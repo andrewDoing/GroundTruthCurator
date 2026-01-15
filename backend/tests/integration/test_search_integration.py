@@ -9,7 +9,7 @@ from app.adapters.search.azure_ai_search import AzureAISearchAdapter
 from app.core.config import settings
 
 
-@pytest.mark.skip
+@pytest.mark.requires_search
 @pytest.mark.anyio
 async def test_search_hits_real_service(async_client: AsyncClient, user_headers: dict[str, str]):
     # Ensure search is configured; otherwise skip this integration test gracefully

@@ -25,9 +25,12 @@ from cosmos_container_manager import (
     initialize_containers,
 )
 
-# Ensure integration tests load a committed baseline env by default.
+# Ensure integration tests load committed baseline env files by default.
 # This must be set before importing settings or app modules.
-os.environ.setdefault("GTC_ENV_FILE", "environments/sample.env,environments/local.env")
+os.environ.setdefault(
+    "GTC_ENV_FILE",
+    "environments/sample.env,environments/integration-tests.env,environments/local.env",
+)
 
 from app.main import create_app
 from app.container import container
@@ -53,7 +56,7 @@ def require_cosmos_backend():
     in-memory backend.
     """
     if getattr(settings, "REPO_BACKEND", None) != "cosmos":
-        pytest.skip("Integration tests require REPO_BACKEND=cosmos")
+        pytest.fail("Integration tests require REPO_BACKEND=cosmos")
 
 
 # Intentionally no session-scoped CosmosClient to avoid binding it to a loop
@@ -86,7 +89,7 @@ async def init_emulator_containers(test_db_name: str):
     key = settings.COSMOS_KEY.get_secret_value() if settings.COSMOS_KEY else None
 
     if not endpoint or not key:
-        pytest.skip("Cosmos settings not configured")
+        pytest.fail("Cosmos settings not configured")
 
     # Build container specs using the unified manager
     container_specs = get_default_container_specs(
@@ -187,7 +190,7 @@ async def live_app(require_cosmos_backend, configure_repo_for_test_db):
     Lifespan is managed by the test HTTP client via ASGITransport(lifespan="on").
     """
     if CosmosClient is None:
-        pytest.skip("azure-cosmos SDK not available; skipping Cosmos integration tests")
+        pytest.fail("azure-cosmos SDK not available; cannot run Cosmos integration tests")
 
     app = create_app()
     # Manage app lifespan explicitly to ensure startup/shutdown run with tests
@@ -232,6 +235,18 @@ async def async_client(live_app):
 
 
 @pytest.fixture(scope="session", autouse=True)
+def enable_cosmos_test_mode():
+    """Enable Cosmos test mode for integration tests.
+
+    Prevents app lifespan from re-initializing repos and seeding default tags.
+    """
+    original = settings.COSMOS_TEST_MODE
+    settings.COSMOS_TEST_MODE = True
+    yield
+    settings.COSMOS_TEST_MODE = original
+
+
+@pytest.fixture(scope="session", autouse=True)
 def configure_ezauth_for_tests():
     """Baseline Easy Auth configuration for the test session."""
     try:
@@ -241,6 +256,35 @@ def configure_ezauth_for_tests():
         settings.EZAUTH_ALLOWED_OBJECT_IDS = None
     except Exception:
         pass
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Apply default skips for integration tests that require external services."""
+    chat_configured = bool(
+        settings.AZURE_AI_PROJECT_ENDPOINT and settings.AZURE_AI_AGENT_ID and settings.CHAT_ENABLED
+    )
+    search_configured = bool(settings.AZ_SEARCH_ENDPOINT and settings.AZ_SEARCH_INDEX)
+
+    for item in items:
+        if item.get_closest_marker("requires_chat") and not chat_configured:
+            item.add_marker(
+                pytest.mark.skip(
+                    reason=(
+                        "Azure AI Foundry agent not configured; set "
+                        "GTC_AZURE_AI_PROJECT_ENDPOINT, GTC_AZURE_AI_AGENT_ID, "
+                        "and GTC_CHAT_ENABLED=true"
+                    )
+                )
+            )
+        if item.get_closest_marker("requires_search") and not search_configured:
+            item.add_marker(
+                pytest.mark.skip(
+                    reason=(
+                        "Azure AI Search not configured; set "
+                        "GTC_AZ_SEARCH_ENDPOINT and GTC_AZ_SEARCH_INDEX"
+                    )
+                )
+            )
 
 
 @pytest.fixture(autouse=True)
@@ -323,7 +367,7 @@ def reset_sampling_allocation_env(monkeypatch: pytest.MonkeyPatch):
 async def seed_default_tags(
     async_client: AsyncClient, user_headers: dict[str, str], request: pytest.FixtureRequest
 ):
-    if request.node.get_closest_marker("no_seed_tags"):
+    if request.node.get_closest_marker("no_seed_tags") or "no_seed_tags" in request.node.keywords:
         return  # Skip seeding for this test
 
     default_tags = {

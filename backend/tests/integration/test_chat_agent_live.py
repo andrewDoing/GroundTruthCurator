@@ -36,6 +36,7 @@ async def async_client():
 
 
 @pytest.mark.no_seed_tags
+@pytest.mark.requires_chat
 @pytest.mark.anyio
 async def test_chat_endpoint_hits_azure_ai_agent(
     async_client: AsyncClient, user_headers: dict[str, str]
