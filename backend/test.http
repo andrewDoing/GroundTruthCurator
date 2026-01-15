@@ -1,0 +1,151 @@
+### Ground Truth Curator API quick tests
+###
+### How to use:
+### - Open this file in VS Code with the REST Client extension (humao.rest-client) or JetBrains HTTP client.
+### - Start the FastAPI app (default: http://localhost:8000).
+### - Click "Send Request" above any request.
+
+@host = localhost
+@port = 8000
+@baseUrl = http://{{host}}:{{port}}
+@apiPrefix = /v1
+@dataset = demo-dataset
+@user = demo-user
+
+### Health check
+GET {{baseUrl}}/healthz
+
+### Upload a small test set of ground truth items
+POST {{baseUrl}}{{apiPrefix}}/ground-truths
+Content-Type: application/json
+Accept: application/json
+X-User-Id: {{user}}
+
+[
+  {
+    "id": "gt-001",
+    "datasetName": "{{dataset}}",
+    "bucket": "00000000-0000-0000-0000-000000000000",
+    "synthQuestion": "How do I reset my password?",
+    "editedQuestion": "How can I reset my password?",
+    "answer": "To reset your password, go to Settings > Security > Reset Password and follow the prompts.",
+    "refs": [
+      {
+        "url": "https://docs.example.com/account/reset-password",
+        "content": "Reset password steps",
+        "type": "doc"
+      }
+    ],
+    "tags": [
+      "source:synthetic",
+      "split:validation",
+      "answerability:answerable",
+      "topic:general",
+      "reference_type:document",
+      "question_length:short",
+      "retrieval_behavior:single",
+      "intent:informational",
+      "answer_type:procedural",
+      "expertise:novice",
+      "turns:singleturn",
+      "difficulty:easy"
+    ],
+    "contextSource": "docs",
+    "modelUsedForGeneration": "gpt-4o-mini",
+    "semanticClusterNumber": 7,
+    "weight": 1.0,
+    "samplingBucket": 0
+  },
+  {
+    "id": "gt-002",
+    "datasetName": "{{dataset}}",
+    "bucket": "00000000-0000-0000-0000-000000000000",
+    "synthQuestion": "What browsers are supported?",
+    "answer": "We support the latest two versions of Chrome, Edge, Firefox, and Safari.",
+    "refs": [
+      {
+        "url": "https://docs.example.com/platform/supported-browsers",
+        "keyExcerpt": "Supported browsers include Chrome, Edge, Firefox, Safari (2 latest).",
+        "type": "doc"
+      }
+    ],
+    "tags": [
+      "source:synthetic",
+      "split:validation",
+      "answerability:answerable",
+      "topic:general",
+      "reference_type:document",
+      "question_length:short",
+      "retrieval_behavior:single",
+      "intent:informational",
+      "answer_type:policy",
+      "expertise:novice",
+      "turns:singleturn",
+      "difficulty:easy"
+    ],
+    "contextSource": "docs",
+    "weight": 0.8,
+    "samplingBucket": 0
+  },
+  {
+    "id": "gt-003",
+    "datasetName": "{{dataset}}",
+    "bucket": "00000000-0000-0000-0000-000000000000",
+    "synthQuestion": "How can I export my data?",
+    "editedQuestion": null,
+    "answer": "Navigate to Settings > Export and choose JSON or CSV to download your data.",
+    "refs": [
+      { "url": "https://docs.example.com/data/export", "type": "doc" }
+    ],
+    "tags": [
+      "source:synthetic",
+      "split:validation",
+      "answerability:answerable",
+      "topic:general",
+      "reference_type:document",
+      "question_length:short",
+      "retrieval_behavior:single",
+      "intent:action",
+      "answer_type:procedural",
+      "expertise:novice",
+      "turns:singleturn",
+      "difficulty:easy"
+    ],
+    "contextSource": "docs",
+    "samplingBucket": 0 
+  }
+]
+
+### Upload and auto-approve on import (approve=true)
+POST {{baseUrl}}{{apiPrefix}}/ground-truths?approve=true
+Content-Type: application/json
+Accept: application/json
+X-User-Id: {{user}}
+
+[
+  {
+    "id": "gt-approve-001",
+    "datasetName": "{{dataset}}",
+    "bucket": "00000000-0000-0000-0000-000000000000",
+    "synthQuestion": "What is 2+2?",
+    "answer": "4",
+    "refs": [],
+    "tags": ["source:synthetic", "split:validation"],
+    "samplingBucket": 0
+  }
+]
+
+### List all items in the dataset (includes etag field)
+GET {{baseUrl}}{{apiPrefix}}/ground-truths/{{dataset}}
+Accept: application/json
+X-User-Id: {{user}}
+
+### Delete the entire dataset (cleanup)
+DELETE {{baseUrl}}{{apiPrefix}}/ground-truths/{{dataset}}
+Accept: application/json
+X-User-Id: {{user}}
+
+### Create a snapshot export to exports/snapshots/<timestamp>
+POST {{baseUrl}}{{apiPrefix}}/ground-truths/snapshot
+Accept: application/json
+X-User-Id: {{user}}

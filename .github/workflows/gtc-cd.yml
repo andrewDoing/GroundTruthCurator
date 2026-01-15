@@ -1,0 +1,313 @@
+name: Ground Truth Curator CD
+
+on:
+  # for development purpose, u can enable for your own branch
+  # push:
+  #   branches:
+  #     - SA-153/gt-cd
+  workflow_dispatch:
+    inputs:
+      TAG_NAME:
+        description: 'Tag name for the container image'
+        required: true
+        type: string
+        default: 'latest'
+      DEPLOYMENT_TARGET_NAME:
+        description: 'Target container app name'
+        required: true
+        type: string
+        default: 'dev'
+
+permissions:
+  id-token: write # Require write permission to Fetch an federated identity token.
+  contents: read # Require read permission to access the repository contents.
+
+jobs:
+  deploy:
+    name: Deploy ${{ github.event.inputs.DEPLOYMENT_TARGET_NAME }}
+    environment: ${{ github.event.inputs.DEPLOYMENT_TARGET_NAME }}
+    runs-on: ubuntu-latest
+    env:
+      TAG_NAME: ${{ github.event.inputs.TAG_NAME || 'latest' }}
+      GT_COSMOS_DB_RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP_NAME }}
+      GT_COSMOS_DB_INDEXING_POLICY: backend/scripts/indexing-policy.json
+      WORKLOAD_PROFILE_NAME: ${{ vars.WORKLOAD_PROFILE_NAME || 'ai-apps' }}
+
+    steps:
+      - name: "Checkout git"
+        uses: actions/checkout@v4
+
+      - name: "Load Environment Variables"
+        shell: pwsh
+        run: |
+          Write-Output "Loading environment variables for target: ${{ github.event.inputs.DEPLOYMENT_TARGET_NAME }}"
+          ./deployment/set-environment.ps1 -DeploymentTarget "${{ github.event.inputs.DEPLOYMENT_TARGET_NAME }}" -EnvFilePath "./backend/environments" -ServiceName "gtc"
+
+      - name: Login to Azure and Federate Credentials with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Azure Container Apps CLI Extension
+        run: az extension add --name containerapp --upgrade
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          # Environment variables are now loaded from .env files via set-environment.ps1
+          # Variables available: GROUND_TRUTH_CURATION_NAME, REGISTRY_PREFIX, USER_ASSIGNED_IDENTITY,
+          # ENVIRONMENT_NAME, CONTAINER_CPU, CONTAINER_MEMORY, and all GTC_* app config
+          
+          # Function to generate YAML env section from GTC_* and other app variables
+          generate_env_yaml() {
+            # Output all environment variables that should be passed to the container
+            # These are loaded from the .env file by set-environment.ps1
+            env | grep -E "^(GTC_|APPLICATIONINSIGHTS_|AZURE_CLIENT_ID|HEALTHCHECK_)" | while IFS='=' read -r key value; do
+              echo "                    - name: $key"
+              echo "                      value: \"$value\""
+            done
+          }
+          
+          # Generate the environment variables section
+          ENV_YAML=$(generate_env_yaml)
+          
+          # Create YAML configuration file with full configuration including identity
+          cat > container-config.yaml << EOF
+          identity:
+            type: UserAssigned
+            userAssignedIdentities:
+              "/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourcegroups/${{ vars.RESOURCE_GROUP_NAME }}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${USER_ASSIGNED_IDENTITY}": {}
+          properties:
+            workloadProfileName: ${WORKLOAD_PROFILE_NAME}
+            configuration:
+              ingress:
+                external: true
+                targetPort: 8080
+            template:
+              replicas:
+                min: 1
+                max: 1
+              scale:
+                rules: []
+              containers:
+                - name: $GROUND_TRUTH_CURATION_NAME
+                  image: ${REGISTRY_PREFIX}.azurecr.io/gtc-backend:$TAG_NAME
+                  resources:
+                    cpu: $CONTAINER_CPU
+                    memory: $CONTAINER_MEMORY
+                  env:
+          $ENV_YAML
+                  probes:
+                    - type: Liveness
+                      httpGet:
+                        path: "/healthz"
+                        port: 8080
+                      initialDelaySeconds: 5
+                      periodSeconds: 60
+                      timeoutSeconds: 30
+                      successThreshold: 1
+                      failureThreshold: 3
+                    - type: Readiness
+                      httpGet:
+                        path: "/healthz"
+                        port: 8080
+                      initialDelaySeconds: 0
+                      periodSeconds: 10
+                      timeoutSeconds: 1
+                      successThreshold: 1
+                      failureThreshold: 3
+          EOF
+          
+          # Check if container app exists
+          if az containerapp show --name $GROUND_TRUTH_CURATION_NAME --resource-group ${{ vars.RESOURCE_GROUP_NAME }} &>/dev/null; then
+            echo "Updating existing container app with full configuration..."
+            
+            az containerapp update \
+              --name $GROUND_TRUTH_CURATION_NAME \
+              --resource-group ${{ vars.RESOURCE_GROUP_NAME }} \
+              --yaml container-config.yaml
+          else
+            echo "Creating new container app using 2-step process..."
+
+            # Step 1: Create basic container app with managed identity
+            az containerapp create \
+              --name $GROUND_TRUTH_CURATION_NAME \
+              --registry-identity system-environment \
+              --registry-server ${REGISTRY_PREFIX}.azurecr.io \
+              --resource-group ${{ vars.RESOURCE_GROUP_NAME }} \
+              --environment ${ENVIRONMENT_NAME} \
+              --image ${REGISTRY_PREFIX}.azurecr.io/gtc-backend:$TAG_NAME \
+              --workload-profile-name ${WORKLOAD_PROFILE_NAME} \
+              --min-replicas 1 \
+              --max-replicas 1 \
+              --user-assigned /subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourcegroups/${{ vars.RESOURCE_GROUP_NAME }}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${USER_ASSIGNED_IDENTITY}
+             
+            # Step 2: Update with full configuration
+            echo "Updating container app with full configuration..."
+            az containerapp update \
+              --name $GROUND_TRUTH_CURATION_NAME \
+              --resource-group ${{ vars.RESOURCE_GROUP_NAME }} \
+              --yaml container-config.yaml
+          fi
+
+          # Clean up temporary file
+          rm container-config.yaml
+
+      - name: Clear Scale Rules and Set Single Replica
+        run: |
+          echo "Clearing any existing scale rules and setting single replica..."
+          
+          # Clear all scale rules first
+          az containerapp update \
+            --name $GROUND_TRUTH_CURATION_NAME \
+            --resource-group ${{ vars.RESOURCE_GROUP_NAME }} \
+            --min-replicas 1 \
+            --max-replicas 1
+          
+          # Remove any HTTP scale rules specifically
+          SCALE_RULES=$(az containerapp show --name $GROUND_TRUTH_CURATION_NAME --resource-group ${{ vars.RESOURCE_GROUP_NAME }} --query "properties.template.scale.rules[].name" -o tsv)
+          for rule in $SCALE_RULES; do
+            echo "Removing scale rule: $rule"
+            az containerapp update \
+              --name $GROUND_TRUTH_CURATION_NAME \
+              --resource-group ${{ vars.RESOURCE_GROUP_NAME }} \
+              --remove-scale-rule $rule
+          done
+
+      - name: Set Revision Mode
+        run: |
+          echo "Setting revision mode to single..."
+          az containerapp revision set-mode \
+            --name $GROUND_TRUTH_CURATION_NAME \
+            --resource-group ${{ vars.RESOURCE_GROUP_NAME }} \
+            --mode single
+
+      - name: Configure Authentication
+        run: |
+            echo "Setting up Microsoft identity provider..."
+            echo "Enabling Easy Auth (built-in auth) and requiring authentication..."
+
+            # Enable Container Apps built-in auth (Easy Auth) and require authentication.
+            #
+            # Two-level auth design (single source of truth):
+            # - GTC_EZAUTH_ALLOW_ANONYMOUS_PATHS configures both the platform-level exclusions
+            #   (--excluded-paths) and the in-app middleware skip list, keeping the probe paths
+            #   identical in both layers.
+            # - Any path listed here (currently /healthz,/metrics) is publicly accessible because
+            #   it bypasses Easy Auth, but these endpoints only return non-sensitive health/metrics
+            #   payloads and are required for ACA internal probes to succeed without headers.
+            #
+            # When Easy Auth is enabled, Container Apps injects trusted identity headers:
+            # - X-MS-CLIENT-PRINCIPAL (base64 JSON with claims)
+            # - X-MS-CLIENT-PRINCIPAL-NAME
+            # - X-MS-CLIENT-PRINCIPAL-ID
+            az containerapp auth update \
+              --name $GROUND_TRUTH_CURATION_NAME \
+              --resource-group ${{ vars.RESOURCE_GROUP_NAME }} \
+              --enabled true \
+              --unauthenticated-client-action RedirectToLoginPage \
+              --excluded-paths $GTC_EZAUTH_ALLOW_ANONYMOUS_PATHS \
+              --yes
+
+            az containerapp auth microsoft update \
+              --name $GROUND_TRUTH_CURATION_NAME \
+              --resource-group ${{ vars.RESOURCE_GROUP_NAME }} \
+              --client-id $AUTH_CLIENT_ID \
+              --tenant-id ${{ vars.AZURE_TENANT_ID }}
+
+      - name: Cosmos DB
+        run: |
+          # Ensure Cosmos DB database exists
+          if az cosmosdb sql database show --account-name $GT_COSMOS_DB_ACCOUNT --name $GTC_COSMOS_DB_NAME --resource-group $GT_COSMOS_DB_RESOURCE_GROUP &>/dev/null; then
+              echo "Cosmos DB database exists"
+          else
+              echo "Cosmos DB database does not exist. Creating Cosmos DB database."            
+              az cosmosdb sql database create \
+                --account-name $GT_COSMOS_DB_ACCOUNT \
+                --name $GTC_COSMOS_DB_NAME \
+                --resource-group $GT_COSMOS_DB_RESOURCE_GROUP
+          fi
+
+          # Check if Cosmos DB container exists
+          if az cosmosdb sql container show --account-name $GT_COSMOS_DB_ACCOUNT --database-name $GTC_COSMOS_DB_NAME --name $GTC_COSMOS_CONTAINER_GT --resource-group $GT_COSMOS_DB_RESOURCE_GROUP &>/dev/null; then
+             echo "Cosmos Container already exist. Updating Cosmos DB indexing policy..."
+             az cosmosdb sql container update \
+                   --account-name $GT_COSMOS_DB_ACCOUNT \
+                   --database-name $GTC_COSMOS_DB_NAME \
+                   --name $GTC_COSMOS_CONTAINER_GT \
+                   --resource-group $GT_COSMOS_DB_RESOURCE_GROUP \
+                   --idx @$GT_COSMOS_DB_INDEXING_POLICY
+          else
+             echo "Cosmos DB container does not exist. Creating container."
+             # Using python script as az cli does not currently support hierarchical partition keys
+             # should be replaced by a suitable 'az cosmosdb sql container create ...' command when az cli supports hierarchical partition keys
+             pip install azure-identity azure-cosmos
+             python backend/scripts/cosmos_container_manager.py \
+                --endpoint "https://$GT_COSMOS_DB_ACCOUNT.documents.azure.com:443/" \
+                --use-aad \
+                --db $GTC_COSMOS_DB_NAME \
+                --container $GTC_COSMOS_CONTAINER_GT \
+                --partition-paths /datasetName /bucket \
+                --max-throughput $GT_COSMOS_CONTAINER_GT_MAX_THROUGHPUT \
+                --indexing-policy $GT_COSMOS_DB_INDEXING_POLICY
+          fi
+
+          # Always enforce desired container autoscale max throughput (create sets it; this keeps it updated)
+          echo "Setting '$GTC_COSMOS_CONTAINER_GT' container autoscale max throughput to $GT_COSMOS_CONTAINER_GT_MAX_THROUGHPUT..."
+          az cosmosdb sql container throughput update \
+            --account-name $GT_COSMOS_DB_ACCOUNT \
+            --database-name $GTC_COSMOS_DB_NAME \
+            --name $GTC_COSMOS_CONTAINER_GT \
+            --resource-group $GT_COSMOS_DB_RESOURCE_GROUP \
+            --max-throughput $GT_COSMOS_CONTAINER_GT_MAX_THROUGHPUT
+
+          # Create assignments container with simple partition key
+          if az cosmosdb sql container show --account-name $GT_COSMOS_DB_ACCOUNT \
+              --database-name $GTC_COSMOS_DB_NAME \
+              --name $GTC_COSMOS_CONTAINER_ASSIGNMENTS \
+              --resource-group $GT_COSMOS_DB_RESOURCE_GROUP &>/dev/null; then
+              echo "Assignments container already exists"
+          else
+              echo "Creating assignments container..."
+              az cosmosdb sql container create \
+                  --account-name $GT_COSMOS_DB_ACCOUNT \
+                  --database-name $GTC_COSMOS_DB_NAME \
+                  --name $GTC_COSMOS_CONTAINER_ASSIGNMENTS \
+                  --resource-group $GT_COSMOS_DB_RESOURCE_GROUP \
+                  --partition-key-path "/pk" \
+                  --max-throughput $GT_COSMOS_CONTAINER_ASSIGNMENTS_MAX_THROUGHPUT
+          fi
+
+          echo "Setting '$GTC_COSMOS_CONTAINER_ASSIGNMENTS' container autoscale max throughput to $GT_COSMOS_CONTAINER_ASSIGNMENTS_MAX_THROUGHPUT..."
+          az cosmosdb sql container throughput update \
+            --account-name $GT_COSMOS_DB_ACCOUNT \
+            --database-name $GTC_COSMOS_DB_NAME \
+            --name $GTC_COSMOS_CONTAINER_ASSIGNMENTS \
+            --resource-group $GT_COSMOS_DB_RESOURCE_GROUP \
+            --max-throughput $GT_COSMOS_CONTAINER_ASSIGNMENTS_MAX_THROUGHPUT
+
+          # Create tags container with simple partition key
+          if az cosmosdb sql container show --account-name $GT_COSMOS_DB_ACCOUNT \
+              --database-name $GTC_COSMOS_DB_NAME \
+              --name $GTC_COSMOS_CONTAINER_TAGS \
+              --resource-group $GT_COSMOS_DB_RESOURCE_GROUP &>/dev/null; then
+              echo "Tags container already exists"
+          else
+              echo "Creating tags container..."
+              az cosmosdb sql container create \
+                  --account-name $GT_COSMOS_DB_ACCOUNT \
+                  --database-name $GTC_COSMOS_DB_NAME \
+                  --name $GTC_COSMOS_CONTAINER_TAGS \
+                  --resource-group $GT_COSMOS_DB_RESOURCE_GROUP \
+                  --partition-key-path "/pk" \
+                  --max-throughput $GT_COSMOS_CONTAINER_TAGS_MAX_THROUGHPUT
+          fi
+
+          echo "Setting '$GTC_COSMOS_CONTAINER_TAGS' container autoscale max throughput to $GT_COSMOS_CONTAINER_TAGS_MAX_THROUGHPUT..."
+          az cosmosdb sql container throughput update \
+            --account-name $GT_COSMOS_DB_ACCOUNT \
+            --database-name $GTC_COSMOS_DB_NAME \
+            --name $GTC_COSMOS_CONTAINER_TAGS \
+            --resource-group $GT_COSMOS_DB_RESOURCE_GROUP \
+            --max-throughput $GT_COSMOS_CONTAINER_TAGS_MAX_THROUGHPUT

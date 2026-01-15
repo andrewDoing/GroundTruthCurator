@@ -1,0 +1,106 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Install Python deps with uv",
+			"type": "shell",
+			"command": "uv sync",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "uv run pytest -q tests/unit --cov=app",
+			"isBackground": false,
+			"problemMatcher": [
+				"$python"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Run integration tests (integration env)",
+			"type": "shell",
+			"command": "uv run pytest -q tests/integration --cov=app",
+			"options": {
+				"env": {
+					"GTC_ENV_FILE": "environments/sample.env, environments/local.env"
+				}
+			},
+			"isBackground": false,
+			"problemMatcher": [
+				"$python"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Run large/stress integration tests (integration env)",
+			"type": "shell",
+			"command": "uv run pytest -q tests/stress --cov=app",
+			"options": {
+				"env": {
+					"GTC_ENV_FILE": "environments/sample.env"
+				}
+			},
+			"isBackground": false,
+			"problemMatcher": [
+				"$python"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Run tests",
+			"type": "shell",
+			"command": "uv run pytest -q --cov=app",
+			"isBackground": false,
+			"problemMatcher": [
+				"$python"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Run container smoke test",
+			"type": "shell",
+			"command": "uv run pytest -vv tests/integration/test_container_smoke.py::test_healthz_ok_in_containerized_env",
+			"options": {
+				"env": {
+					"GTC_RUN_DOCKER_TESTS": "1"
+				}
+			},
+			"isBackground": false,
+			"problemMatcher": [
+				"$python"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"group": "build"
+		},
+		{
+			"label": "Run mypy",
+			"type": "shell",
+			"command": "uv run mypy --hide-error-codes --show-column-numbers .",
+			"isBackground": false,
+			"problemMatcher": [
+				{
+					"owner": "python",
+					"fileLocation": [
+						"relative",
+						"${workspaceFolder}"
+					],
+					"pattern": {
+						"regexp": "^(.+?):(\\d+):(\\d+): (error|note): (.*)$",
+						"file": 1,
+						"line": 2,
+						"column": 3,
+						"severity": 4,
+						"message": 5
+					}
+				}
+			],
+			"group": "build"
+		}
+	]
+}

@@ -1,0 +1,92 @@
+[project]
+name = "backend"
+version = "1.0.6"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+	"fastapi",
+	"uvicorn[standard]",
+	"pydantic>=2",
+	"pydantic-settings",
+	"httpx",
+	"python-jose[cryptography]",
+	"azure-cosmos",
+	"aiohttp>=3.12.15",
+	"respx>=0.22.0",
+	"asgi-lifespan>=2.1.0",
+	"pytest-cov>=6.2.1",
+	"azure-monitor-opentelemetry",
+	"opentelemetry-instrumentation-fastapi",
+	"opentelemetry-instrumentation-asgi",
+	"opentelemetry-instrumentation-httpx",
+	"opentelemetry-instrumentation-logging",
+	"azure-identity",
+	"randomname",
+	"azure-ai-projects>=1.0.0",
+	"azure-ai-agents",
+	"azure-search-documents>=11.5.3",
+]
+
+[dependency-groups]
+dev = [
+	"pytest",
+	"pytest-asyncio",
+	"ruff",
+	"black",
+	"mypy",
+	"pre-commit",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+	"F",       # Pyflakes (F401, F841, F811, etc.)
+	"ERA",     # Commented code (ERA001)
+	"RUF059",  # Unused unpacked variables
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]           # Re-exports are intentional
+"conftest.py" = ["F401", "F811"]   # Fixtures injected by name
+"tests/**/*.py" = ["F841"]         # Test variables
+
+[tool.vulture]
+paths = ["app/"]
+min_confidence = 80
+sort_by_size = true
+exclude = [
+	"*test*.py",
+	"*conftest*",
+]
+ignore_decorators = [
+	"@router.get",
+	"@router.post",
+	"@router.put",
+	"@router.patch",
+	"@router.delete",
+	"@app.on_event",
+	"@pytest.fixture",
+	"@pytest.mark.*",
+]
+ignore_names = [
+	"test_*",
+	"_*",
+	"model_*",
+]
+
+[tool.black]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+
+[[tool.mypy.overrides]]
+module = ["app.adapters.inference.inference"]
+ignore_errors = true

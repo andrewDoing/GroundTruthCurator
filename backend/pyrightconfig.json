@@ -1,0 +1,7 @@
+{
+  "include": ["app", "tests"],
+  "exclude": ["app/adapters/inference/inference.py"],
+  "ignore": ["app/adapters/inference/inference.py"],
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": false
+}

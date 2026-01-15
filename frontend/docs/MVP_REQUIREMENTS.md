@@ -1,0 +1,53 @@
+# Needed for MVP
+- [ ] UI needs to be hooked up to the backend (frontend scope; ignored for backend status)
+- [x] Ground Truth schema should be stable for v1
+- Ground Truth endpoints
+  - [x] support importing the current gold set as approved (bulk import exists; approval-on-import not explicit)
+  - [x] import questions in bulk - just support json since its synthetic (`POST /v1/ground-truths`)
+  - [x] read individual (`GET /v1/ground-truths/{datasetName}/{bucket}/{item_id}`)
+  - [x] update individual (`PUT /v1/ground-truths/{datasetName}/{bucket}/{item_id}` with ETag)
+  - [x] soft-delete individual (`DELETE /v1/ground-truths/{datasetName}/{bucket}/{item_id}`)
+  - [ ] create individual - optional (no single-item create endpoint; bulk import only)
+- Assignment endpoints
+  - [x] /my to fetch my current assigned work (`GET /v1/assignments/my`)
+  - [x] /self-serve to request more work (`POST /v1/assignments/self-serve`)
+  - [x] update assignments and underlying ground truth as changes are made (`PUT /v1/assignments/{item_id}` incl. approve and soft-delete)
+- Dataset endpoints
+  - [x] hard delete dataset (`DELETE /v1/ground-truths/{datasetName}` implemented; semantics are soft-delete all items per repo notes)
+  - [x] get curation instructions (`GET /datasets/{datasetName}/curation-instructions`)
+  - [x] write curation instructions (`PUT /datasets/{datasetName}/curation-instructions` with ETag)
+- Curation Instructions endpoints
+  - [x] get curation instructions
+  - [x] put curation instructions
+- Tags endpoints
+  - [x] get the known set of existing tags for the user to choose from (`GET /tags/schema`)
+  - [ ] allow the user to create new tags (no write endpoints for tags)
+  - [x] apply the tags to the current ground truth (tags field present on model; updates via GT/assignment PUT)
+  - [ ] ease up on the tag validation to allow for new tags (currently validated against fixed schema)
+  - [ ] tags document? (no tags document endpoint)
+- Search service pointing to AI Search
+  - [ ] hit an endpoint from the UI (no search API endpoint in backend)
+  - [ ] display search results (no search API)
+  - [ ] select from search results into GT refs (no backend wiring; refs field exists)
+- Generation service (LLM) for answer generation
+  - [ ] no model picker - use gpt-5-nano or similar cheap (no LLM endpoint; service stub only)
+  - [ ] prompt editor (frontend scope; no backend endpoint)
+  - [ ] sends the question and refs (no endpoint)
+  - [ ] comes back with a 1st draft answer. (no endpoint)
+- Authentication
+    - [x] we don't need code apparently (dev header-based auth in `app/core/auth.py`)
+- Sampling
+  - [ ] make the sampling approach much simpler for self-serve. x% per dataset. defined in configuration. shuffle for fun
+
+
+# Nice to have
+- [ ] multi-turn
+- [ ] authorization (no roles/permissions enforced)
+- [x] tagging for train/validation in snapshotting (tags exist; snapshot exports approved items)
+- Stats endpoints
+  - [ ] get stats for a specific user (not implemented)
+  - [x] get the stats for all the users (overall stats via `GET /v1/ground-truths/stats`)
+- Tags
+  - [ ] auto tagging logic (not implemented)
+  - [ ] allow the user to remove tags (no dedicated endpoint; could be via GT update but not explicit)
+  - [ ] configure tags via configuration (static schema; no dynamic config endpoint)

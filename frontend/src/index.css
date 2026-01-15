@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+/* Custom utilities (lightweight) */
+@layer utilities {
+	/* Multi-line truncation (no plugin) */
+	.line-clamp-2 {
+		display: -webkit-box;
+		line-clamp: 2;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+	.break-anywhere {
+		/* Allow breaking long unspaced strings/URLs */
+		overflow-wrap: anywhere;
+		word-break: break-word;
+	}
+}

@@ -1,0 +1,212 @@
+name: Ground Truth Curator CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      TAG_NAME:
+        description: "Tag name for the container image (defaults to latest)"
+        required: false
+        type: string
+        default: latest
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/gtc-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/gtc-ci.yml"
+
+permissions:
+  id-token: write # Require write permission to Fetch an federated identity token.
+  contents: read # Require read permission to access the repository contents.
+  checks: write # Required to publish test results.
+  pull-requests: write # Required to create comments on pull requests.
+  issues: write # Required to create issue comments.
+  actions: write # Required to trigger other workflows.
+
+jobs:
+  test:
+    environment: dev
+    name: Backend tests, mypy, and frontend build
+    runs-on: ubuntu-latest
+
+    services:
+      cosmos:
+        image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-EN20251022
+        env:
+          AZURE_COSMOS_EMULATOR_ENABLE_HTTP_API: "true"
+          AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "3"
+        ports:
+          - 8081:8081
+        options: >-
+          --health-cmd "bash -c 'curl -ksSf https://localhost:8081/_explorer/emulator.pem >/dev/null || curl -sS --max-time 2 http://localhost:8081/ >/dev/null'"
+          --health-interval 5s --health-timeout 5s --health-retries 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # todo: restore when ready to connect with Azure services, this current cause unit tests to fail
+      # - name: Login to Azure and Federate Credentials with OIDC
+      #   uses: azure/login@v2
+      #   with:
+      #     client-id: ${{ vars.AZURE_CLIENT_ID }}
+      #     tenant-id: ${{ vars.AZURE_TENANT_ID }}
+      #     subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Python 3.11 and uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-py311-${{ hashFiles('backend/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-py311-
+
+      - name: Install backend dependencies (dev)
+        working-directory: backend
+        run: uv sync --frozen
+
+      - name: Backend unit tests
+        working-directory: backend
+        env:
+          GTC_LLM_ENABLED: "False"
+        run: uv run pytest -q tests/unit -v --junitxml=pytest-unit-results.xml --cov=backend/src --cov-report=xml --cov-report=term 
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: backend/pytest-unit-results.xml
+          check_name: "Backend Unit Test Results"
+          comment_title: "GTC Backend Unit Test Results"
+
+      - name: Wait for Cosmos DB Emulator to be ready
+        run: |
+          for i in {1..60}; do
+            if curl -ksSf https://localhost:8081/_explorer/emulator.pem >/dev/null 2>&1 || curl -sS --max-time 2 http://localhost:8081/ >/dev/null 2>&1; then
+              echo "Emulator is ready"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Emulator not ready in time" >&2
+              # Dump container logs to help diagnose
+              docker logs $(docker ps -aqf "name=cosmos") || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Load integration test environment
+        run: |
+          grep -v '^[[:space:]]*#' backend/environments/integration-tests.env | sed 's/\r$//' >> "$GITHUB_ENV"
+
+      - name: Backend integration tests (Cosmos)
+        working-directory: backend
+        env:
+          GTC_LLM_ENABLED: "False"
+        run: |
+          uv run pytest -q tests/integration -v --junitxml=pytest-int-results.xml --cov=backend/src --cov-report=xml --cov-report=term
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: backend/pytest-int-results.xml
+          check_name: "Backend Integration Test Results"
+          comment_title: "GTC Backend Integration Test Results"
+
+      - name: Mypy (backend/app)
+        working-directory: backend
+        run: uv run mypy app
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: GroundTruthCurator/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Export OpenAPI spec
+        working-directory: backend
+        run: uv run python scripts/export_openapi.py
+
+      - name: Check OpenAPI spec is up to date
+        working-directory: frontend
+        run: |
+          git --no-pager diff --exit-code -- src/api/openapi.json || (echo 'OpenAPI spec is out of date. Run: cd backend && uv run python scripts/export_openapi.py' && exit 1)
+
+      
+      - name: Check frontend OpenAPI types
+        working-directory: frontend
+        run: npm run api:types:check
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run test:run
+
+      - name: Publish frontend test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: frontend/junit-results.xml
+          check_name: "Frontend Test Results"
+          comment_title: "GTC Frontend Test Results"
+
+  build-and-push:
+    environment: dev
+    name: Build & push backend image
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      TAG_NAME: "${{ github.event.inputs.TAG_NAME || 'latest' }}"
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+      IMAGE_REPO: ${{ vars.IMAGE_REPO || 'gtc-backend' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine image tags
+        id: image-tags
+        run: |
+          tag_name="${TAG_NAME:-latest}"
+          if [[ -z "$tag_name" ]]; then
+            tag_name="latest"
+          fi
+          tags="${ACR_LOGIN_SERVER}/${IMAGE_REPO}:${{ github.sha }},${ACR_LOGIN_SERVER}/${IMAGE_REPO}:${tag_name}"
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Azure and Federate Credentials with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR login
+        run: |
+          az acr login --name "$ACR_NAME"
+
+      - name: Build and Push
+        id: build-and-push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.image-tags.outputs.tags }}

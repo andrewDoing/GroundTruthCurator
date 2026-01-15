@@ -1,0 +1,22 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.1
+    hooks:
+      - id: ruff-format
+        name: ruff (format)
+        # Limit to backend Python files only (adjust path if repo root differs)
+        files: ^GroundTruthCurator/backend/.*\.py$
+      - id: ruff
+        name: ruff (lint)
+        args: ["--fix"]
+        # Limit to backend Python files only (adjust path if repo root differs)
+        files: ^GroundTruthCurator/backend/.*\.py$
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: bash -c "cd GroundTruthCurator/backend && uv run --frozen mypy --no-incremental --hide-error-codes --show-column-numbers --check-untyped-defs app"
+        language: system
+        files: ^GroundTruthCurator/backend/app/.*\.py$
+        require_serial: true
+        pass_filenames: false

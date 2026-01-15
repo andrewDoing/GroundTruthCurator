@@ -1,0 +1,29 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.1.4/schema.json",
+	"formatter": {
+		"enabled": true
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"correctness": {
+				"noUnusedImports": "error",
+				"noUnusedVariables": "warn",
+				"noUnusedFunctionParameters": "warn",
+				"noUnusedPrivateClassMembers": "warn"
+			}
+		}
+	},
+	"assist": {
+		"enabled": true
+	},
+	"files": {
+		"includes": ["**", "!**/dist", "!**/*.generated.js", "!src/api/generated.ts"]
+	},
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true,
+		"defaultBranch": "main"
+	}
+}

@@ -1,0 +1,30 @@
+# VCS and editor
+.git
+.gitignore
+.gitattributes
+.vscode/
+
+# Python caches and environments
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.pyc
+.venv/
+env*/
+
+# Tests and local artifacts not needed in image
+tests/
+exports/
+docs/
+plans/
+scripts/
+
+# Local env files
+*.env
+environments/*.env
+
+# Node and frontend caches (if present in build context)
+node_modules/
+dist/
+build/

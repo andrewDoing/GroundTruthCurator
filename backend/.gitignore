@@ -1,0 +1,12 @@
+__pycache__
+exports/*
+.venv
+app/frontend/*
+
+# Local env overlays (keep secrets out of git)
+environments/*.local.env
+environments/local.env
+environments/*.env
+!environments/sample.env
+
+.coverage

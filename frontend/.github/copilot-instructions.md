@@ -1,0 +1,1 @@
+Use the show-notification tool from notify MCP when you're done working.
