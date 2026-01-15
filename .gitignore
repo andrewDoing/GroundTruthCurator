@@ -5,13 +5,11 @@ Thumbs.db
 # Python (FastAPI backend)
 # Based on common Python + pytest defaults (e.g., GitHub's Python.gitignore)
 # ------------------------------
-__pycache__/
 *.py[cod]
 *$py.class
 *.so
 
 # Virtual environments
-.venv/
 venv/
 ENV/
 env/
@@ -19,8 +17,6 @@ env/
 
 # Test / coverage
 .pytest_cache/
-.coverage
-.coverage.*
 coverage.xml
 htmlcov/
 
@@ -32,7 +28,6 @@ htmlcov/
 
 # Packaging / build
 build/
-dist/
 *.egg-info/
 *.egg
 
@@ -45,43 +40,13 @@ dist/
 !.env.example
 !.env.sample
 
-# Backend env files (keep secrets out of git)
-backend/environments/*.env
-!backend/environments/sample.env
-
 # ------------------------------
 # Node / React (Vite frontend)
 # Based on common Node.gitignore defaults
 # ------------------------------
-node_modules/
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Build / tooling outputs
-dist/
-dist-ssr/
-.vite/
 .vitest/
-coverage/
 .eslintcache
 *.tsbuildinfo
-
-# Playwright artifacts
-playwright-report/
-blob-report/
-test-results/
-
-# Local overrides
-*.local
-.env.local
-.env.*.local
 
 # ------------------------------
 # Editors / IDEs
@@ -94,9 +59,3 @@ test-results/
 
 .idea/
 *.iml
-
-# ------------------------------
-# Repo-specific generated artifacts
-# ------------------------------
-backend/exports/
-backend/app/frontend/*

@@ -8,5 +8,6 @@ environments/*.local.env
 environments/local.env
 environments/*.env
 !environments/sample.env
+!environments/integration-tests.env
 
 .coverage
