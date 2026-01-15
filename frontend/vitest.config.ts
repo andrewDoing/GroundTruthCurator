@@ -6,7 +6,7 @@ export default defineConfig({
 		environment: "jsdom",
 		setupFiles: ["./vitest.setup.ts"],
 		include: ["tests/unit/**/*.{test,spec}.{ts,tsx}"],
-		exclude: [...configDefaults.exclude, "e2e", "tests/e2e"],
+		exclude: [...configDefaults.exclude],
 		reporters: ["default", "junit"],
 		outputFile: {
 			junit: "./junit-results.xml"

@@ -1,8 +1,15 @@
-# Ground Truth Curator – Frontend Codebase Guide
+---
+title: Ground Truth Curator frontend codebase guide
+description: Practical guide to the React, Vite, and TypeScript frontend structure and workflows.
+ms.date: 2026-01-15
+ms.topic: reference
+---
+
+## Overview
 
 This guide is a compact, practical map for future contributors (human or AI) to understand and extend the React + Vite + TypeScript frontend. It explains structure, data models, flows, and safe extension points. It reflects the current codebase after the hook refactor and API integrations.
 
-If you do just one thing: scan the Architectural Overview and the Key Flows. They’ll unlock ~80% of the code.
+If you do just one thing: scan the Architectural Overview and the Key Flows. They’ll unlock about 80 percent of the code.
 
 ## Stack and Tooling
 
@@ -10,7 +17,7 @@ If you do just one thing: scan the Architectural Overview and the Key Flows. The
 - Styling: Tailwind CSS v4 (via `@tailwindcss/vite`)
 - Icons: `lucide-react`
 - API client: `openapi-fetch` + generated types via `openapi-typescript` (`src/api/generated.ts`)
-- Tests: Vitest (unit) + Playwright (e2e)
+- Tests: Vitest (unit)
 - Lint/Format: Biome (`biome.json`), ESLint baseline present but Biome is primary
 - Build scripts (see `package.json`):
   - dev: vite
@@ -18,7 +25,7 @@ If you do just one thing: scan the Architectural Overview and the Key Flows. The
   - lint: `biome check --write`
   - preview: vite preview
   - api:types: generate `src/api/generated.ts` from `VITE_OPENAPI_URL` (defaults to `http://localhost:8000/v1/openapi.json`)
-  - test: Vitest; e2e via `playwright test`
+  - test: Vitest
 - TypeScript config uses project references (`tsconfig.json` → `tsconfig.app.json`, `tsconfig.node.json`), bundler resolution, and strict flags. No emit; Vite does the bundling.
 
 ## Directory Layout
@@ -57,7 +64,7 @@ If you do just one thing: scan the Architectural Overview and the Key Flows. The
   - `stats.ts` – stats endpoint + demo mock
 - `src/config/demo.ts` – DEMO mode flag
 - `src/dev/self-tests.ts` – runtime self-checks for versioning/validators (dev only)
-- `tests/` – Vitest unit + Playwright e2e suites
+- `tests/` – Vitest unit suites
 
 ## Architectural Overview
 
@@ -236,7 +243,6 @@ Success criteria
 - Typecheck/Build: `npm run build`
 - Lint/Format: `npm run lint`
 - Unit tests: `npm test` or `npm run test:run`
-- E2E tests: `npm run test:e2e` (optionally `:headed` or `:ui`)
 
 Manual smoke test
 - Load app, verify first item selected

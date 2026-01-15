@@ -1,6 +1,13 @@
-## Ground Truth Curator — Frontend
+---
+title: Ground Truth Curator frontend
+description: Local development guide for the Ground Truth Curator frontend.
+ms.date: 2026-01-15
+ms.topic: how-to
+---
 
-Welcome! This is the React + Vite + TypeScript frontend for Ground Truth Curation. This guide helps you get running locally, connect to the backend, generate API types, and run tests.
+## Overview
+
+Welcome. This is the React + Vite + TypeScript frontend for Ground Truth Curation. This guide helps you get running locally, connect to the backend, generate API types, and run tests.
 
 ## Prerequisites
 
@@ -62,37 +69,6 @@ npm run api:types:check
 - Preview built app: `npm run preview` (served at http://localhost:4173)
 - Lint/format: `npm run lint` (Biome)
 - Unit tests: `npm test` or `npm run test:run` (Vitest)
-- E2E tests: see next section
-
-## End-to-end tests (Playwright)
-
-First run only (install browsers):
-
-```bash
-npm run test:e2e:install-browsers
-```
-
-Run tests:
-
-```bash
-# Headless
-npm run test:e2e
-
-# Headed (see the browser)
-npm run test:e2e:headed
-
-# Playwright inspector UI
-npm run test:e2e:ui
-```
-
-Notes:
-
-- Locally, tests reuse the dev server on http://localhost:5173.
-- In CI, tests build then run a preview server on http://localhost:4173.
-- If you’re running against a real backend, ensure it’s up and reachable at `VITE_API_BASE_URL`.
-- Optional envs used by global setup:
-  - `E2E_WAIT_FOR_BACKEND=1` – wait for backend health before running
-  - `E2E_BACKEND_URL=http://host:port` – override backend URL (defaults to `http://localhost:8000`)
 
 ## Demo mode
 
@@ -124,14 +100,10 @@ Telemetry automatically no-ops in demo mode or when required config is missing.
 - OpenAPI type generation fails
   - Verify `VITE_OPENAPI_URL` points to a valid OpenAPI JSON and the backend is running.
 
-- Playwright can’t connect to the app
-  - Ensure the dev or preview server has started and is listening on the expected port (5173 or 4173).
-
 ## Learn more / contribute
 
 - Codebase map and how things fit: `CODEBASE_GUIDE.md`
 - Backend wiring and types generation: `CONNECT_TO_BACKEND.md`
-- E2E test strategy: `plans/playwright-e2e-test-plan.md`
 - Project requirements: `docs/MVP_REQUIREMENTS.md`
 
 PRs welcome. Keep commits tidy and prefer conventional messages. Thanks for contributing!

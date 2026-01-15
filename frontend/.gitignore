@@ -7,13 +7,15 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Test outputs
+junit-results.xml
+
 node_modules
 dist
 dist-ssr
 *.local
 
 # Environment files (except examples)
-.env.e2e.integration
 .env.local
 .env.*.local
 
@@ -27,11 +29,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# Playwright artifacts
-playwright-report/
-blob-report/
-test-results/
 
 # Vite cache
 .vite/
