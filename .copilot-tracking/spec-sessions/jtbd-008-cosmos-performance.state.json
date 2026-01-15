@@ -1,0 +1,49 @@
+{
+  "jtbdId": "JTBD-008",
+  "jtbdStatement": "Help optimize GTC performance and Cosmos usage",
+  "lastAccessed": "2026-01-22T12:30:00Z",
+  "currentPhase": "spec-generation",
+  "completedPhases": ["jtbd-discovery", "topic-decomposition", "topic-research", "spec-generation"],
+  "topics": [
+    {
+      "name": "cosmos-indexing",
+      "description": "The indexing strategy limits indexed fields to reduce write RU costs",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/cosmos-indexing-research.md",
+      "specFile": "specs/cosmos-indexing.md",
+      "status": "specified",
+      "stories": ["SA-242"]
+    },
+    {
+      "name": "partial-updates",
+      "description": "The partial update system patches only changed fields instead of replacing entire documents",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/partial-updates-research.md",
+      "specFile": "specs/partial-updates.md",
+      "status": "specified",
+      "stories": ["SA-244"]
+    },
+    {
+      "name": "query-optimization",
+      "description": "The query optimization effort replaces expensive cross-partition queries with efficient patterns",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/query-optimization-research.md",
+      "specFile": "specs/query-optimization.md",
+      "status": "specified",
+      "stories": ["SA-247", "SA-248"]
+    },
+    {
+      "name": "concurrency-control",
+      "description": "The concurrency control mechanism prevents race conditions during simultaneous updates",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/concurrency-control-research.md",
+      "specFile": "specs/concurrency-control.md",
+      "status": "specified",
+      "stories": ["SA-246"]
+    }
+  ],
+  "openQuestions": [],
+  "nextActions": [
+    "Hand off to Planning Mode for implementation plan generation"
+  ]
+}

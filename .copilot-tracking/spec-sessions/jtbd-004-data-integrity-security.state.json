@@ -1,0 +1,47 @@
+{
+  "jtbdId": "JTBD-004",
+  "jtbdStatement": "Help administrators ensure data integrity and security",
+  "lastAccessed": "2026-01-22T12:00:00Z",
+  "currentPhase": "handoff",
+  "completedPhases": ["jtbd-discovery", "topic-decomposition", "topic-research", "spec-generation"],
+  "topics": [
+    {
+      "name": "pii-detection",
+      "description": "The PII detection system scans ground truth content during import to identify and flag personally identifiable information",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/pii-detection-research.md",
+      "specFile": "specs/pii-detection.md",
+      "status": "complete",
+      "stories": ["SA-669"]
+    },
+    {
+      "name": "dos-prevention",
+      "description": "The DoS prevention system enforces batch size limits and rate limiting on bulk import endpoints",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/dos-prevention-research.md",
+      "specFile": "specs/dos-prevention.md",
+      "status": "complete",
+      "stories": ["SA-409"]
+    },
+    {
+      "name": "xss-sanitization",
+      "description": "The XSS sanitization system cleanses user-generated content to prevent script injection attacks",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/xss-sanitization-research.md",
+      "specFile": "specs/xss-sanitization.md",
+      "status": "complete",
+      "stories": ["SA-565"]
+    },
+    {
+      "name": "batch-validation",
+      "description": "The batch validation system provides detailed error feedback and proper data integrity checks during bulk imports",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/batch-validation-research.md",
+      "specFile": "specs/batch-validation.md",
+      "status": "complete",
+      "stories": ["SA-241"]
+    }
+  ],
+  "openQuestions": ["Should SA-565 be updated to reflect URL validation gap instead of textarea XSS?"],
+  "nextActions": ["Ready for handoff to Planning Mode"]
+}

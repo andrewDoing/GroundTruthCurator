@@ -1,0 +1,27 @@
+{
+  "jtbdId": "JTBD-007",
+  "jtbdStatement": "Help GTC handle chunked document references correctly",
+  "lastAccessed": "2026-01-22T12:00:00Z",
+  "currentPhase": "spec-generation",
+  "completedPhases": ["jtbd-discovery", "topic-decomposition", "topic-research", "spec-generation"],
+  "topics": [
+    {
+      "name": "reference-identity",
+      "description": "The reference identity system uses chunk ID from the search index as the primary uniqueness key instead of URL",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/reference-identity-research.md",
+      "specFile": "specs/reference-identity.md",
+      "status": "specified"
+    }
+  ],
+  "openQuestions": [],
+  "resolvedQuestions": [
+    "UI should display chunk ID and allow users to view chunk text content",
+    "Identity key is chunk ID alone; references are stored per-turn in history[].refs[]"
+  ],
+  "stories": ["SA-821", "SA-257"],
+  "excludedStories": {
+    "SA-447": "Moved to separate JTBD for export/split-tags"
+  },
+  "nextActions": ["Hand off to Planning Mode to generate IMPLEMENTATION_PLAN.md"]
+}

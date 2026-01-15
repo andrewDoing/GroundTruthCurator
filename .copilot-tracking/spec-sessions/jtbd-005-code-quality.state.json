@@ -1,0 +1,64 @@
+{
+  "jtbdId": "JTBD-005",
+  "jtbdStatement": "Help developers maintain GTC code quality",
+  "lastAccessed": "2026-01-22T12:00:00Z",
+  "currentPhase": "handoff",
+  "completedPhases": [
+    "jtbd-discovery",
+    "topic-decomposition",
+    "topic-research",
+    "spec-generation"
+  ],
+  "stories": [
+    "SA-746",
+    "SA-424",
+    "SA-745",
+    "SA-238",
+    "SA-249",
+    "SA-250",
+    "SA-245"
+  ],
+  "topics": [
+    {
+      "name": "architecture-refactoring",
+      "description": "The architecture refactoring extracts duplicate API logic into services and splits the repository layer into focused modules",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/architecture-refactoring-research.md",
+      "specFile": "specs/architecture-refactoring.md",
+      "status": "complete",
+      "stories": ["SA-746", "SA-424"]
+    },
+    {
+      "name": "dependency-injection",
+      "description": "The dependency injection refactoring adopts FastAPI's DI patterns for configuration and services",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/dependency-injection-research.md",
+      "specFile": "specs/dependency-injection.md",
+      "status": "complete",
+      "stories": ["SA-238"]
+    },
+    {
+      "name": "ci-code-quality",
+      "description": "The CI code quality enforcement adds linting, formatting, and pre-push hooks with drift reconciliation",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/ci-code-quality-research.md",
+      "specFile": "specs/ci-code-quality.md",
+      "status": "complete",
+      "stories": ["SA-745"]
+    },
+    {
+      "name": "code-conventions",
+      "description": "The code conventions standardize Pydantic model usage, exception handling, and logging patterns",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/code-conventions-research.md",
+      "specFile": "specs/code-conventions.md",
+      "status": "complete",
+      "stories": ["SA-249", "SA-250", "SA-245"]
+    }
+  ],
+  "openQuestions": [],
+  "nextActions": [
+    "Hand off to Planning Mode to generate IMPLEMENTATION_PLAN.md",
+    "Run task-planner for gap analysis against existing code"
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "jtbdId": "JTBD-003",
+  "jtbdStatement": "Help users find and filter ground truth items (enhancements)",
+  "lastAccessed": "2026-01-22T12:00:00Z",
+  "currentPhase": "handoff",
+  "completedPhases": [
+    "jtbd-discovery",
+    "topic-decomposition",
+    "topic-research",
+    "spec-generation"
+  ],
+  "topics": [
+    {
+      "name": "keyword-search",
+      "description": "The keyword search system enables users to find ground truth items by searching text across all multi-turn history",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/keyword-search-research.md",
+      "specFile": "specs/keyword-search.md",
+      "status": "complete",
+      "stories": ["SA-828"]
+    },
+    {
+      "name": "tag-filtering",
+      "description": "The tag filtering system allows users to include, exclude, or apply boolean logic to filter items by tags",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/tag-filtering-research.md",
+      "specFile": "specs/tag-filtering.md",
+      "status": "complete",
+      "stories": ["SA-363"]
+    },
+    {
+      "name": "explorer-sorting",
+      "description": "The Explorer sorting system handles column sort order, sort direction indicators, and tag-count sorting",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/explorer-sorting-research.md",
+      "specFile": "specs/explorer-sorting.md",
+      "status": "complete",
+      "stories": ["SA-684", "SA-361"]
+    }
+  ],
+  "excludedStories": [
+    {
+      "story": "SA-463",
+      "reason": "Bug fix - Explorer layout overflow. Too small for full spec, treat as quick fix."
+    }
+  ],
+  "openQuestions": [],
+  "nextActions": [
+    "Hand off to Planning Mode to generate IMPLEMENTATION_PLAN.md",
+    "Or continue with another JTBD specification"
+  ]
+}

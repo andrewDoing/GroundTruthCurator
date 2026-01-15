@@ -1,0 +1,57 @@
+{
+  "jtbdId": "JTBD-006",
+  "jtbdStatement": "Help teams understand GTC through documentation",
+  "stories": ["SA-835", "SA-422", "SA-205"],
+  "lastAccessed": "2026-01-22T12:00:00Z",
+  "currentPhase": "handoff",
+  "completedPhases": [
+    "jtbd-discovery",
+    "topic-decomposition",
+    "topic-research",
+    "spec-generation"
+  ],
+  "topics": [
+    {
+      "name": "docs-infrastructure",
+      "description": "The docs infrastructure provides MkDocs setup with build/serve commands and navigation structure",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/docs-infrastructure-research.md",
+      "specFile": "specs/docs-infrastructure.md",
+      "status": "complete"
+    },
+    {
+      "name": "docs-content-strategy",
+      "description": "The content strategy defines audience-specific documentation organization, migration paths, and drift reconciliation workflows",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/docs-content-strategy-research.md",
+      "specFile": "specs/docs-content-strategy.md",
+      "status": "complete"
+    },
+    {
+      "name": "tag-glossary",
+      "description": "The tag glossary surfaces tag definitions to users through the UI and allows definitions to be managed",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/tag-glossary-research.md",
+      "specFile": "specs/tag-glossary.md",
+      "status": "complete"
+    }
+  ],
+  "decisions": [
+    {
+      "question": "Where should MkDocs be set up?",
+      "answer": "Backend Python environment",
+      "date": "2026-01-22"
+    },
+    {
+      "question": "How should tag glossary definitions be stored?",
+      "answer": "Hybrid: config for system tags, database for SME-created tags",
+      "date": "2026-01-22"
+    }
+  ],
+  "openQuestions": [],
+  "nextActions": [
+    "Hand off to Planning Mode to generate IMPLEMENTATION_PLAN.md",
+    "Planning Mode performs gap analysis against existing code",
+    "Building Mode implements tasks from plan"
+  ]
+}

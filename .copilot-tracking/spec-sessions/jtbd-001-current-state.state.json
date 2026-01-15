@@ -1,0 +1,72 @@
+{
+  "jtbdId": "JTBD-001",
+  "jtbdStatement": "Help curators review and approve ground-truth data items through an assignment-based workflow",
+  "lastAccessed": "2026-01-22T00:00:00Z",
+  "currentPhase": "handoff",
+  "completedPhases": [
+    "jtbd-discovery",
+    "topic-decomposition",
+    "topic-research",
+    "spec-generation"
+  ],
+  "topics": [
+    {
+      "name": "assignment-workflow",
+      "description": "The assignment workflow manages how curators receive, claim, and complete work items.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/assignment-workflow-research.md",
+      "specFile": "specs/assignment-workflow.md",
+      "status": "complete"
+    },
+    {
+      "name": "explorer-view",
+      "description": "The explorer view allows curators to browse and filter ground-truth items outside the assigned queue.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/explorer-view-research.md",
+      "specFile": "specs/explorer-view.md",
+      "status": "complete"
+    },
+    {
+      "name": "curation-editor",
+      "description": "The curation editor enables viewing and editing ground-truth content, including tags.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/curation-editor-research.md",
+      "specFile": "specs/curation-editor.md",
+      "status": "complete"
+    },
+    {
+      "name": "reference-management",
+      "description": "The reference management system supports adding, visiting, and annotating supporting sources.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/reference-management-research.md",
+      "specFile": "specs/reference-management.md",
+      "status": "complete"
+    },
+    {
+      "name": "export-snapshots",
+      "description": "The export system generates downloadable JSON snapshots of curated data.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/export-snapshots-research.md",
+      "specFile": "specs/export-snapshots.md",
+      "status": "complete"
+    },
+    {
+      "name": "data-persistence",
+      "description": "The persistence layer abstracts storage behind repositories with Cosmos DB as the primary backend.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/data-persistence-research.md",
+      "specFile": "specs/data-persistence.md",
+      "status": "complete"
+    },
+    {
+      "name": "observability-operations",
+      "description": "The observability and operations system provides opt-in telemetry, error handling, and health status.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/observability-operations-research.md",
+      "specFile": "specs/observability-operations.md",
+      "status": "complete"
+    }
+  ],
+  "openQuestions": [],
+  "nextActions": []
+}

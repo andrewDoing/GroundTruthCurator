@@ -1,0 +1,10 @@
+Read the supplied PRD file.
+PRD path (if provided): {{PRD_FILE}}
+
+Pick only the highest priority task.
+Implement it in this repo.
+Add tests as needed to cover your changes.
+Run the existing tests/build/lint commands you discover (package.json/Makefile/etc) and iterate (fix -> re-run) until tests pass.
+Run the pre-commit hooks manually if any are defined and fix issues until they pass.
+Write a changelog entry for the work you did in CHANGELOG.md. Create the file if it does not exist.
+When green, commit progress with message 'ralph: <task>'.

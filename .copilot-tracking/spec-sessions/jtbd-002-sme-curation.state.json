@@ -1,0 +1,82 @@
+{
+  "jtbdId": "JTBD-002",
+  "jtbdStatement": "Help SMEs curate ground truth items effectively (enhancements)",
+  "lastAccessed": "2026-01-22T00:00:00Z",
+  "currentPhase": "spec-generation",
+  "completedPhases": [
+    "jtbd-discovery",
+    "topic-decomposition",
+    "topic-research"
+  ],
+  "topics": [
+    {
+      "name": "assignment-error-feedback",
+      "description": "The assignment error feedback system displays specific, actionable messages when assignment operations fail due to conflicts.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/assignment-error-feedback-research.md",
+      "specFile": "specs/assignment-error-feedback.md",
+      "status": "draft"
+    },
+    {
+      "name": "assignment-takeover",
+      "description": "The assignment takeover system allows SMEs to reassign items currently assigned to others with appropriate confirmation.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/assignment-takeover-research.md",
+      "specFile": "specs/assignment-takeover.md",
+      "status": "draft"
+    },
+    {
+      "name": "explorer-state-preservation",
+      "description": "The explorer state preservation system maintains filter and view state when users perform actions that navigate away.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/explorer-state-preservation-research.md",
+      "specFile": "specs/explorer-state-preservation.md",
+      "status": "draft"
+    },
+    {
+      "name": "draft-duplicate-detection",
+      "description": "The draft duplicate detection system warns SMEs when draft items appear to duplicate approved items.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/draft-duplicate-detection-research.md",
+      "specFile": "specs/draft-duplicate-detection.md",
+      "status": "draft"
+    },
+    {
+      "name": "modal-keyboard-handling",
+      "description": "The modal keyboard handling system ensures keyboard shortcuts do not unexpectedly close or interfere with modal interactions.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/modal-keyboard-handling-research.md",
+      "specFile": "specs/modal-keyboard-handling.md",
+      "status": "draft"
+    },
+    {
+      "name": "validation-error-clarity",
+      "description": "The validation error clarity system translates backend validation errors into user-friendly messages with remediation guidance.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/validation-error-clarity-research.md",
+      "specFile": "specs/validation-error-clarity.md",
+      "status": "draft"
+    },
+    {
+      "name": "inspection-performance",
+      "description": "The inspection performance system caches and memoizes data to improve responsiveness when viewing ground truth items.",
+      "scopeValidated": true,
+      "researchFile": ".copilot-tracking/subagent/20260122/inspection-performance-research.md",
+      "specFile": "specs/inspection-performance.md",
+      "status": "draft"
+    }
+  ],
+  "openQuestions": [
+    "What UI surface should the View assignee action open by default?",
+    "Which Explorer filters and UI controls should be included in URL state for v1?",
+    "What is the first duplicate matching heuristic for v1?",
+    "Which non-Escape keys should be stopped from propagating for all modals?",
+    "Which field name is canonical for the key paragraph in the API?",
+    "What TTL is appropriate for the inspect cache if we cannot reliably invalidate on all edits?"
+  ],
+  "nextActions": [
+    "Review specs for accuracy against current codebase",
+    "Resolve open questions and update specs",
+    "Hand off to Planning mode to generate an implementation plan"
+  ]
+}
