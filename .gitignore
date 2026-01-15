@@ -51,10 +51,12 @@ build/
 # ------------------------------
 # Editors / IDEs
 # ------------------------------
+.vscode/*
+!.vscode/extensions.json
+
 **/.vscode/*
 !**/.vscode/tasks.json
 !**/.vscode/launch.json
-!**/.vscode/settings.json
 !**/.vscode/extensions.json
 
 .idea/
