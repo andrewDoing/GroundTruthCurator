@@ -176,7 +176,15 @@ jobs:
       ACR_NAME: ${{ vars.ACR_NAME }}
       ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
       IMAGE_REPO: ${{ vars.IMAGE_REPO || 'gtc-backend' }}
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    if: >-
+      ${{
+        (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+        && vars.AZURE_CLIENT_ID != ''
+        && vars.AZURE_TENANT_ID != ''
+        && vars.AZURE_SUBSCRIPTION_ID != ''
+        && vars.ACR_NAME != ''
+        && vars.ACR_LOGIN_SERVER != ''
+      }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
