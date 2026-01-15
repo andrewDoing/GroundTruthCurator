@@ -134,7 +134,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: GroundTruthCurator/frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
         working-directory: frontend
