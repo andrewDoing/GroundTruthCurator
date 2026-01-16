@@ -7,7 +7,6 @@ import pytest
 from httpx import AsyncClient
 
 
-
 def make_item(dataset: str, item_id: str) -> dict[str, Any]:
     return {
         "id": item_id,

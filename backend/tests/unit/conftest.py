@@ -276,14 +276,7 @@ except Exception:
     pass
 
 
-# Helper fixture to override dependencies conveniently in tests. Tests can do:
-#
-# def fake_repo():
-#     return InMemoryRepo(...)
-#
-# def test_something(live_app):
-#     use_fakes(live_app, {get_repo: fake_repo})
-#
+# Helper fixture to override dependencies conveniently in tests.
 def use_fakes(app, overrides: dict):
     """Apply dependency overrides to the FastAPI app.
 

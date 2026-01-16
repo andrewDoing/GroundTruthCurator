@@ -11,7 +11,7 @@ from app.domain.enums import GroundTruthStatus
 
 class _InMemoryRepo:
     def __init__(self):
-        # Key: (datasetName, bucket_str, id)
+        # Tuple key: datasetName, bucket_str, id
         self.items: dict[tuple[str, str, str], GroundTruthItem] = {}
 
     # ---- GroundTruthRepo protocol (minimal working set for this test) ----

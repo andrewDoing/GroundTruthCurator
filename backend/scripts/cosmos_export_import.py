@@ -457,9 +457,9 @@ def write_batch(
 
 
 def main():
-    # Build one DefaultAzureCredential and reuse it
-    # For user-assigned managed identity, you can do:
-    # aad_credential = DefaultAzureCredential(managed_identity_client_id=os.getenv("AZURE_CLIENT_ID"))
+    # Build one DefaultAzureCredential and reuse it.
+    # For user-assigned managed identity, set the credential's managed identity
+    # client id from the AZURE_CLIENT_ID environment variable.
     aad_credential = DefaultAzureCredential()
 
     # Source client (AAD)

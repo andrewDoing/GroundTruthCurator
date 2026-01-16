@@ -61,7 +61,7 @@ async def test_list_all_ground_truths_default_params(
         build_item(dataset, idx=1, status=GroundTruthStatus.draft.value, reviewed_at=base),
     ]
 
-    # import items
+    # Load items into the service
     await import_items(async_client, user_headers, items)
 
     response = await async_client.get("/v1/ground-truths", headers=user_headers)

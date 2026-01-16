@@ -14,9 +14,7 @@ from app.core.config import settings
 async def test_search_hits_real_service(async_client: AsyncClient, user_headers: dict[str, str]):
     # Ensure search is configured; otherwise skip this integration test gracefully
     if not (settings.AZ_SEARCH_ENDPOINT and settings.AZ_SEARCH_INDEX):
-        pytest.skip(
-            "Azure Search not configured; set GTC_ENV_FILE=environments/sample.env"
-        )
+        pytest.skip("Azure Search not configured; set GTC_ENV_FILE=environments/sample.env")
 
     # Skip if no default Azure credential is available (prevents noisy auth failures)
     try:
