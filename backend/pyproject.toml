@@ -22,6 +22,7 @@ dependencies = [
 	"opentelemetry-instrumentation-httpx",
 	"opentelemetry-instrumentation-logging",
 	"azure-identity",
+	"azure-storage-blob",
 	"randomname",
 	"azure-ai-projects>=1.0.0",
 	"azure-ai-agents",

@@ -33,50 +33,50 @@ Follow repository workflow guidance from #file:../../AGENTS.md
 
 ## Implementation Checklist
 
-### [ ] Phase 1: Lock down compatibility contract
+### [x] Phase 1: Lock down compatibility contract
 
-* [ ] Task 1.1: Confirm snapshot endpoint contracts (write + download)
+* [x] Task 1.1: Confirm snapshot endpoint contracts (write + download)
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 15-37)
 
-* [ ] Task 1.2: Define compatibility-safe defaults for pipeline adoption
+* [x] Task 1.2: Define compatibility-safe defaults for pipeline adoption
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 39-60)
 
-### [ ] Phase 2: Build pipeline core (registries + request models)
+### [x] Phase 2: Build pipeline core (registries + request models)
 
-* [ ] Task 2.1: Add export pipeline request/option models
+* [x] Task 2.1: Add export pipeline request/option models
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 64-84)
 
-* [ ] Task 2.2: Implement processor and formatter registries
+* [x] Task 2.2: Implement processor and formatter registries
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 86-109)
 
-### [ ] Phase 3: Implement initial processors and formatters
+### [x] Phase 3: Implement initial processors and formatters
 
-* [ ] Task 3.1: Implement processor `merge_tags`
+* [x] Task 3.1: Implement processor `merge_tags`
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 113-130)
 
-* [ ] Task 3.2: Implement formatters `json_items` and `json_snapshot_payload`
+* [x] Task 3.2: Implement formatters `json_items` and `json_snapshot_payload`
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 132-152)
 
-### [ ] Phase 4: Storage backends and delivery modes
+### [x] Phase 4: Storage backends and delivery modes
 
-* [ ] Task 4.1: Define and implement an export storage interface
+* [x] Task 4.1: Define and implement an export storage interface
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 156-178)
 
-* [ ] Task 4.2: Add Azure Blob storage backend
+* [x] Task 4.2: Add Azure Blob storage backend
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 180-204)
 
-* [ ] Task 4.3: Implement delivery modes (attachment/artifact/stream)
+* [x] Task 4.3: Implement delivery modes (attachment/artifact/stream)
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 206-227)
 
-### [ ] Phase 5: Wire into container, API, and tests
+### [x] Phase 5: Wire into container, API, and tests
 
-* [ ] Task 5.1: Wire registries, storage, and pipeline via container
+* [x] Task 5.1: Wire registries, storage, and pipeline via container
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 231-245)
 
-* [ ] Task 5.2: Update snapshot service and routes to use pipeline internally
+* [x] Task 5.2: Update snapshot service and routes to use pipeline internally
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 247-266)
 
-* [ ] Task 5.3: Add new unit tests for pipeline components
+* [x] Task 5.3: Add new unit tests for pipeline components
   * Details: .copilot-tracking/details/20260116-export-pipeline-implementation-details.md (Lines 268-289)
 
 ## Dependencies

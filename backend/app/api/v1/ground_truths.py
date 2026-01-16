@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Header, Query
 from typing import Any, cast
 from datetime import datetime, timezone
 from uuid import UUID
@@ -17,6 +17,7 @@ from app.domain.models import GroundTruthItem, Reference, GroundTruthListRespons
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.plugins import get_default_registry
 from app.container import container
+from app.exports.models import SnapshotExportRequest
 from app.services.validation_service import validate_bulk_items
 import logging
 from app.services.tagging_service import apply_computed_tags
@@ -126,9 +127,18 @@ async def import_bulk(
 
 
 @router.post("/snapshot")
-async def snapshot(user: UserContext = Depends(get_current_user)) -> dict[str, Any]:
-    res = await container.snapshot_service.export_json()
-    return {"status": "ok", **res}
+async def snapshot(
+    body: SnapshotExportRequest = Body(default_factory=SnapshotExportRequest),
+    user: UserContext = Depends(get_current_user),
+) -> Any:
+    try:
+        response = await container.snapshot_service.export_snapshot(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if isinstance(response, dict):
+        return {"status": "ok", **response}
+    return response
 
 
 @router.get("/snapshot")

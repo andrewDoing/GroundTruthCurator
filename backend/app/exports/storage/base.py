@@ -1,0 +1,17 @@
+from __future__ import annotations
+
+from typing import Any, AsyncIterator, Protocol
+
+
+class ExportStorage(Protocol):
+    async def write_json(self, key: str, obj: dict[str, Any]) -> None:
+        ...
+
+    async def write_bytes(self, key: str, data: bytes, content_type: str) -> None:
+        ...
+
+    async def open_read(self, key: str) -> AsyncIterator[bytes]:
+        ...
+
+    async def list_prefix(self, prefix: str) -> list[str]:
+        ...

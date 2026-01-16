@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, AliasChoices, SecretStr
+from pydantic import Field, AliasChoices, SecretStr, model_validator
 from pathlib import Path
 import os
 import logging
@@ -100,6 +100,22 @@ class Settings(BaseSettings):
     # When set, the `/v1/tags` endpoint will return this allowlist instead of
     # reading from the tags registry store.
     ALLOWED_MANUAL_TAGS: str | None = None
+
+    # Export pipeline settings
+    EXPORT_PROCESSOR_ORDER: str | None = None
+    EXPORT_STORAGE_BACKEND: str = "local"  # local|blob
+    EXPORT_BLOB_ACCOUNT_URL: str | None = None
+    EXPORT_BLOB_CONTAINER: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_export_storage(self) -> "Settings":
+        if self.EXPORT_STORAGE_BACKEND == "blob":
+            if not self.EXPORT_BLOB_ACCOUNT_URL or not self.EXPORT_BLOB_CONTAINER:
+                raise ValueError(
+                    "EXPORT_BLOB_ACCOUNT_URL and EXPORT_BLOB_CONTAINER are required when "
+                    "EXPORT_STORAGE_BACKEND is 'blob'"
+                )
+        return self
 
     # Sampling allocation config (CSV string). Example: "dataset1:50,dataset2:50"
     # Used by get_sampling_allocation(); kept as raw string for flexible parsing.

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional, cast
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict, field_validator, computed_field, model_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 from app.domain.enums import GroundTruthStatus, HistoryItemRole, ExpectedBehavior
 from app.domain.validators import GroundTruthItemTagValidators
@@ -76,7 +76,6 @@ class GroundTruthItem(GroundTruthItemTagValidators, BaseModel):
     refs: list[Reference] = cast("list[Reference]", Field(default_factory=list, alias="refs"))
 
     # Tag fields: manualTags are user-provided, computedTags are system-generated
-    # The 'tags' property merges both for API responses
     manual_tags: list[str] = Field(default_factory=list, alias="manualTags")
     computed_tags: list[str] = Field(default_factory=list, alias="computedTags")
 
@@ -125,17 +124,6 @@ class GroundTruthItem(GroundTruthItemTagValidators, BaseModel):
             else:
                 self.totalReferences = history_refs
         return self
-
-    @computed_field  # type: ignore[misc]
-    @property
-    def tags(self) -> list[str]:
-        """Merged view of manualTags and computedTags for API responses.
-
-        Returns the union of manual and computed tags, sorted for consistency.
-        """
-        combined = set(self.manual_tags or []) | set(self.computed_tags or [])
-        return sorted(combined)
-
 
 class PaginationMetadata(BaseModel):
     """Pagination metadata for list responses."""

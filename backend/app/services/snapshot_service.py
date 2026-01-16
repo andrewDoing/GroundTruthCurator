@@ -1,17 +1,32 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
 import json
+from typing import Any
+
+from fastapi.responses import Response
 
 from app.adapters.repos.base import GroundTruthRepo
 from app.domain.enums import GroundTruthStatus
+from app.exports.models import ExportFilters, SnapshotExportRequest
+from app.exports.pipeline import ExportPipeline
+from app.exports.registry import ExportFormatterRegistry, ExportProcessorRegistry
 
 
 class SnapshotService:
-    def __init__(self, repo: GroundTruthRepo, base_dir: str = "./exports/snapshots"):
+    def __init__(
+        self,
+        repo: GroundTruthRepo,
+        export_pipeline: ExportPipeline,
+        processor_registry: ExportProcessorRegistry,
+        formatter_registry: ExportFormatterRegistry,
+        default_processor_order: list[str],
+    ):
         self.repo = repo
-        self.base_dir = Path(base_dir)
+        self.export_pipeline = export_pipeline
+        self.processor_registry = processor_registry
+        self.formatter_registry = formatter_registry
+        self.default_processor_order = default_processor_order
 
     async def collect_approved(self) -> list:
         """Return all approved GroundTruthItems from the repository.
@@ -25,64 +40,72 @@ class SnapshotService:
         """Build an in-memory JSON payload of approved items.
 
         Shape:
-          { schemaVersion: "v2", snapshotAt, datasetNames, count, filters, items }
+            { schemaVersion: "v2", snapshotAt, datasetNames, count, filters, items }
         """
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        items = await self.collect_approved()
-        dataset_names: set[str] = set()
-        out_items: list[dict] = []
-        for it in items:
-            dataset_names.add(getattr(it, "datasetName", ""))
-            out_items.append(it.model_dump(mode="json", by_alias=True, exclude_none=True))
+        request = SnapshotExportRequest()
+        payload_bytes, _ = await self._format_payload(request)
+        return json.loads(payload_bytes)
 
-        payload: dict = {
-            "schemaVersion": "v2",
-            "snapshotAt": ts,
-            "datasetNames": sorted(n for n in dataset_names if n),
-            "count": len(out_items),
-            "filters": {"status": "approved"},
-            "items": out_items,
-        }
-        return payload
+    async def export_snapshot(self, request: SnapshotExportRequest) -> Response | dict[str, str | int]:
+        delivery_mode = request.delivery.mode if request.delivery else "attachment"
+        if delivery_mode == "artifact":
+            snapshot_at = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            items, filters = await self._collect_export_items(request)
+            return await self.export_pipeline.deliver_artifacts(
+                items=items,
+                filters=filters,
+                snapshot_at=snapshot_at,
+            )
 
-    async def export_json(self) -> dict[str, str | int]:
-        """Export approved items as individual JSON documents and a manifest.
+        payload_bytes, snapshot_at = await self._format_payload(request)
+        filename = self._resolve_filename(request.format, snapshot_at)
+        return await self.export_pipeline.deliver_attachment(payload_bytes, filename=filename)
 
-        Layout:
-          ./exports/snapshots/{ts}/ground-truth-{id}.json
-          ./exports/snapshots/{ts}/manifest.json
-        """
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        out_dir = self.base_dir / ts
-        out_dir.mkdir(parents=True, exist_ok=True)
+    async def _collect_export_items(
+        self, request: SnapshotExportRequest
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        filters = request.filters or ExportFilters()
+        status_value = filters.status
+        try:
+            status = GroundTruthStatus(status_value) if status_value else None
+        except ValueError as exc:
+            raise ValueError(f"Invalid status value '{status_value}'") from exc
 
-        # Collect approved items (no fallback; surface errors)
-        items = await self.collect_approved()
+        items = await self.repo.list_all_gt(status=status)
+        dataset_names = filters.dataset_names
+        if dataset_names:
+            items = [it for it in items if getattr(it, "datasetName", None) in dataset_names]
 
-        # Write each item as its own JSON file
-        dataset_names: set[str] = set()
-        count = 0
-        for it in items:
-            dataset_names.add(getattr(it, "datasetName", ""))
-            obj = it.model_dump(mode="json", by_alias=True, exclude_none=True)
-            # Ensure schemaVersion/docType present from model defaults
-            file_path = out_dir / f"ground-truth-{it.id}.json"
-            with file_path.open("w", encoding="utf-8") as f:
-                json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
-            count += 1
+        out_items = [
+            it.model_dump(mode="json", by_alias=True, exclude_none=True) for it in items
+        ]
+        processors = self.processor_registry.resolve_chain(
+            request.processors,
+            self.default_processor_order,
+        )
+        for processor in processors:
+            out_items = processor.process(out_items)
 
-        manifest = {
-            "schemaVersion": "v2",
-            "snapshotAt": ts,
-            "datasetNames": sorted(n for n in dataset_names if n),
-            "count": count,
-            "filters": {"status": "approved"},
-        }
-        with (out_dir / "manifest.json").open("w", encoding="utf-8") as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
+        filters_payload: dict[str, Any] = {"status": status_value}
+        if dataset_names is not None:
+            filters_payload["datasetNames"] = dataset_names
+        return out_items, filters_payload
 
-        return {
-            "snapshotDir": str(out_dir.resolve()),
-            "count": count,
-            "manifestPath": str((out_dir / "manifest.json").resolve()),
-        }
+    async def _format_payload(self, request: SnapshotExportRequest) -> tuple[bytes, str]:
+        snapshot_at = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        items, filters = await self._collect_export_items(request)
+        format_name = request.format or "json_snapshot_payload"
+        formatter = self.formatter_registry.create(
+            format_name,
+            snapshot_at=snapshot_at,
+            filters=filters,
+        )
+        formatted = formatter.format(items)
+        payload_bytes = formatted if isinstance(formatted, bytes) else formatted.encode("utf-8")
+        return payload_bytes, snapshot_at
+
+    def _resolve_filename(self, format_name: str | None, snapshot_at: str) -> str:
+        if (format_name or "json_snapshot_payload") == "json_items":
+            return f"ground-truth-items-{snapshot_at}.json"
+        return f"ground-truth-snapshot-{snapshot_at}.json"
+

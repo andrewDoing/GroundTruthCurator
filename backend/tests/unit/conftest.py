@@ -174,7 +174,13 @@ async def live_app(configure_unit_test_settings):
         # If container is immutable in some contexts, continue with None
         pass
     container.assignment_service = AssignmentService(container.repo)
-    container.snapshot_service = SnapshotService(container.repo)
+    container.snapshot_service = SnapshotService(
+        container.repo,
+        export_pipeline=container.export_pipeline,
+        processor_registry=container.export_processor_registry,
+        formatter_registry=container.export_formatter_registry,
+        default_processor_order=container.export_default_processor_order,
+    )
     container.search_service = SearchService()
     container.curation_service = CurationService(container.repo)
     container.tag_registry_service = TagRegistryService(_InMemoryTagsRepo())

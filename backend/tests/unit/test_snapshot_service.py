@@ -3,6 +3,12 @@ from __future__ import annotations
 import pytest
 from typing import Any
 
+from app.exports.formatters.json_items import JsonItemsFormatter
+from app.exports.formatters.json_snapshot_payload import JsonSnapshotPayloadFormatter
+from app.exports.pipeline import ExportPipeline
+from app.exports.processors.merge_tags import MergeTagsProcessor
+from app.exports.registry import ExportFormatterRegistry, ExportProcessorRegistry
+from app.exports.storage.local import LocalExportStorage
 from app.services.snapshot_service import SnapshotService
 from app.domain.models import GroundTruthItem
 from app.domain.enums import GroundTruthStatus
@@ -93,6 +99,29 @@ def _make_item(id: str, dataset: str, status: GroundTruthStatus) -> GroundTruthI
     )
 
 
+def _build_snapshot_service(repo: _FakeRepo) -> SnapshotService:
+    storage = LocalExportStorage(base_dir=".")
+    pipeline = ExportPipeline(storage)
+    processor_registry = ExportProcessorRegistry()
+    processor_registry.register(MergeTagsProcessor())
+    formatter_registry = ExportFormatterRegistry()
+    formatter_registry.register(JsonItemsFormatter())
+    formatter_registry.register_factory(
+        "json_snapshot_payload",
+        lambda snapshot_at, filters=None: JsonSnapshotPayloadFormatter(
+            snapshot_at=snapshot_at,
+            filters=filters,
+        ),
+    )
+    return SnapshotService(
+        repo,
+        export_pipeline=pipeline,
+        processor_registry=processor_registry,
+        formatter_registry=formatter_registry,
+        default_processor_order=[],
+    )
+
+
 @pytest.mark.anyio
 async def test_collect_approved_calls_repo_with_status():
     items = [
@@ -100,7 +129,7 @@ async def test_collect_approved_calls_repo_with_status():
         _make_item("2", "d2", GroundTruthStatus.draft),
     ]
     repo = _FakeRepo(items)
-    svc = SnapshotService(repo)
+    svc = _build_snapshot_service(repo)
 
     res = await svc.collect_approved()
 
@@ -118,7 +147,7 @@ async def test_build_snapshot_payload_includes_only_approved():
         _make_item("2", "d2", GroundTruthStatus.draft),
     ]
     repo = _FakeRepo(items)
-    svc = SnapshotService(repo)
+    svc = _build_snapshot_service(repo)
 
     payload = await svc.build_snapshot_payload()
 
@@ -134,7 +163,7 @@ async def test_build_snapshot_payload_counts_and_timestamp_present():
         _make_item("2", "dx", GroundTruthStatus.approved),
     ]
     repo = _FakeRepo(items)
-    svc = SnapshotService(repo)
+    svc = _build_snapshot_service(repo)
 
     payload = await svc.build_snapshot_payload()
 
@@ -152,7 +181,7 @@ async def test_build_snapshot_payload_has_dataset_names_sorted_unique():
         _make_item("4", "", GroundTruthStatus.approved),
     ]
     repo = _FakeRepo(items)
-    svc = SnapshotService(repo)
+    svc = _build_snapshot_service(repo)
 
     payload = await svc.build_snapshot_payload()
 
@@ -162,7 +191,7 @@ async def test_build_snapshot_payload_has_dataset_names_sorted_unique():
 @pytest.mark.anyio
 async def test_build_snapshot_payload_empty_list():
     repo = _FakeRepo([])
-    svc = SnapshotService(repo)
+    svc = _build_snapshot_service(repo)
 
     payload = await svc.build_snapshot_payload()
 

@@ -14,6 +14,18 @@ from app.services.tag_registry_service import TagRegistryService
 from app.adapters.gtc_inference_adapter import GTCInferenceAdapter
 from app.services.chat_service import ChatService
 from app.adapters.agent_steps_store import AgentStepsStore
+from app.exports.formatters.json_items import JsonItemsFormatter
+from app.exports.formatters.json_snapshot_payload import JsonSnapshotPayloadFormatter
+from app.exports.pipeline import ExportPipeline
+from app.exports.processors.merge_tags import MergeTagsProcessor
+from app.exports.registry import (
+    ExportFormatterRegistry,
+    ExportProcessorRegistry,
+    parse_processor_order,
+)
+from app.exports.storage.base import ExportStorage
+from app.exports.storage.blob import BlobExportStorage
+from app.exports.storage.local import LocalExportStorage
 
 
 logger = logging.getLogger("gtc.container")
@@ -31,6 +43,11 @@ class Container:
     inference_service: GTCInferenceAdapter | None
     chat_service: ChatService
     agent_steps_store: AgentStepsStore | None
+    export_pipeline: ExportPipeline
+    export_processor_registry: ExportProcessorRegistry
+    export_formatter_registry: ExportFormatterRegistry
+    export_storage: ExportStorage
+    export_default_processor_order: list[str]
 
     def __init__(self) -> None:
         # Lazily initialize repo and services. Tests and app lifespan will call
@@ -45,6 +62,11 @@ class Container:
         self.tag_registry_service = cast(TagRegistryService, None)
         self.inference_service = None  # Lazily initialized by init_chat()
         self.agent_steps_store = cast(AgentStepsStore | None, None)
+        self.export_storage = self._build_export_storage()
+        self.export_processor_registry = self._build_export_processor_registry()
+        self.export_formatter_registry = self._build_export_formatter_registry()
+        self.export_pipeline = ExportPipeline(self.export_storage)
+        self.export_default_processor_order = parse_processor_order(settings.EXPORT_PROCESSOR_ORDER)
         self.chat_service = ChatService(
             inference_service=None,
             steps_store=self.agent_steps_store,
@@ -62,6 +84,36 @@ class Container:
             raise RuntimeError(f"azure-identity not installed: {e}")
         # Exclude shared cache for server scenarios to keep minimal surface
         return DefaultAzureCredential(exclude_shared_token_cache_credential=True)
+
+    def _build_export_storage(self) -> ExportStorage:
+        if settings.EXPORT_STORAGE_BACKEND == "blob":
+            if not settings.EXPORT_BLOB_ACCOUNT_URL or not settings.EXPORT_BLOB_CONTAINER:
+                raise RuntimeError(
+                    "EXPORT_BLOB_ACCOUNT_URL and EXPORT_BLOB_CONTAINER are required when "
+                    "EXPORT_STORAGE_BACKEND is 'blob'"
+                )
+            return BlobExportStorage(
+                account_url=settings.EXPORT_BLOB_ACCOUNT_URL,
+                container_name=settings.EXPORT_BLOB_CONTAINER,
+            )
+        return LocalExportStorage(base_dir=".")
+
+    def _build_export_processor_registry(self) -> ExportProcessorRegistry:
+        registry = ExportProcessorRegistry()
+        registry.register(MergeTagsProcessor())
+        return registry
+
+    def _build_export_formatter_registry(self) -> ExportFormatterRegistry:
+        registry = ExportFormatterRegistry()
+        registry.register(JsonItemsFormatter())
+        registry.register_factory(
+            "json_snapshot_payload",
+            lambda snapshot_at, filters=None: JsonSnapshotPayloadFormatter(
+                snapshot_at=snapshot_at,
+                filters=filters,
+            ),
+        )
+        return registry
 
     def init_cosmos_repo(self, db_name: str | None = None) -> None:
         """Create a Cosmos repo instance and wire services.
@@ -116,7 +168,13 @@ class Container:
         self.assignment_service = AssignmentService(self.repo)
         # Keep existing search service (may already be wired with adapter)
         self.search_service = self.search_service or SearchService()
-        self.snapshot_service = SnapshotService(self.repo)
+        self.snapshot_service = SnapshotService(
+            self.repo,
+            export_pipeline=self.export_pipeline,
+            processor_registry=self.export_processor_registry,
+            formatter_registry=self.export_formatter_registry,
+            default_processor_order=self.export_default_processor_order,
+        )
         self.curation_service = CurationService(self.repo)
         # Initialize tags repo and service (shares the same Cosmos account/db)
         self.tags_repo = CosmosTagsRepo(
