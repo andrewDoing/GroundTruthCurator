@@ -257,7 +257,7 @@ class AssignmentService:
             bucket=original.bucket,
             status=GroundTruthStatus.draft,
             synthQuestion=original.synth_question,
-            editedQuestion=original.edited_question,
+            edited_question=original.edited_question,
             answer=original.answer,
             refs=[Reference.model_validate(r) for r in (original.refs or [])],
             manualTags=new_tags,
@@ -271,9 +271,9 @@ class AssignmentService:
             samplingBucket=original.samplingBucket,
             questionLength=original.questionLength,
             assignedTo=user_id,
-            assignedAt=now,
+            assigned_at=now,
             updatedBy=None,
-            reviewedAt=None,
+            reviewed_at=None,
         )
 
         # Apply computed tags based on the new item's properties

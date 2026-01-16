@@ -350,7 +350,7 @@ async def update_ground_truth(
                             msg=h.get("msg")
                             or h.get("content", ""),  # Support both 'msg' and 'content'
                             refs=refs_list,
-                            expectedBehavior=expected_behavior_data
+                            expected_behavior=expected_behavior_data
                             if isinstance(expected_behavior_data, list)
                             else None,
                         )

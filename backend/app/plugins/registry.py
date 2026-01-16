@@ -84,6 +84,7 @@ def get_default_registry() -> TagPluginRegistry:
             # Double-check after acquiring lock
             if _default_registry is None:
                 _default_registry = create_default_registry()
+    assert _default_registry is not None
     return _default_registry
 
 

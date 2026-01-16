@@ -25,14 +25,15 @@ def _build_resource(settings: Settings):
     """
     try:
         from opentelemetry.sdk.resources import Resource
-        from opentelemetry.semconv.resource import ResourceAttributes
     except Exception as e:  # pragma: no cover - optional dep
         log.debug("OpenTelemetry SDK not available for Resource: %s", e)
         return None
 
     attrs = {
-        ResourceAttributes.SERVICE_NAME: settings.SERVICE_NAME,
-        ResourceAttributes.SERVICE_VERSION: _get_package_version("0.1.0"),
+        # Use stable semantic convention keys directly to avoid importing
+        # deprecated semconv helper classes.
+        "service.name": settings.SERVICE_NAME,
+        "service.version": _get_package_version("0.1.0"),
     }
     return Resource.create(attrs)
 
