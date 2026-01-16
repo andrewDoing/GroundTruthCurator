@@ -6,41 +6,42 @@ This repository uses [Jujutsu (jj)](https://martinvonz.github.io/jj/) for versio
 
 ### Before Making Changes
 
-1. **Create a new workspace** for your changes:
+1. Create a new commit for your changes:
 
    ```bash
    jj new -m "description of the change"
    ```
 
-2. **Verify** you are working on the new commit:
+2. Verify you are working on the new commit:
 
    ```bash
-   jj log --limit 5
+   jj log --no-pager --limit 5
    ```
 
 ### Making Changes
 
 - Make all necessary code changes within this workspace.
-- Use `jj status` to review uncommitted changes.
-- Use `jj diff` to see what has changed.
+- Use `jj status` to review uncommitted changes
+- Use `jj diff --no-pager` to see what has changed
+- Use `--no-pager` with commands that may open a pager, such as `jj log` and `jj diff`
 
 ### After Completing Changes
 
-1. **Update the commit description** if needed:
+1. Update the commit description if needed:
 
    ```bash
    jj describe -m "final description of changes"
    ```
 
-2. **Prompt the user** before advancing the main bookmark:
+2. Prompt the user before advancing the main bookmark:
 
    > ⚠️ **User Action Required**
    >
    > Changes are complete. Please review the changes:
    >
    > ```bash
-   > jj log --limit 5
-   > jj diff -r @
+   > jj log --no-pager --limit 5
+   > jj diff --no-pager -r @
    > ```
    >
    > If you are satisfied with the changes, move the main bookmark forward:
@@ -53,6 +54,6 @@ This repository uses [Jujutsu (jj)](https://martinvonz.github.io/jj/) for versio
 
 ### Important Notes
 
-- **Never** automatically move the main bookmark—always prompt the user first.
-- Keep commits atomic and focused on a single logical change.
-- Write clear, descriptive commit messages.
+- Never automatically move the main bookmark, always prompt the user first
+- Keep commits atomic and focused on a single logical change
+- Write clear, descriptive commit messages
