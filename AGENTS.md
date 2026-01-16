@@ -6,13 +6,25 @@ This repository uses [Jujutsu (jj)](https://martinvonz.github.io/jj/) for versio
 
 ### Before Making Changes
 
-1. Create a new commit for your changes:
+1. Check if the current commit is empty:
+
+   ```bash
+   jj log --no-pager --limit 1
+   ```
+
+   If the commit is empty, set a descriptive commit message:
+
+   ```bash
+   jj describe -m "initial commit description"
+   ```
+
+2. If the commit is not empty, create a new commit for your changes:
 
    ```bash
    jj new -m "description of the change"
    ```
 
-2. Verify you are working on the new commit:
+3. Verify you are working on the new commit:
 
    ```bash
    jj log --no-pager --limit 5

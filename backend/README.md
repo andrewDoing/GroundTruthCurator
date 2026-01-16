@@ -56,6 +56,12 @@ From `backend/`:
 uv sync
 ```
 
+Optional (recommended): install Git hooks (format/lint on commit, tests on push):
+
+```bash
+uv run pre-commit install -c .pre-commit-config.yaml --hook-type pre-commit --hook-type pre-push
+```
+
 You’ll use `uv run <command>` to run tools (pytest, uvicorn, scripts) inside the venv.
 
 ## Run the Cosmos DB Emulator (Docker)
