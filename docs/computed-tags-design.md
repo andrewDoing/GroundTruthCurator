@@ -252,6 +252,57 @@ To support scenarios where tag logic changes (e.g., a new plugin is added or an 
 
 ### 4.4 Export Pipeline Architecture
 
+#### 4.4.1 Baseline contract
+
+The export pipeline design must preserve the existing snapshot behaviors that other components rely on.
+
+Stable behaviors:
+
+* `POST /v1/ground-truths/snapshot` writes per-item JSON artifacts plus `manifest.json` under `exports/snapshots/{ts}/`.
+* `GET /v1/ground-truths/snapshot` returns a downloadable JSON attachment and sets `Content-Disposition` with a filename.
+* The frontend derives the download filename from the `Content-Disposition` header and expects the snapshot payload keys to remain stable.
+
+Flexible behaviors:
+
+* The internal implementation may shift to a processor and formatter pipeline.
+* New export routes may introduce additional formats and delivery targets, as long as the snapshot endpoints above remain unchanged.
+
+#### 4.4.2 v1 export pipeline API surface
+
+We reuse the existing snapshot export route for pipeline-based exports, because it is rarely used and already aligned with export semantics. Snapshot routes stay intact for backward compatibility, with `POST /v1/ground-truths/snapshot` becoming the pipeline entry point.
+
+Proposed route:
+
+* `POST /v1/ground-truths/snapshot`
+
+Request body shape:
+
+```json
+{
+    "format": "json_snapshot_payload",
+    "filters": {
+        "datasetNames": ["dataset_a"],
+        "status": "approved"
+    },
+    "processors": ["merge_tags"],
+    "delivery": {
+        "mode": "attachment"
+    }
+}
+```
+
+v1 defaults and constraints:
+
+* Supported formats: `json_snapshot_payload` and `json_items`.
+* Supported filters: `datasetNames` and `status`, with `status` defaulting to `approved`.
+* Processor order defaults to configured environment settings if `processors` is omitted.
+* `delivery.mode` defaults to `attachment` and preserves `Content-Disposition` behavior for downloaded JSON.
+
+Implementation notes:
+
+* Keep the existing snapshot endpoints and payload shape intact.
+* Update the snapshot service implementation to route through the pipeline while preserving behavior.
+
 To support custom transformations and various output formats, we use a pipeline architecture allowing for chained processing steps.
 
 **1. Export Processors (Intermediate Steps):**
@@ -290,6 +341,210 @@ class ExportFormatter(ABC):
 
 * **Order of Operations:** The sequence of processors is configured via an environment variable (e.g., `EXPORT_PROCESSOR_ORDER="merge_tags,anonymize"`).
 * **Formatter Selection:** The formatter is selected by the request (e.g., `?format=csv`).
+
+#### 4.4.3 Processor and formatter interface rules
+
+Interfaces follow the list-in/list-out pipeline design and must remain deterministic for tests.
+
+Processor contract:
+
+* `process()` accepts a list of export records and returns a list of export records.
+* `name` must be lowercase, stable, and unique within the registry (e.g., `merge_tags`).
+* Processors raise a validation error for invalid inputs rather than collecting errors inline.
+
+Formatter contract:
+
+* `format()` accepts a list of export records and returns `bytes` or `str`.
+* `format_name` must be lowercase, stable, and unique (e.g., `json_items`).
+* Formatters raise a validation error for unsupported output options.
+
+Determinism guidance:
+
+* Avoid non-deterministic timestamps in unit tests by allowing `snapshotAt` overrides or injecting a clock.
+* Keep output payload keys stable and compare JSON payloads by parsing into objects.
+
+#### 4.4.4 Registry and configuration strategy
+
+We introduce registries to manage pipeline components and configure them via environment variables.
+
+Registries:
+
+* `ExportProcessorRegistry` registers processors by `name` and rejects duplicates.
+* `ExportFormatterRegistry` registers formatters by `format_name` and resolves the requested format.
+* Registries raise a clear validation error when a requested name is missing and the API returns `400` with the message.
+
+Configuration:
+
+* `GTC_EXPORT_PROCESSOR_ORDER` defines the default ordered processor list, comma-separated.
+* If `GTC_EXPORT_PROCESSOR_ORDER` is unset or empty, no processors run by default.
+* Request bodies may override processor order; unknown processor names return `400`.
+* Format resolution is request-driven via the `format` field; unknown format names return `400`.
+
+Container wiring:
+
+* Registries are created in `backend/app/container.py` and passed into the snapshot pipeline service so routers remain thin.
+* The snapshot route calls the service with resolved processor order and formatter name.
+
+#### 4.4.5 Execution flow and delivery
+
+Execution flow for `POST /v1/ground-truths/snapshot` when running the pipeline:
+
+1. Load items from `GroundTruthRepo` using the selected filters, with `status` defaulting to `approved`.
+2. Convert each item into an export record via `model_dump(mode="json", by_alias=True, exclude_none=True)`.
+3. Apply the configured processor chain in order.
+4. Format the output using the requested formatter.
+5. Deliver the output using one of the following modes:
+     * `attachment` for in-memory JSON via `JSONResponse`.
+     * `artifact` for a generated file response via `FileResponse`.
+     * `stream` for large payloads via `StreamingResponse`.
+
+Content-Disposition handling:
+
+* The delivery step sets `Content-Disposition` when returning a downloadable file or JSON attachment.
+* The filename is generated in the delivery step so processors and formatters remain pure.
+
+#### 4.4.6 Initial processors and formatters
+
+Processor: `merge_tags`
+
+* Adds a derived `tags` field that is the unique union of `manualTags` and `computedTags`.
+* Keeps `manualTags` and `computedTags` in the record for downstream auditing.
+
+Formatter: `json_snapshot_payload`
+
+* Preserves the existing `GET /v1/ground-truths/snapshot` response shape.
+* Output shape:
+
+```json
+{
+    "schemaVersion": "v2",
+    "snapshotAt": "20260116T000000Z",
+    "datasetNames": ["dataset_a"],
+    "count": 2,
+    "filters": {
+        "status": "approved",
+        "datasetNames": ["dataset_a"]
+    },
+    "items": [
+        {
+            "id": "gt_1",
+            "datasetName": "dataset_a",
+            "manualTags": ["tag:a"],
+            "computedTags": ["tag:b"],
+            "tags": ["tag:a", "tag:b"]
+        }
+    ]
+}
+```
+
+Formatter: `json_items`
+
+* Returns only the list of export records.
+* Output shape:
+
+```json
+[
+    {
+        "id": "gt_1",
+        "datasetName": "dataset_a",
+        "manualTags": ["tag:a"],
+        "computedTags": ["tag:b"],
+        "tags": ["tag:a", "tag:b"]
+    }
+]
+```
+
+Schema versioning and manifests:
+
+* `schemaVersion` remains `v2` for JSON payloads to preserve existing snapshot compatibility.
+* When the delivery mode writes per-item artifacts, the export pipeline writes a `manifest.json` alongside items with `schemaVersion`, `snapshotAt`, `datasetNames`, `count`, and `filters`.
+
+#### 4.4.7 Export storage interface (multi-backend)
+
+We generalize the existing snapshot storage abstraction into an export storage interface to support multiple backends, starting with Azure Blob Storage.
+
+Design goals:
+
+* Keep a stable interface that supports both local filesystem and Blob storage.
+* Allow snapshot and pipeline exports to write artifacts without coupling to a specific backend.
+* Use a consistent artifact key layout: `exports/snapshots/{timestamp}/{filename}`.
+
+Proposed interface (minimum required methods):
+
+* `write_json(key: str, obj: dict) -> None` for manifest and JSON payloads.
+* `write_bytes(key: str, data: bytes, content_type: str) -> None` for formatted outputs.
+* `open_read(key: str) -> BinaryIO` for streaming reads.
+* `list_prefix(prefix: str) -> list[str]` for artifact discovery when needed.
+
+Local filesystem remains the default dev/test implementation, while Blob becomes the first cloud target.
+
+#### 4.4.8 Azure Blob configuration and authentication
+
+Add explicit settings to `backend/app/core/config.py` because `extra="forbid"` rejects unknown env vars.
+
+Required settings:
+
+* `GTC_EXPORT_STORAGE_BACKEND` with values `local` or `blob`.
+* `GTC_EXPORT_BLOB_ACCOUNT_URL` for the storage account endpoint.
+* `GTC_EXPORT_BLOB_CONTAINER` for the target container name.
+
+Authentication:
+
+* Use `DefaultAzureCredential` from `azure-identity` for all environments.
+* Production should rely on managed identity for Blob access.
+* Local execution uses the same credential chain and should authenticate through your developer identity.
+
+Local execution warning:
+
+* When using the Blob backend locally, exports write your local data into the configured Blob container.
+* Ensure the account and container are scoped for development and review access policies before running exports.
+
+Dependency updates:
+
+* Add `azure-storage-blob` to `backend/pyproject.toml` to enable Blob operations.
+
+#### 4.4.9 Delivery strategy for Blob-hosted artifacts
+
+We select backend streaming as the initial delivery strategy to preserve the existing download behavior.
+
+Decision:
+
+* The API streams from Blob and returns a `StreamingResponse` or `FileResponse` with `Content-Disposition` set by the backend.
+
+Rationale:
+
+* Preserves the current filename parsing behavior in the frontend.
+* Avoids exposing container access or SAS URLs to clients in the initial milestone.
+
+Security expectations:
+
+* Backend access to Blob uses managed identity or connection string credentials.
+* Responses remain authenticated through the existing API surface; no public Blob access required.
+
+#### 4.4.10 Test strategy and rollout
+
+Test coverage targets for the export pipeline:
+
+* Registry duplicate name protections for processors and formatters.
+* Processor order configuration parsing via `GTC_EXPORT_PROCESSOR_ORDER`.
+* JSON output shape compatibility with existing snapshot download tests.
+* Delivery mode selection for large payloads, exercised via a small fake dataset and a streaming response path.
+
+Suggested test locations:
+
+* `backend/tests/unit/test_export_registry.py` for registry and config parsing behavior.
+* `backend/tests/unit/test_export_pipeline.py` for processor order and formatter outputs.
+* `backend/tests/integration/ground_truths/test_snapshot_download_endpoint.py` for snapshot payload compatibility.
+
+Determinism guidance:
+
+* Inject a fixed `snapshotAt` value or a clock in tests to avoid timestamp drift.
+* Compare JSON outputs via parsed objects instead of raw string equality.
+
+Rollout notes:
+
+* Keep existing snapshot endpoints and payload keys unchanged.
+* Introduce pipeline internals behind the same routes to avoid breaking clients.
 
 **Execution Flow:**
 `DB Docs -> [Processor 1] -> [Processor 2] -> ... -> [Formatter] -> Output`
