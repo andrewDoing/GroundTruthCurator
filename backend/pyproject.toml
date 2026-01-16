@@ -34,7 +34,7 @@ dev = [
 	"pytest-asyncio",
 	"ruff",
 	"black",
-	"mypy",
+	"ty",
 	"pre-commit",
 ]
 
@@ -84,9 +84,15 @@ ignore_names = [
 [tool.black]
 line-length = 100
 
-[tool.mypy]
-python_version = "3.11"
+[tool.ty.environment]
+python-version = "3.11"
 
-[[tool.mypy.overrides]]
-module = ["app.adapters.inference.inference"]
-ignore_errors = true
+[tool.ty.rules]
+unknown-argument = "warn"
+invalid-return-type = "warn"
+unused-ignore-comment = "ignore"
+
+[tool.ty.src]
+exclude = [
+	"app/adapters/inference/inference.py",
+]

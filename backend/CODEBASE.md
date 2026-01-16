@@ -172,15 +172,15 @@ Use VS Code tasks under this workspace:
 - Integration tests: “Run integration tests (integration env)”
 - Large/stress: “Run large/stress integration tests (integration env)”
 - Full suite: “Run tests”
-- Mypy: “Run mypy”
+- ty: “Run ty”
 - Container smoke test: “Run container smoke test” (builds image, runs container, verifies /healthz and frontend)
 
 Manual equivalents (examples):
 - uv run pytest -q tests/unit
 - GTC_ENV_FILE="environments/integration-tests.env,environments/local.env" uv run pytest -q tests/integration
-- uv run mypy --hide-error-codes --show-column-numbers .
+- uv run ty check app --output-format concise --exclude app/adapters/inference/inference.py --force-exclude
 
-Aim to keep: ruff clean, black formatted, mypy passing, tests green.
+Aim to keep: ruff clean, black formatted, ty passing, tests green.
 
 ## Docker image
 

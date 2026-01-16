@@ -13,9 +13,9 @@ repos:
         files: ^backend/.*\.py$
   - repo: local
     hooks:
-      - id: mypy
-        name: mypy
-        entry: bash -c "cd backend && uv run --frozen mypy --no-incremental --hide-error-codes --show-column-numbers --check-untyped-defs app"
+      - id: ty
+        name: ty
+        entry: bash -c "cd backend && uv run --frozen ty check app --output-format concise --exclude app/adapters/inference/inference.py --force-exclude"
         language: system
         files: ^backend/app/.*\.py$
         require_serial: true

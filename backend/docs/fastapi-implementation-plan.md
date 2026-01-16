@@ -111,7 +111,7 @@ Azure integrations (add when wiring cloud):
 Dev/tooling:
 - pytest, pytest-asyncio
 - ruff (lint), black (format)
-- mypy (type check)
+- ty (type check)
 
 Note: We’ll use uv to manage these in `pyproject.toml` with a `dev` dependency group.
 
@@ -257,7 +257,7 @@ Phase 2 — Blob + AI Search + LLM stubs
 
 Phase 3 — Hardening and cleanup
 - Tag management endpoints (admin), periodic cleanup for soft-deleted items.
-- More tests (concurrency, auth edge cases), mypy/ruff/black in CI.
+- More tests (concurrency, auth edge cases), ty/ruff/black in CI.
 - Performance tuning: pagination, query filters, indices guidance for Cosmos.
 
 
@@ -310,7 +310,7 @@ uv add fastapi uvicorn[standard] pydantic pydantic-settings httpx "python-jose[c
 uv add azure-cosmos azure-storage-blob azure-identity azure-search-documents
 
 # dev tooling
-uv add -g dev pytest pytest-asyncio ruff black mypy
+uv add -g dev pytest pytest-asyncio ruff black ty
 
 # run app
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -329,7 +329,7 @@ uv run pytest -q
 
 ## CI/CD (outline)
 
-- Lint (ruff), format check (black --check), type check (mypy), tests (pytest) on PR.
+- Lint (ruff), format check (black --check), type check (ty), tests (pytest) on PR.
 - Build container image with multi-stage Dockerfile (later); health endpoints for readiness.
 - Deployment pipeline to Azure (later) with managed identity and private endpoints (future).
 

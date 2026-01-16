@@ -79,27 +79,11 @@
 			"group": "build"
 		},
 		{
-			"label": "Run mypy",
+			"label": "Run ty",
 			"type": "shell",
-			"command": "uv run mypy --hide-error-codes --show-column-numbers .",
+			"command": "uv run ty check app --output-format concise --exclude app/adapters/inference/inference.py --force-exclude",
 			"isBackground": false,
-			"problemMatcher": [
-				{
-					"owner": "python",
-					"fileLocation": [
-						"relative",
-						"${workspaceFolder}"
-					],
-					"pattern": {
-						"regexp": "^(.+?):(\\d+):(\\d+): (error|note): (.*)$",
-						"file": 1,
-						"line": 2,
-						"column": 3,
-						"severity": 4,
-						"message": 5
-					}
-				}
-			],
+			"problemMatcher": [],
 			"group": "build"
 		}
 	]
