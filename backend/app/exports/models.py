@@ -18,7 +18,7 @@ class ExportFilters(BaseModel):
 class ExportDeliveryOptions(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    mode: ExportDeliveryMode = Field(default="attachment")
+    mode: ExportDeliveryMode = Field(default="artifact")
 
 
 class SnapshotExportRequest(BaseModel):
@@ -27,4 +27,4 @@ class SnapshotExportRequest(BaseModel):
     format: ExportFormat | None = None
     filters: ExportFilters | None = None
     processors: list[str] | None = None
-    delivery: ExportDeliveryOptions | None = None
+    delivery: ExportDeliveryOptions | None = Field(default_factory=ExportDeliveryOptions)

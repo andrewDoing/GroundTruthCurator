@@ -17,6 +17,7 @@ from app.core.logging import setup_logging, user_logging_middleware, attach_trac
 from app.api.v1.router import api_router
 from app.container import container
 from app.domain.tags import TAG_SCHEMA
+from app.domain.manual_tags_provider import JsonFileManualTagProvider, expand_manual_tags
 from app.plugins import get_default_registry
 
 logger = logging.getLogger("gtc.startup")
@@ -27,12 +28,13 @@ async def lifespan(app: FastAPI):
     # Log configuration at startup (SecretStr fields are masked)
     log_settings()
 
+    registry = get_default_registry()
+    computed = set(registry.get_static_keys())
+
     # Validate configuration-derived tag allowlist doesn't collide
     # with computed tags; collisions make it impossible to interpret
     # whether a tag was manually set or computed.
     if config.settings.ALLOWED_MANUAL_TAGS:
-        registry = get_default_registry()
-        computed = set(registry.get_static_keys())
         manual = {
             t.strip() for t in config.settings.ALLOWED_MANUAL_TAGS.split(",") if t and t.strip()
         }
@@ -40,6 +42,19 @@ async def lifespan(app: FastAPI):
         if overlap:
             raise RuntimeError(
                 "GTC_ALLOWED_MANUAL_TAGS overlaps computed tag keys: " + ", ".join(overlap)
+            )
+
+    # Validate manual tag defaults do not overlap computed tags.
+    manual_defaults = expand_manual_tags(
+        JsonFileManualTagProvider(
+            Path(config.settings.MANUAL_TAGS_CONFIG_PATH)
+        ).get_default_tag_groups()
+    )
+    if manual_defaults:
+        overlap = sorted(set(manual_defaults).intersection(computed))
+        if overlap:
+            raise RuntimeError(
+                "Manual tag defaults overlap computed tag keys: " + ", ".join(overlap)
             )
 
     # Lazily initialize repo (creates Cosmos DB/container if configured)

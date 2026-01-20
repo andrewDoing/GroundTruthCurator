@@ -26,62 +26,6 @@ class DocType(str, Enum):
     file = "file"
 
 
-# Tag group enums (values used to populate the tag schema)
-
-
-class SourceTag(str, Enum):
-    # mutually exclusive
-    sme = "sme"
-    sa = "sa"  # support assistant
-    synthetic = "synthetic"
-    sme_curated = "sme_curated"
-    user = "user"
-    other = "other"
-
-
-class AnswerabilityTag(str, Enum):
-    # mutually exclusive
-    answerable = "answerable"
-    not_answerable = "not_answerable"
-    should_not_answer = "should_not_answer"
-
-
-# application specific tags should move to configuration
-
-
-class TopicTag(str, Enum):
-    # multi-select allowed
-    # set to topics that apply to all products only
-    general = "general"
-    compatibility = "compatibility"
-    install = "install"
-    license = "license"
-    performance = "performance"
-    security = "security"
-
-
-class IntentTypeTag(str, Enum):
-    # multi-select allowed
-    informational = "informational"
-    action = "action"
-    feedback = "feedback"
-    clarification = "clarification"
-    other = "other"
-
-
-class QueryExpertiseVariationTag(str, Enum):
-    # mutually exclusive
-    expert = "expert"
-    novice = "novice"
-
-
-class DifficultyTag(str, Enum):
-    # mutually exclusive
-    easy = "easy"
-    medium = "medium"
-    hard = "hard"
-
-
 class HistoryItemRole(str, Enum):
     user = "user"
     assistant = "assistant"

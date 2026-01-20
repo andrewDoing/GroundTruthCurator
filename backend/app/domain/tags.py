@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Set, Tuple, Type
+from pathlib import Path
+from typing import Optional, Set, Tuple
 
-from app.domain import enums as E
+from app.core.config import settings
+from app.domain.manual_tags_provider import JsonFileManualTagProvider, ManualTagGroup
 
 
 @dataclass(frozen=True)
@@ -14,21 +16,42 @@ class TagGroupSpec:
     depends_on: Optional[list[Tuple[str, str]]] = None  # list of (group, value) dependencies
 
 
-def _values(enum_cls: Type[E.Enum]) -> Set[str]:
-    return {m.value for m in enum_cls}
+def _load_default_tag_groups() -> list[ManualTagGroup]:
+    config_path = settings.MANUAL_TAGS_CONFIG_PATH
+    if not config_path:
+        return []
+    path = Path(config_path)
+    provider = JsonFileManualTagProvider(path)
+    return provider.get_default_tag_groups()
+
+
+def _build_schema(groups: list[ManualTagGroup]) -> dict[str, TagGroupSpec]:
+    schema: dict[str, TagGroupSpec] = {}
+    for group in groups:
+        existing = schema.get(group.group)
+        if existing:
+            merged_values = set(existing.values) | set(group.tags)
+            schema[group.group] = TagGroupSpec(
+                name=group.group,
+                values=merged_values,
+                exclusive=existing.exclusive or group.mutually_exclusive,
+                depends_on=existing.depends_on,
+            )
+            continue
+
+        schema[group.group] = TagGroupSpec(
+            name=group.group,
+            values=set(group.tags),
+            exclusive=group.mutually_exclusive,
+        )
+
+    return schema
 
 
 # Global tag schema definition
 # Schema is fetched dynamically by frontend via /v1/tags/schema endpoint
 # Frontend validation will fail if schema is unavailable (fail-fast approach)
-TAG_SCHEMA: dict[str, TagGroupSpec] = {
-    "source": TagGroupSpec("source", _values(E.SourceTag), exclusive=True),
-    "answerability": TagGroupSpec("answerability", _values(E.AnswerabilityTag), exclusive=True),
-    "topic": TagGroupSpec("topic", _values(E.TopicTag), exclusive=False),
-    "intent": TagGroupSpec("intent", _values(E.IntentTypeTag), exclusive=False),
-    "expertise": TagGroupSpec("expertise", _values(E.QueryExpertiseVariationTag), exclusive=True),
-    "difficulty": TagGroupSpec("difficulty", _values(E.DifficultyTag), exclusive=True),
-}
+TAG_SCHEMA: dict[str, TagGroupSpec] = _build_schema(_load_default_tag_groups())
 
 
 class RuleError(Exception):

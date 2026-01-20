@@ -101,6 +101,9 @@ class Settings(BaseSettings):
     # reading from the tags registry store.
     ALLOWED_MANUAL_TAGS: str | None = None
 
+    # Manual tag defaults configuration (JSON file with manualTagGroups)
+    MANUAL_TAGS_CONFIG_PATH: str = str(REPO_ROOT / "app" / "domain" / "manual_tags.json")
+
     # Export pipeline settings
     EXPORT_PROCESSOR_ORDER: str | None = None
     EXPORT_STORAGE_BACKEND: str = "local"  # local|blob

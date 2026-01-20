@@ -66,6 +66,10 @@ class RemoveTagsRequest(BaseModel):
 @router.get("/tags", response_model=TagListResponse)
 async def get_tags() -> TagListResponse:
     try:
+        registry = get_default_registry()
+        computed_tag_keys = sorted(registry.get_static_keys())
+        computed_tag_set = set(computed_tag_keys)
+
         # If ALLOWED_MANUAL_TAGS is set, use it as the source of truth for
         # manual tag selection (provider-style configuration).
         if settings.ALLOWED_MANUAL_TAGS:
@@ -74,10 +78,8 @@ async def get_tags() -> TagListResponse:
             ]
         else:
             manual_tags = await container.tag_registry_service.list_tags()
-
-        registry = get_default_registry()
-        computed_tag_keys = sorted(registry.get_static_keys())
-        return TagListResponse(tags=sorted(manual_tags), computedTags=computed_tag_keys)
+        filtered_manual = sorted([t for t in manual_tags if t not in computed_tag_set])
+        return TagListResponse(tags=filtered_manual, computedTags=computed_tag_keys)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,0 +1,34 @@
+{
+  "manualTagGroups": [
+    {
+      "group": "source",
+      "mutuallyExclusive": true,
+      "tags": ["sme", "sa", "synthetic", "sme_curated", "user", "other"]
+    },
+    {
+      "group": "answerability",
+      "mutuallyExclusive": true,
+      "tags": ["answerable", "not_answerable", "should_not_answer"]
+    },
+    {
+      "group": "topic",
+      "mutuallyExclusive": false,
+      "tags": ["general", "compatibility", "install", "license", "performance", "security"]
+    },
+    {
+      "group": "intent",
+      "mutuallyExclusive": false,
+      "tags": ["informational", "action", "feedback", "clarification", "other"]
+    },
+    {
+      "group": "expertise",
+      "mutuallyExclusive": true,
+      "tags": ["expert", "novice"]
+    },
+    {
+      "group": "difficulty",
+      "mutuallyExclusive": true,
+      "tags": ["easy", "medium", "hard"]
+    }
+  ]
+}
