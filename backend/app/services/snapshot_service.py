@@ -46,7 +46,9 @@ class SnapshotService:
         payload_bytes, _ = await self._format_payload(request)
         return json.loads(payload_bytes)
 
-    async def export_snapshot(self, request: SnapshotExportRequest) -> Response | dict[str, str | int]:
+    async def export_snapshot(
+        self, request: SnapshotExportRequest
+    ) -> Response | dict[str, str | int]:
         delivery_mode = request.delivery.mode if request.delivery else "attachment"
         if delivery_mode == "artifact":
             snapshot_at = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -76,9 +78,7 @@ class SnapshotService:
         if dataset_names:
             items = [it for it in items if getattr(it, "datasetName", None) in dataset_names]
 
-        out_items = [
-            it.model_dump(mode="json", by_alias=True, exclude_none=True) for it in items
-        ]
+        out_items = [it.model_dump(mode="json", by_alias=True, exclude_none=True) for it in items]
         processors = self.processor_registry.resolve_chain(
             request.processors,
             self.default_processor_order,
@@ -108,4 +108,3 @@ class SnapshotService:
         if (format_name or "json_snapshot_payload") == "json_items":
             return f"ground-truth-items-{snapshot_at}.json"
         return f"ground-truth-snapshot-{snapshot_at}.json"
-
