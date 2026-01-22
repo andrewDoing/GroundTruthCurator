@@ -163,6 +163,8 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("GTC_AZURE_CLIENT_ID", "AZURE_CLIENT_ID"),
     )
+    # PII detection toggle
+    PII_DETECTION_ENABLED: bool = True
 
 
 def _resolve_env_files_from_override(repo_root: Path) -> str | tuple[str, ...] | None:

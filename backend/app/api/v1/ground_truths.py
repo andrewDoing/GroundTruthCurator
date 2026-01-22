@@ -9,16 +9,18 @@ from uuid import UUID
 
 import randomname  # type: ignore
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from fastapi.responses import JSONResponse
 
 from app.core.auth import get_current_user, UserContext
+from app.core.config import settings
 from app.domain.models import GroundTruthItem, Reference, GroundTruthListResponse, HistoryItem
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.plugins import get_default_registry
 from app.container import container
 from app.exports.models import SnapshotExportRequest
 from app.services.validation_service import validate_bulk_items
+from app.services.pii_service import PIIWarning, scan_bulk_items_for_pii
 import logging
 from app.services.tagging_service import apply_computed_tags
 
@@ -28,6 +30,8 @@ router = APIRouter()
 
 
 class ImportBulkResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     imported: int = Field(description="Number of items successfully imported.")
     errors: list[str] = Field(description="List of error messages for items that failed to import.")
     uuids: list[str] = Field(
@@ -35,6 +39,14 @@ class ImportBulkResponse(BaseModel):
         description=(
             "The item IDs in the same order as the request payload. Clients may send either 'id' or 'uuid' in each item; "
             "when missing or blank, the server generates a two-word, hyphenated string ID (e.g., 'sleek-voxel') via randomname."
+        ),
+    )
+    pii_warnings: list[PIIWarning] = Field(
+        default_factory=list,
+        alias="piiWarnings",
+        description=(
+            "Warnings about potential personally identifiable information (PII) detected in imported items. "
+            "These are informational only and do not block import. Review flagged content for remediation."
         ),
     )
 
@@ -123,7 +135,17 @@ async def import_bulk(
     else:
         imported_count = 0
 
-    return ImportBulkResponse(imported=imported_count, errors=errors, uuids=uuids)
+    # Scan for PII (informational warnings only, does not block import)
+    pii_warnings: list[PIIWarning] = []
+    if settings.PII_DETECTION_ENABLED:
+        pii_warnings = scan_bulk_items_for_pii(items)
+        if pii_warnings:
+            logger.info(
+                f"api.import_bulk.pii_detected - "
+                f"items={len(items)}, warnings={len(pii_warnings)}"
+            )
+
+    return ImportBulkResponse(imported=imported_count, errors=errors, uuids=uuids, pii_warnings=pii_warnings)
 
 
 @router.post("/snapshot")
