@@ -105,6 +105,7 @@ Implement the next task from the implementation plan.
 7. Update AGENTS.md with any operational learnings (keep it brief).
 
 IMPORTANT: Implement functionality completely. Placeholders and stubs waste efforts.
+When you are done and no further work is needed, output a single line: COMPLETE
 EOF
     fi
 }
@@ -126,7 +127,16 @@ while true; do
     # --agent: Use the specified agent from .github/agents/
     # --model: Use the specified model
     # --yolo: Auto-approve all tool calls (equivalent to --dangerously-skip-permissions)
-    copilot -p "$PROMPT" --agent "$AGENT" --model "$MODEL" --yolo
+    copilot_output_file=$(mktemp)
+    copilot -p "$PROMPT" --agent "$AGENT" --model "$MODEL" --yolo | tee "$copilot_output_file"
+
+    if grep -q "^COMPLETE$" "$copilot_output_file"; then
+        rm -f "$copilot_output_file"
+        echo "Completion signal received. Exiting loop."
+        break
+    fi
+
+    rm -f "$copilot_output_file"
 
     # Push changes after each iteration (build mode only)
     if [ "$MODE" = "build" ]; then
