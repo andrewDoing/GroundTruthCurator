@@ -225,7 +225,7 @@ async def import_bulk(
         failed=failed_count,
     )
 
-    return ImportBulkResponse(  # type: ignore[call-arg,misc]
+    return ImportBulkResponse(  # type: ignore[call-arg]
         imported=imported_count,
         failed=failed_count,
         errors=errors,

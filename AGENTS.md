@@ -93,7 +93,8 @@ uv run pytest tests/unit/test_dos_prevention.py -v
 uv run pytest tests/unit/ -k "bulk" -v
 
 # Type checking (uses 'ty' not mypy)
-uv run ty check app/api/v1/ground_truths.py
+uv run ty check app/  # Check entire app directory
+uv run ty check app/api/v1/ground_truths.py  # Check specific file
 ```
 
 ### Frontend (Node.js)
