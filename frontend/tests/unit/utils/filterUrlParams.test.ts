@@ -188,6 +188,7 @@ describe("filterUrlParams utilities", () => {
 				tags: { include: ["important"], exclude: [] },
 				itemId: "item-456",
 				refUrl: "https://example.com",
+				keyword: "",
 				sortColumn: "reviewedAt",
 				sortDirection: "asc",
 			};
@@ -292,6 +293,7 @@ describe("filterUrlParams utilities", () => {
 				tags: { include: ["validated", "important"], exclude: [] },
 				itemId: "item-789",
 				refUrl: "https://example.com/reference",
+				keyword: "",
 				sortColumn: "reviewedAt",
 				sortDirection: "asc",
 			};

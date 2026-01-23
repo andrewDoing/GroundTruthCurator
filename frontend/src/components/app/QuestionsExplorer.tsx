@@ -234,7 +234,9 @@ export default function QuestionsExplorer({
 		const sortByParam =
 			appliedFilter.sortColumn === "refs"
 				? "totalReferences"
-				: appliedFilter.sortColumn;
+				: appliedFilter.sortColumn === "tagCount"
+					? "tagCount"
+					: appliedFilter.sortColumn;
 
 		// Ensure page is at least 1
 		const safePage = Math.max(1, currentPage);
@@ -336,7 +338,7 @@ export default function QuestionsExplorer({
 		// Page reset is handled by useEffect that watches appliedFilter
 	};
 
-	const handleSort = (column: "refs" | "reviewedAt" | "hasAnswer") => {
+	const handleSort = (column: "refs" | "reviewedAt" | "hasAnswer" | "tagCount") => {
 		if (sortColumn === column) {
 			// If already sorting by this column, toggle direction
 			if (sortDirection === "desc") {
@@ -929,6 +931,28 @@ export default function QuestionsExplorer({
 												)}
 										</button>
 									</th>
+									<th className="px-3 py-3 text-center min-w-[50px]">
+										<button
+											type="button"
+											onClick={() => handleSort("tagCount")}
+											className="inline-flex items-center gap-1 transition-colors hover:text-violet-700 w-full justify-center"
+											aria-label="Sort by Tag Count"
+											title="Number of tags"
+										>
+											Tags
+											{appliedFilter.sortColumn === "tagCount" && (
+												<span className="text-violet-600">
+													{appliedFilter.sortDirection === "desc" ? "↓" : "↑"}
+												</span>
+											)}
+											{sortColumn === "tagCount" &&
+												sortColumn !== appliedFilter.sortColumn && (
+													<span className="text-amber-500 opacity-50">
+														{sortDirection === "desc" ? "↓" : "↑"}
+													</span>
+												)}
+										</button>
+									</th>
 									<th className="px-3 py-3 text-center min-w-[70px]">
 										<button
 											type="button"
@@ -959,7 +983,7 @@ export default function QuestionsExplorer({
 								{loadError ? (
 									<tr>
 										<td
-											colSpan={8}
+											colSpan={9}
 											className="px-4 py-8 text-center text-sm text-rose-600"
 										>
 											Failed to load items: {loadError}
@@ -968,7 +992,7 @@ export default function QuestionsExplorer({
 								) : isLoading && sourceItems.length === 0 ? (
 									<tr>
 										<td
-											colSpan={8}
+											colSpan={9}
 											className="px-4 py-8 text-center text-sm text-slate-500"
 										>
 											Loading ground truths…
@@ -977,7 +1001,7 @@ export default function QuestionsExplorer({
 								) : displayItems.length === 0 ? (
 									<tr>
 										<td
-											colSpan={8}
+											colSpan={9}
 											className="px-4 py-8 text-center text-sm text-slate-500"
 										>
 											No items to display
@@ -1103,6 +1127,10 @@ export default function QuestionsExplorer({
 											{/* Refs */}
 											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700">
 												{item.totalReferences ?? 0}
+											</td>
+											{/* Tag Count */}
+											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700">
+												{item.tags?.length ?? 0}
 											</td>
 											{/* Reviewed */}
 											<td className="px-3 py-3 text-center text-xs text-slate-600">

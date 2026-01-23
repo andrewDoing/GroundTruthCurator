@@ -87,6 +87,7 @@ export interface paths {
          *     - Order preservation: Response `uuids` mirrors request order for easy correlation.
          *     - Duplicate handling: Existing items are not overwritten; per-item errors are returned in `errors`.
          *     - Optional approval: `approve=true` marks all items approved and sets review metadata.
+         *     - Size limit: Requests exceeding BULK_IMPORT_MAX_ITEMS return HTTP 413.
          */
         post: operations["import_bulk_v1_ground_truths_post"];
         delete?: never;
@@ -496,6 +497,37 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * BulkImportError
+         * @description Structured error for bulk import failures.
+         */
+        BulkImportError: {
+            /**
+             * Index
+             * @description 0-based position in request array
+             */
+            index: number;
+            /**
+             * Itemid
+             * @description ID of the failed item (if available)
+             */
+            itemId?: string | null;
+            /**
+             * Field
+             * @description Field that caused the error (if applicable)
+             */
+            field?: string | null;
+            /**
+             * Code
+             * @description Error code: INVALID_TAG, DUPLICATE_ID, CREATE_FAILED, etc.
+             */
+            code: string;
+            /**
+             * Message
+             * @description Human-readable error description
+             */
+            message: string;
+        };
         /** ChatReference */
         ChatReference: {
             /** Id */
@@ -592,6 +624,25 @@ export interface components {
          * @enum {string}
          */
         ExpectedBehavior: "tool:search" | "generation:answer" | "generation:need-context" | "generation:clarification" | "generation:out-of-domain";
+        /** ExportDeliveryOptions */
+        ExportDeliveryOptions: {
+            /**
+             * Mode
+             * @default artifact
+             * @enum {string}
+             */
+            mode: "attachment" | "artifact";
+        };
+        /** ExportFilters */
+        ExportFilters: {
+            /** Datasetnames */
+            datasetNames?: string[] | null;
+            /**
+             * Status
+             * @default approved
+             */
+            status: string;
+        };
         /**
          * FrontendConfig
          * @description Frontend runtime configuration.
@@ -761,9 +812,7 @@ export interface components {
             totalReferences: number;
             /**
              * Tags
-             * @description Merged view of manualTags and computedTags for API responses.
-             *
-             *     Returns the union of manual and computed tags, sorted for consistency.
+             * @description Return a merged, sorted view of manual and computed tags.
              */
             readonly tags: string[];
         };
@@ -812,15 +861,59 @@ export interface components {
              */
             imported: number;
             /**
-             * Errors
-             * @description List of error messages for items that failed to import.
+             * Failed
+             * @description Number of items that failed to import.
+             * @default 0
              */
-            errors: string[];
+            failed: number;
+            /**
+             * Errors
+             * @description Structured error objects for items that failed to import.
+             */
+            errors?: components["schemas"]["BulkImportError"][];
             /**
              * Uuids
              * @description The item IDs in the same order as the request payload. Clients may send either 'id' or 'uuid' in each item; when missing or blank, the server generates a two-word, hyphenated string ID (e.g., 'sleek-voxel') via randomname.
              */
             uuids?: string[];
+            /**
+             * Piiwarnings
+             * @description Warnings about potential personally identifiable information (PII) detected in imported items. These are informational only and do not block import. Review flagged content for remediation.
+             */
+            piiWarnings?: components["schemas"]["PIIWarning"][];
+            /** @description Summary statistics for the bulk import operation. */
+            validationSummary: components["schemas"]["ValidationSummary"];
+        };
+        /**
+         * PIIWarning
+         * @description Warning about potential PII detected in a ground truth item.
+         */
+        PIIWarning: {
+            /**
+             * Item Id
+             * @description Item identifier
+             */
+            item_id: string;
+            /**
+             * Field
+             * @description Field name where PII was detected (e.g., 'synthQuestion', 'history[2].msg')
+             */
+            field: string;
+            /**
+             * Pattern Type
+             * @description Type of PII detected ('email' or 'phone')
+             */
+            pattern_type: string;
+            /**
+             * Snippet
+             * @description Masked context snippet showing the detected PII
+             */
+            snippet: string;
+            /**
+             * Position
+             * @description Character position where the PII was found
+             */
+            position: number;
         };
         /**
          * PaginationMetadata
@@ -944,11 +1037,20 @@ export interface components {
             /** Assignedcount */
             assignedCount: number;
         };
+        /** SnapshotExportRequest */
+        SnapshotExportRequest: {
+            /** Format */
+            format?: ("json_snapshot_payload" | "json_items") | null;
+            filters?: components["schemas"]["ExportFilters"] | null;
+            /** Processors */
+            processors?: string[] | null;
+            delivery?: components["schemas"]["ExportDeliveryOptions"] | null;
+        };
         /**
          * SortField
          * @enum {string}
          */
-        SortField: "reviewedAt" | "updatedAt" | "id" | "hasAnswer" | "totalReferences";
+        SortField: "reviewedAt" | "updatedAt" | "id" | "hasAnswer" | "totalReferences" | "tagCount";
         /**
          * SortOrder
          * @enum {string}
@@ -990,6 +1092,27 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * ValidationSummary
+         * @description Summary statistics for bulk import.
+         */
+        ValidationSummary: {
+            /**
+             * Total
+             * @description Total items in request
+             */
+            total: number;
+            /**
+             * Succeeded
+             * @description Items successfully imported
+             */
+            succeeded: number;
+            /**
+             * Failed
+             * @description Items that failed
+             */
+            failed: number;
         };
     };
     responses: never;
@@ -1068,10 +1191,14 @@ export interface operations {
                 status?: string | null;
                 dataset?: string | null;
                 tags?: string | null;
+                /** @description Comma-separated list of tags to exclude (items with ANY excluded tag will be filtered out) */
+                excludeTags?: string | null;
                 /** @description Search for items by ID (case-sensitive partial match) */
                 itemId?: string | null;
                 /** @description Search for items by reference URL (case-sensitive partial match) */
                 refUrl?: string | null;
+                /** @description Search for items by keyword (case-insensitive text search across questions, answers, and history) */
+                keyword?: string | null;
                 sortBy?: components["schemas"]["SortField"];
                 sortOrder?: components["schemas"]["SortOrder"];
                 page?: number;
@@ -1167,7 +1294,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SnapshotExportRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -1175,9 +1306,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1473,7 +1611,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GroundTruthItem-Output"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

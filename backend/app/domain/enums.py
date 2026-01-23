@@ -14,6 +14,7 @@ class SortField(str, Enum):
     id = "id"
     has_answer = "hasAnswer"
     totalReferences = "totalReferences"
+    tag_count = "tagCount"
 
 
 class SortOrder(str, Enum):

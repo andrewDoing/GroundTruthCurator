@@ -1,2752 +1,3158 @@
 {
-	"openapi": "3.1.0",
-	"info": {
-		"title": "Ground Truth Curator",
-		"version": "1.0.6"
-	},
-	"paths": {
-		"/healthz": {
-			"get": {
-				"summary": " Healthz",
-				"description": "Health check endpoint for ACA liveness/readiness probes.",
-				"operationId": "_healthz_healthz_get",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"additionalProperties": {
-										"type": "string"
-									},
-									"type": "object",
-									"title": "Response  Healthz Healthz Get"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/config": {
-			"get": {
-				"tags": ["config", "config"],
-				"summary": "Get Frontend Config",
-				"description": "Get frontend runtime configuration.\n\nThis endpoint exposes backend configuration to the frontend,\nallowing runtime configuration without rebuilding the frontend.\n\nReturns:\n    FrontendConfig: Configuration values for frontend validation behavior",
-				"operationId": "get_frontend_config_v1_config_get",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/FrontendConfig"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/ground-truths/stats": {
-			"get": {
-				"tags": ["stats"],
-				"summary": "Get Stats",
-				"operationId": "get_stats_v1_ground_truths_stats_get",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/ground-truths": {
-			"post": {
-				"tags": ["ground-truths"],
-				"summary": "Import Bulk",
-				"description": "Bulk import ground truth items.\n\nBehavior:\n- ID field: Each item may include 'id' (alias 'uuid'); missing/blank values are generated server-side using\n  randomname to produce a two-word, hyphenated string (e.g., 'sleek-voxel').\n- Order preservation: Response `uuids` mirrors request order for easy correlation.\n- Duplicate handling: Existing items are not overwritten; per-item errors are returned in `errors`.\n- Optional approval: `approve=true` marks all items approved and sets review metadata.",
-				"operationId": "import_bulk_v1_ground_truths_post",
-				"parameters": [
-					{
-						"name": "buckets",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "integer",
-									"maximum": 50,
-									"minimum": 1
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "Buckets"
-						}
-					},
-					{
-						"name": "approve",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "boolean",
-							"description": "If true, mark all imported items as approved and set review metadata.",
-							"default": false,
-							"title": "Approve"
-						},
-						"description": "If true, mark all imported items as approved and set review metadata."
-					}
-				],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"type": "array",
-								"items": {
-									"$ref": "#/components/schemas/GroundTruthItem-Input"
-								},
-								"title": "Items"
-							}
-						}
-					}
-				},
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ImportBulkResponse"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			},
-			"get": {
-				"tags": ["ground-truths"],
-				"summary": "List All Ground Truths",
-				"operationId": "list_all_ground_truths_v1_ground_truths_get",
-				"parameters": [
-					{
-						"name": "status",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "Status"
-						}
-					},
-					{
-						"name": "dataset",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "Dataset"
-						}
-					},
-					{
-						"name": "tags",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "Tags"
-						}
-					},
-					{
-						"name": "itemId",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"description": "Search for items by ID (case-sensitive partial match)",
-							"title": "Itemid"
-						},
-						"description": "Search for items by ID (case-sensitive partial match)"
-					},
-					{
-						"name": "refUrl",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"description": "Search for items by reference URL (case-sensitive partial match)",
-							"title": "Refurl"
-						},
-						"description": "Search for items by reference URL (case-sensitive partial match)"
-					},
-					{
-						"name": "sortBy",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"$ref": "#/components/schemas/SortField",
-							"default": "reviewedAt"
-						}
-					},
-					{
-						"name": "sortOrder",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"$ref": "#/components/schemas/SortOrder",
-							"default": "desc"
-						}
-					},
-					{
-						"name": "page",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "integer",
-							"default": 1,
-							"title": "Page"
-						}
-					},
-					{
-						"name": "limit",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "integer",
-							"default": 25,
-							"title": "Limit"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/GroundTruthListResponse"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/ground-truths/snapshot": {
-			"get": {
-				"tags": ["ground-truths"],
-				"summary": "Download Snapshot",
-				"description": "Return approved items as a downloadable JSON attachment.\n\nResponse headers include Content-Disposition so browsers download the file.",
-				"operationId": "download_snapshot_v1_ground_truths_snapshot_get",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {}
-							}
-						}
-					}
-				}
-			},
-			"post": {
-				"tags": ["ground-truths"],
-				"summary": "Snapshot",
-				"operationId": "snapshot_v1_ground_truths_snapshot_post",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"additionalProperties": true,
-									"type": "object",
-									"title": "Response Snapshot V1 Ground Truths Snapshot Post"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/ground-truths/{datasetName}": {
-			"get": {
-				"tags": ["ground-truths"],
-				"summary": "List Ground Truths",
-				"operationId": "list_ground_truths_v1_ground_truths__datasetName__get",
-				"parameters": [
-					{
-						"name": "datasetName",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Datasetname"
-						}
-					},
-					{
-						"name": "status",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"$ref": "#/components/schemas/GroundTruthStatus"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "Status"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "array",
-									"items": {
-										"$ref": "#/components/schemas/GroundTruthItem-Output"
-									},
-									"title": "Response List Ground Truths V1 Ground Truths  Datasetname  Get"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/ground-truths/{datasetName}/{bucket}/{item_id}": {
-			"get": {
-				"tags": ["ground-truths"],
-				"summary": "Get Ground Truth",
-				"operationId": "get_ground_truth_v1_ground_truths__datasetName___bucket___item_id__get",
-				"parameters": [
-					{
-						"name": "datasetName",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Datasetname"
-						}
-					},
-					{
-						"name": "bucket",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"format": "uuid",
-							"title": "Bucket"
-						}
-					},
-					{
-						"name": "item_id",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Item Id"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/GroundTruthItem-Output"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			},
-			"put": {
-				"tags": ["ground-truths"],
-				"summary": "Update Ground Truth",
-				"operationId": "update_ground_truth_v1_ground_truths__datasetName___bucket___item_id__put",
-				"parameters": [
-					{
-						"name": "datasetName",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Datasetname"
-						}
-					},
-					{
-						"name": "bucket",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"format": "uuid",
-							"title": "Bucket"
-						}
-					},
-					{
-						"name": "item_id",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Item Id"
-						}
-					},
-					{
-						"name": "If-Match",
-						"in": "header",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "If-Match"
-						}
-					}
-				],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"type": "object",
-								"additionalProperties": true,
-								"title": "Payload"
-							}
-						}
-					}
-				},
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/GroundTruthItem-Output"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			},
-			"delete": {
-				"tags": ["ground-truths"],
-				"summary": "Delete Item",
-				"description": "Soft-delete a ground truth item.",
-				"operationId": "delete_item_v1_ground_truths__datasetName___bucket___item_id__delete",
-				"parameters": [
-					{
-						"name": "datasetName",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Datasetname"
-						}
-					},
-					{
-						"name": "bucket",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"format": "uuid",
-							"title": "Bucket"
-						}
-					},
-					{
-						"name": "item_id",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Item Id"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "object",
-									"additionalProperties": {
-										"type": "string"
-									},
-									"title": "Response Delete Item V1 Ground Truths  Datasetname   Bucket   Item Id  Delete"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/ground-truths/recompute-tags": {
-			"post": {
-				"tags": ["ground-truths"],
-				"summary": "Recompute Computed Tags",
-				"description": "Recompute computed tags for all matching ground truth items.\n\nThis endpoint recalculates the `computedTags` field for all items matching\nthe optional filter criteria. Use this when:\n- A new computed tag plugin has been added\n- An existing plugin's logic has been modified\n- Data needs to be reprocessed after a bug fix\n\nThe operation is idempotent - running it multiple times with the same\ndata produces the same result.\n\n**Important**: By default, `dry_run=true` for safety. Set `dry_run=false`\nto actually persist changes.",
-				"operationId": "recompute_computed_tags_v1_ground_truths_recompute_tags_post",
-				"parameters": [
-					{
-						"name": "dataset",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"description": "Filter to items in a specific dataset. If not provided, processes all datasets.",
-							"title": "Dataset"
-						},
-						"description": "Filter to items in a specific dataset. If not provided, processes all datasets."
-					},
-					{
-						"name": "status",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"$ref": "#/components/schemas/GroundTruthStatus"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"description": "Filter to items with a specific status (draft, approved, etc.).",
-							"title": "Status"
-						},
-						"description": "Filter to items with a specific status (draft, approved, etc.)."
-					},
-					{
-						"name": "dry_run",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "boolean",
-							"description": "If true, preview changes without persisting. Defaults to true for safety.",
-							"default": true,
-							"title": "Dry Run"
-						},
-						"description": "If true, preview changes without persisting. Defaults to true for safety."
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/RecomputeTagsResponse"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/assignments/self-serve": {
-			"post": {
-				"tags": ["assignments"],
-				"summary": "Self Serve Assignments",
-				"operationId": "self_serve_assignments_v1_assignments_self_serve_post",
-				"requestBody": {
-					"content": {
-						"application/json": {
-							"schema": {
-								"additionalProperties": true,
-								"type": "object",
-								"title": "Body"
-							}
-						}
-					},
-					"required": true
-				},
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/SelfServeResponse"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/assignments/my": {
-			"get": {
-				"tags": ["assignments"],
-				"summary": "List My Assignments",
-				"operationId": "list_my_assignments_v1_assignments_my_get",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"items": {
-										"$ref": "#/components/schemas/GroundTruthItem-Output"
-									},
-									"type": "array",
-									"title": "Response List My Assignments V1 Assignments My Get"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/assignments/{dataset}/{bucket}/{item_id}": {
-			"put": {
-				"tags": ["assignments"],
-				"summary": "Update Item",
-				"operationId": "update_item_v1_assignments__dataset___bucket___item_id__put",
-				"parameters": [
-					{
-						"name": "dataset",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Dataset"
-						}
-					},
-					{
-						"name": "bucket",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"format": "uuid",
-							"title": "Bucket"
-						}
-					},
-					{
-						"name": "item_id",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Item Id"
-						}
-					},
-					{
-						"name": "If-Match",
-						"in": "header",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "If-Match"
-						}
-					}
-				],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/AssignmentUpdateRequest"
-							}
-						}
-					}
-				},
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/GroundTruthItem-Output"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/assignments/{dataset}/{bucket}/{item_id}/assign": {
-			"post": {
-				"tags": ["assignments"],
-				"summary": "Assign Item",
-				"description": "Assign a specific ground truth item to the current user.\n\nThis endpoint:\n- Assigns the item to the current user\n- Sets the item status to draft (even if previously approved/deleted/skipped)\n- Creates an assignment document in the assignments container\n- Returns the updated ground truth item",
-				"operationId": "assign_item_v1_assignments__dataset___bucket___item_id__assign_post",
-				"parameters": [
-					{
-						"name": "dataset",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Dataset"
-						}
-					},
-					{
-						"name": "bucket",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"format": "uuid",
-							"title": "Bucket"
-						}
-					},
-					{
-						"name": "item_id",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Item Id"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/GroundTruthItem-Output"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/assignments/{dataset}/{bucket}/{item_id}/duplicate": {
-			"post": {
-				"tags": ["assignments"],
-				"summary": "Duplicate Assignment Item",
-				"description": "Duplicate an existing item as a draft rephrase, assign to caller, and return the new item.",
-				"operationId": "duplicate_assignment_item_v1_assignments__dataset___bucket___item_id__duplicate_post",
-				"parameters": [
-					{
-						"name": "dataset",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Dataset"
-						}
-					},
-					{
-						"name": "bucket",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"format": "uuid",
-							"title": "Bucket"
-						}
-					},
-					{
-						"name": "item_id",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Item Id"
-						}
-					}
-				],
-				"responses": {
-					"201": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/GroundTruthItem-Output"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/schemas": {
-			"get": {
-				"tags": ["schemas"],
-				"summary": "List Schemas",
-				"description": "List available component schema names from the OpenAPI document.\n\nCompatibility behavior:\n- Returns a list where the first segment contains objects with `name` and `title`\n    (for newer clients/tests that expect objects), followed by the plain string names\n    (to preserve backward-compatibility with older callers/tests).",
-				"operationId": "list_schemas_v1_schemas_get",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"items": {
-										"anyOf": [
-											{
-												"additionalProperties": {
-													"type": "string"
-												},
-												"type": "object"
-											},
-											{
-												"type": "string"
-											}
-										]
-									},
-									"type": "array",
-									"title": "Response List Schemas V1 Schemas Get"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/schemas/{name}": {
-			"get": {
-				"tags": ["schemas"],
-				"summary": "Get Schema",
-				"description": "Return a specific component schema by name from the OpenAPI document.",
-				"operationId": "get_schema_v1_schemas__name__get",
-				"parameters": [
-					{
-						"name": "name",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Name"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "object",
-									"additionalProperties": true,
-									"title": "Response Get Schema V1 Schemas  Name  Get"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/tags/schema": {
-			"get": {
-				"tags": ["tags"],
-				"summary": "Get Tags Schema",
-				"operationId": "get_tags_schema_v1_tags_schema_get",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/TagSchemaResponse"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/tags": {
-			"get": {
-				"tags": ["tags"],
-				"summary": "Get Tags",
-				"operationId": "get_tags_v1_tags_get",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/TagListResponse"
-								}
-							}
-						}
-					}
-				}
-			},
-			"post": {
-				"tags": ["tags"],
-				"summary": "Post Tags",
-				"operationId": "post_tags_v1_tags_post",
-				"requestBody": {
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/AddTagsRequest"
-							}
-						}
-					},
-					"required": true
-				},
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/TagListResponse"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			},
-			"delete": {
-				"tags": ["tags"],
-				"summary": "Delete Tags",
-				"operationId": "delete_tags_v1_tags_delete",
-				"requestBody": {
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/RemoveTagsRequest"
-							}
-						}
-					},
-					"required": true
-				},
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/TagListResponse"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/datasets": {
-			"get": {
-				"tags": ["datasets"],
-				"summary": "List Datasets",
-				"operationId": "list_datasets_v1_datasets_get",
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"items": {
-										"type": "string"
-									},
-									"type": "array",
-									"title": "Response List Datasets V1 Datasets Get"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/datasets/{datasetName}/curation-instructions": {
-			"get": {
-				"tags": ["datasets"],
-				"summary": "Get Curation Instructions",
-				"operationId": "get_curation_instructions_v1_datasets__datasetName__curation_instructions_get",
-				"parameters": [
-					{
-						"name": "datasetName",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Datasetname"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/DatasetCurationInstructions"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			},
-			"put": {
-				"tags": ["datasets"],
-				"summary": "Put Curation Instructions",
-				"operationId": "put_curation_instructions_v1_datasets__datasetName__curation_instructions_put",
-				"parameters": [
-					{
-						"name": "datasetName",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Datasetname"
-						}
-					},
-					{
-						"name": "If-Match",
-						"in": "header",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"title": "If-Match"
-						}
-					}
-				],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/CurationInstructionsUpdate"
-							}
-						}
-					}
-				},
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/DatasetCurationInstructions"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/datasets/{datasetName}": {
-			"delete": {
-				"tags": ["datasets"],
-				"summary": "Delete Dataset",
-				"description": "Hard-delete a dataset.",
-				"operationId": "delete_dataset_v1_datasets__datasetName__delete",
-				"parameters": [
-					{
-						"name": "datasetName",
-						"in": "path",
-						"required": true,
-						"schema": {
-							"type": "string",
-							"title": "Datasetname"
-						}
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"type": "object",
-									"additionalProperties": {
-										"type": "string"
-									},
-									"title": "Response Delete Dataset V1 Datasets  Datasetname  Delete"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/search": {
-			"get": {
-				"tags": ["search"],
-				"summary": "Search",
-				"operationId": "search_v1_search_get",
-				"parameters": [
-					{
-						"name": "q",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "null"
-								}
-							],
-							"description": "Search query string",
-							"title": "Q"
-						},
-						"description": "Search query string"
-					},
-					{
-						"name": "top",
-						"in": "query",
-						"required": false,
-						"schema": {
-							"type": "integer",
-							"maximum": 50,
-							"minimum": 1,
-							"description": "Max results (1-50)",
-							"default": 5,
-							"title": "Top"
-						},
-						"description": "Max results (1-50)"
-					}
-				],
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"/v1/chat": {
-			"post": {
-				"tags": ["chat"],
-				"summary": "Chat",
-				"operationId": "chat_v1_chat_post",
-				"requestBody": {
-					"content": {
-						"application/json": {
-							"schema": {
-								"$ref": "#/components/schemas/ChatRequest"
-							}
-						}
-					},
-					"required": true
-				},
-				"responses": {
-					"200": {
-						"description": "Successful Response",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/ChatResponse"
-								}
-							}
-						}
-					},
-					"422": {
-						"description": "Validation Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/HTTPValidationError"
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	},
-	"components": {
-		"schemas": {
-			"AddTagsRequest": {
-				"properties": {
-					"tags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Tags"
-					}
-				},
-				"type": "object",
-				"required": ["tags"],
-				"title": "AddTagsRequest"
-			},
-			"AssignmentUpdateRequest": {
-				"properties": {
-					"editedQuestion": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Editedquestion"
-					},
-					"answer": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Answer"
-					},
-					"comment": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Comment"
-					},
-					"status": {
-						"anyOf": [
-							{
-								"$ref": "#/components/schemas/GroundTruthStatus"
-							},
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Status"
-					},
-					"refs": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/Reference"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Refs"
-					},
-					"manualTags": {
-						"anyOf": [
-							{
-								"items": {
-									"type": "string"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Manualtags"
-					},
-					"approve": {
-						"anyOf": [
-							{
-								"type": "boolean"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Approve"
-					},
-					"etag": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Etag"
-					},
-					"history": {
-						"anyOf": [
-							{
-								"items": {
-									"additionalProperties": true,
-									"type": "object"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "History"
-					}
-				},
-				"additionalProperties": true,
-				"type": "object",
-				"title": "AssignmentUpdateRequest",
-				"description": "Payload for SME update (save draft / approve / skip / delete).\n\nUsing a Pydantic model allows camelCase -> snake_case alias handling. All fields optional; we\nonly mutate those explicitly provided (tracked via model_fields_set)."
-			},
-			"ChatReference": {
-				"properties": {
-					"id": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Id"
-					},
-					"title": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Title"
-					},
-					"url": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Url"
-					},
-					"snippet": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Snippet"
-					},
-					"keyParagraph": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Keyparagraph"
-					}
-				},
-				"additionalProperties": true,
-				"type": "object",
-				"title": "ChatReference"
-			},
-			"ChatRequest": {
-				"properties": {
-					"message": {
-						"type": "string",
-						"minLength": 1,
-						"title": "Message"
-					},
-					"context": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Context"
-					}
-				},
-				"type": "object",
-				"required": ["message"],
-				"title": "ChatRequest"
-			},
-			"ChatResponse": {
-				"properties": {
-					"content": {
-						"type": "string",
-						"title": "Content"
-					},
-					"references": {
-						"items": {
-							"$ref": "#/components/schemas/ChatReference"
-						},
-						"type": "array",
-						"title": "References"
-					}
-				},
-				"type": "object",
-				"required": ["content"],
-				"title": "ChatResponse"
-			},
-			"CurationInstructionsUpdate": {
-				"properties": {
-					"instructions": {
-						"type": "string",
-						"title": "Instructions"
-					},
-					"_etag": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Etag"
-					}
-				},
-				"type": "object",
-				"required": ["instructions"],
-				"title": "CurationInstructionsUpdate"
-			},
-			"DatasetCurationInstructions": {
-				"properties": {
-					"id": {
-						"type": "string",
-						"title": "Id"
-					},
-					"datasetName": {
-						"type": "string",
-						"title": "Datasetname"
-					},
-					"bucket": {
-						"type": "string",
-						"format": "uuid",
-						"title": "Bucket"
-					},
-					"docType": {
-						"type": "string",
-						"title": "Doctype",
-						"default": "curation-instructions"
-					},
-					"schemaVersion": {
-						"type": "string",
-						"title": "Schemaversion",
-						"default": "v1"
-					},
-					"instructions": {
-						"type": "string",
-						"title": "Instructions"
-					},
-					"updatedAt": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Updatedat"
-					},
-					"updatedBy": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Updatedby"
-					},
-					"_etag": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Etag"
-					}
-				},
-				"type": "object",
-				"required": ["id", "datasetName", "instructions"],
-				"title": "DatasetCurationInstructions",
-				"description": "Dataset-level curation instructions document (schemaVersion v1).\n\nStored in the same Cosmos container as ground-truth items using MultiHash PK\n[/datasetName, /bucket] with bucket fixed to 0 and a stable id pattern\n\"curation-instructions|{datasetName}\"."
-			},
-			"DependencyDTO": {
-				"properties": {
-					"group": {
-						"type": "string",
-						"title": "Group"
-					},
-					"value": {
-						"type": "string",
-						"title": "Value"
-					}
-				},
-				"type": "object",
-				"required": ["group", "value"],
-				"title": "DependencyDTO"
-			},
-			"ExpectedBehavior": {
-				"type": "string",
-				"enum": [
-					"tool:search",
-					"generation:answer",
-					"generation:need-context",
-					"generation:clarification",
-					"generation:out-of-domain"
-				],
-				"title": "ExpectedBehavior",
-				"description": "Expected behavior tags for history items in ground truth evaluation.\n\nThese tags describe what the agent should do at each turn of a conversation:\n- tool:search: Agent should perform a search/retrieval operation\n- generation:answer: Agent should generate a direct answer\n- generation:need-context: Agent should ask for more context\n- generation:clarification: Agent should ask for clarification\n- generation:out-of-domain: Agent should indicate the query is out of domain"
-			},
-			"FrontendConfig": {
-				"properties": {
-					"requireReferenceVisit": {
-						"type": "boolean",
-						"title": "Requirereferencevisit"
-					},
-					"requireKeyParagraph": {
-						"type": "boolean",
-						"title": "Requirekeyparagraph"
-					},
-					"selfServeLimit": {
-						"type": "integer",
-						"title": "Selfservelimit"
-					},
-					"trustedReferenceDomains": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Trustedreferencedomains"
-					}
-				},
-				"type": "object",
-				"required": [
-					"requireReferenceVisit",
-					"requireKeyParagraph",
-					"selfServeLimit",
-					"trustedReferenceDomains"
-				],
-				"title": "FrontendConfig",
-				"description": "Frontend runtime configuration."
-			},
-			"GroundTruthItem-Input": {
-				"properties": {
-					"id": {
-						"type": "string",
-						"title": "Id"
-					},
-					"datasetName": {
-						"type": "string",
-						"title": "Datasetname"
-					},
-					"bucket": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "uuid"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Bucket"
-					},
-					"status": {
-						"$ref": "#/components/schemas/GroundTruthStatus",
-						"default": "draft"
-					},
-					"docType": {
-						"type": "string",
-						"title": "Doctype",
-						"default": "ground-truth-item"
-					},
-					"schemaVersion": {
-						"type": "string",
-						"title": "Schemaversion",
-						"default": "v2"
-					},
-					"synthQuestion": {
-						"type": "string",
-						"title": "Synthquestion"
-					},
-					"editedQuestion": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Editedquestion"
-					},
-					"answer": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Answer"
-					},
-					"refs": {
-						"items": {
-							"$ref": "#/components/schemas/Reference"
-						},
-						"type": "array",
-						"title": "Refs"
-					},
-					"manualTags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Manualtags"
-					},
-					"computedTags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Computedtags"
-					},
-					"comment": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Comment"
-					},
-					"history": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/HistoryItem"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "History"
-					},
-					"contextUsedForGeneration": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Contextusedforgeneration"
-					},
-					"contextSource": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Contextsource"
-					},
-					"modelUsedForGeneration": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Modelusedforgeneration"
-					},
-					"semanticClusterNumber": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Semanticclusternumber"
-					},
-					"weight": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Weight"
-					},
-					"samplingBucket": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Samplingbucket"
-					},
-					"questionLength": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Questionlength"
-					},
-					"assignedTo": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Assignedto"
-					},
-					"assignedAt": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Assignedat"
-					},
-					"updatedAt": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Updatedat"
-					},
-					"updatedBy": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Updatedby"
-					},
-					"reviewedAt": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Reviewedat"
-					},
-					"_etag": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Etag"
-					},
-					"totalReferences": {
-						"type": "integer",
-						"title": "Totalreferences",
-						"default": 0
-					}
-				},
-				"type": "object",
-				"required": ["id", "datasetName", "synthQuestion"],
-				"title": "GroundTruthItem",
-				"description": "Canonical Ground Truth item aligned to wire schema (schemaVersion v1).\n\nAll fields with camelCase wire names use aliases; we accept both field names and aliases\non input (populate_by_name=True) and always serialize using by_alias."
-			},
-			"GroundTruthItem-Output": {
-				"properties": {
-					"id": {
-						"type": "string",
-						"title": "Id"
-					},
-					"datasetName": {
-						"type": "string",
-						"title": "Datasetname"
-					},
-					"bucket": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "uuid"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Bucket"
-					},
-					"status": {
-						"$ref": "#/components/schemas/GroundTruthStatus",
-						"default": "draft"
-					},
-					"docType": {
-						"type": "string",
-						"title": "Doctype",
-						"default": "ground-truth-item"
-					},
-					"schemaVersion": {
-						"type": "string",
-						"title": "Schemaversion",
-						"default": "v2"
-					},
-					"synthQuestion": {
-						"type": "string",
-						"title": "Synthquestion"
-					},
-					"editedQuestion": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Editedquestion"
-					},
-					"answer": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Answer"
-					},
-					"refs": {
-						"items": {
-							"$ref": "#/components/schemas/Reference"
-						},
-						"type": "array",
-						"title": "Refs"
-					},
-					"manualTags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Manualtags"
-					},
-					"computedTags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Computedtags"
-					},
-					"comment": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Comment"
-					},
-					"history": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/HistoryItem"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "History"
-					},
-					"contextUsedForGeneration": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Contextusedforgeneration"
-					},
-					"contextSource": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Contextsource"
-					},
-					"modelUsedForGeneration": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Modelusedforgeneration"
-					},
-					"semanticClusterNumber": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Semanticclusternumber"
-					},
-					"weight": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Weight"
-					},
-					"samplingBucket": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Samplingbucket"
-					},
-					"questionLength": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Questionlength"
-					},
-					"assignedTo": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Assignedto"
-					},
-					"assignedAt": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Assignedat"
-					},
-					"updatedAt": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Updatedat"
-					},
-					"updatedBy": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Updatedby"
-					},
-					"reviewedAt": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Reviewedat"
-					},
-					"_etag": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Etag"
-					},
-					"totalReferences": {
-						"type": "integer",
-						"title": "Totalreferences",
-						"default": 0
-					},
-					"tags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Tags",
-						"description": "Merged view of manualTags and computedTags for API responses.\n\nReturns the union of manual and computed tags, sorted for consistency.",
-						"readOnly": true
-					}
-				},
-				"type": "object",
-				"required": ["id", "datasetName", "synthQuestion", "tags"],
-				"title": "GroundTruthItem",
-				"description": "Canonical Ground Truth item aligned to wire schema (schemaVersion v1).\n\nAll fields with camelCase wire names use aliases; we accept both field names and aliases\non input (populate_by_name=True) and always serialize using by_alias."
-			},
-			"GroundTruthListResponse": {
-				"properties": {
-					"items": {
-						"items": {
-							"$ref": "#/components/schemas/GroundTruthItem-Output"
-						},
-						"type": "array",
-						"title": "Items"
-					},
-					"pagination": {
-						"$ref": "#/components/schemas/PaginationMetadata"
-					}
-				},
-				"type": "object",
-				"required": ["items", "pagination"],
-				"title": "GroundTruthListResponse"
-			},
-			"GroundTruthStatus": {
-				"type": "string",
-				"enum": ["draft", "approved", "deleted", "skipped"],
-				"title": "GroundTruthStatus"
-			},
-			"HTTPValidationError": {
-				"properties": {
-					"detail": {
-						"items": {
-							"$ref": "#/components/schemas/ValidationError"
-						},
-						"type": "array",
-						"title": "Detail"
-					}
-				},
-				"type": "object",
-				"title": "HTTPValidationError"
-			},
-			"HistoryItem": {
-				"properties": {
-					"role": {
-						"$ref": "#/components/schemas/HistoryItemRole"
-					},
-					"msg": {
-						"type": "string",
-						"title": "Msg"
-					},
-					"refs": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/Reference"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Refs"
-					},
-					"expectedBehavior": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/ExpectedBehavior"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Expectedbehavior",
-						"description": "Expected behavior(s) for this turn in the conversation (e.g., tool:search, generation:answer)"
-					}
-				},
-				"type": "object",
-				"required": ["role", "msg"],
-				"title": "HistoryItem",
-				"description": "Represents a single item in the multi-turn history."
-			},
-			"HistoryItemRole": {
-				"type": "string",
-				"enum": ["user", "assistant"],
-				"title": "HistoryItemRole"
-			},
-			"ImportBulkResponse": {
-				"properties": {
-					"imported": {
-						"type": "integer",
-						"title": "Imported",
-						"description": "Number of items successfully imported."
-					},
-					"errors": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Errors",
-						"description": "List of error messages for items that failed to import."
-					},
-					"uuids": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Uuids",
-						"description": "The item IDs in the same order as the request payload. Clients may send either 'id' or 'uuid' in each item; when missing or blank, the server generates a two-word, hyphenated string ID (e.g., 'sleek-voxel') via randomname."
-					}
-				},
-				"type": "object",
-				"required": ["imported", "errors"],
-				"title": "ImportBulkResponse"
-			},
-			"PaginationMetadata": {
-				"properties": {
-					"page": {
-						"type": "integer",
-						"title": "Page",
-						"description": "Current page number (1-indexed)"
-					},
-					"limit": {
-						"type": "integer",
-						"title": "Limit",
-						"description": "Items per page"
-					},
-					"total": {
-						"type": "integer",
-						"title": "Total",
-						"description": "Total number of items matching filters"
-					},
-					"totalPages": {
-						"type": "integer",
-						"title": "Totalpages",
-						"description": "Total number of pages"
-					},
-					"hasNext": {
-						"type": "boolean",
-						"title": "Hasnext",
-						"description": "Whether there is a next page"
-					},
-					"hasPrev": {
-						"type": "boolean",
-						"title": "Hasprev",
-						"description": "Whether there is a previous page"
-					}
-				},
-				"type": "object",
-				"required": [
-					"page",
-					"limit",
-					"total",
-					"totalPages",
-					"hasNext",
-					"hasPrev"
-				],
-				"title": "PaginationMetadata",
-				"description": "Pagination metadata for list responses."
-			},
-			"RecomputeTagsResponse": {
-				"properties": {
-					"total": {
-						"type": "integer",
-						"title": "Total",
-						"description": "Total items matching the filter criteria."
-					},
-					"processed": {
-						"type": "integer",
-						"title": "Processed",
-						"description": "Number of items successfully processed."
-					},
-					"updated": {
-						"type": "integer",
-						"title": "Updated",
-						"description": "Number of items with changed computed tags."
-					},
-					"skipped": {
-						"type": "integer",
-						"title": "Skipped",
-						"description": "Number of items with unchanged computed tags."
-					},
-					"errors": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Errors",
-						"description": "Error messages for failed items."
-					},
-					"dry_run": {
-						"type": "boolean",
-						"title": "Dry Run",
-						"description": "Whether this was a dry run (no changes persisted)."
-					},
-					"duration_ms": {
-						"type": "integer",
-						"title": "Duration Ms",
-						"description": "Operation duration in milliseconds."
-					}
-				},
-				"type": "object",
-				"required": [
-					"total",
-					"processed",
-					"updated",
-					"skipped",
-					"dry_run",
-					"duration_ms"
-				],
-				"title": "RecomputeTagsResponse",
-				"description": "Response for bulk computed tag recomputation."
-			},
-			"Reference": {
-				"properties": {
-					"url": {
-						"type": "string",
-						"title": "Url",
-						"description": "Reference URL (required, non-empty)"
-					},
-					"title": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Title",
-						"description": "Human-readable title for the reference"
-					},
-					"content": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Content"
-					},
-					"keyExcerpt": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Keyexcerpt"
-					},
-					"type": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Type"
-					},
-					"bonus": {
-						"type": "boolean",
-						"title": "Bonus",
-						"default": false
-					},
-					"messageIndex": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Messageindex"
-					}
-				},
-				"type": "object",
-				"required": ["url"],
-				"title": "Reference",
-				"description": "Wire reference object.\n\n{ url, title, content, keyExcerpt, type, bonus, messageIndex }"
-			},
-			"RemoveTagsRequest": {
-				"properties": {
-					"tags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Tags"
-					}
-				},
-				"type": "object",
-				"required": ["tags"],
-				"title": "RemoveTagsRequest"
-			},
-			"SelfServeResponse": {
-				"properties": {
-					"assigned": {
-						"items": {
-							"$ref": "#/components/schemas/GroundTruthItem-Output"
-						},
-						"type": "array",
-						"title": "Assigned"
-					},
-					"requested": {
-						"type": "integer",
-						"title": "Requested"
-					},
-					"assignedCount": {
-						"type": "integer",
-						"title": "Assignedcount"
-					}
-				},
-				"type": "object",
-				"required": ["assigned", "requested", "assignedCount"],
-				"title": "SelfServeResponse"
-			},
-			"SortField": {
-				"type": "string",
-				"enum": [
-					"reviewedAt",
-					"updatedAt",
-					"id",
-					"hasAnswer",
-					"totalReferences"
-				],
-				"title": "SortField"
-			},
-			"SortOrder": {
-				"type": "string",
-				"enum": ["asc", "desc"],
-				"title": "SortOrder"
-			},
-			"TagGroupDTO": {
-				"properties": {
-					"name": {
-						"type": "string",
-						"title": "Name"
-					},
-					"values": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Values"
-					},
-					"exclusive": {
-						"type": "boolean",
-						"title": "Exclusive"
-					},
-					"depends_on": {
-						"items": {
-							"$ref": "#/components/schemas/DependencyDTO"
-						},
-						"type": "array",
-						"title": "Depends On"
-					}
-				},
-				"type": "object",
-				"required": ["name", "values", "exclusive"],
-				"title": "TagGroupDTO"
-			},
-			"TagListResponse": {
-				"properties": {
-					"tags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Tags"
-					},
-					"computedTags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Computedtags"
-					}
-				},
-				"type": "object",
-				"required": ["tags"],
-				"title": "TagListResponse"
-			},
-			"TagSchemaResponse": {
-				"properties": {
-					"version": {
-						"type": "string",
-						"title": "Version",
-						"default": "v1"
-					},
-					"groups": {
-						"items": {
-							"$ref": "#/components/schemas/TagGroupDTO"
-						},
-						"type": "array",
-						"title": "Groups"
-					}
-				},
-				"type": "object",
-				"required": ["groups"],
-				"title": "TagSchemaResponse"
-			},
-			"ValidationError": {
-				"properties": {
-					"loc": {
-						"items": {
-							"anyOf": [
-								{
-									"type": "string"
-								},
-								{
-									"type": "integer"
-								}
-							]
-						},
-						"type": "array",
-						"title": "Location"
-					},
-					"msg": {
-						"type": "string",
-						"title": "Message"
-					},
-					"type": {
-						"type": "string",
-						"title": "Error Type"
-					}
-				},
-				"type": "object",
-				"required": ["loc", "msg", "type"],
-				"title": "ValidationError"
-			}
-		}
-	}
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Ground Truth Curator",
+    "version": "1.0.6"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": " Healthz",
+        "description": "Health check endpoint for ACA liveness/readiness probes.",
+        "operationId": "_healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response  Healthz Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/config": {
+      "get": {
+        "tags": [
+          "config",
+          "config"
+        ],
+        "summary": "Get Frontend Config",
+        "description": "Get frontend runtime configuration.\n\nThis endpoint exposes backend configuration to the frontend,\nallowing runtime configuration without rebuilding the frontend.\n\nReturns:\n    FrontendConfig: Configuration values for frontend validation behavior",
+        "operationId": "get_frontend_config_v1_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrontendConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ground-truths/stats": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Get Stats",
+        "operationId": "get_stats_v1_ground_truths_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ground-truths": {
+      "post": {
+        "tags": [
+          "ground-truths"
+        ],
+        "summary": "Import Bulk",
+        "description": "Bulk import ground truth items.\n\nBehavior:\n- ID field: Each item may include 'id' (alias 'uuid'); missing/blank values are generated server-side using\n  randomname to produce a two-word, hyphenated string (e.g., 'sleek-voxel').\n- Order preservation: Response `uuids` mirrors request order for easy correlation.\n- Duplicate handling: Existing items are not overwritten; per-item errors are returned in `errors`.\n- Optional approval: `approve=true` marks all items approved and sets review metadata.\n- Size limit: Requests exceeding BULK_IMPORT_MAX_ITEMS return HTTP 413.",
+        "operationId": "import_bulk_v1_ground_truths_post",
+        "parameters": [
+          {
+            "name": "buckets",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 50,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Buckets"
+            }
+          },
+          {
+            "name": "approve",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "If true, mark all imported items as approved and set review metadata.",
+              "default": false,
+              "title": "Approve"
+            },
+            "description": "If true, mark all imported items as approved and set review metadata."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GroundTruthItem-Input"
+                },
+                "title": "Items"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportBulkResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "ground-truths"
+        ],
+        "summary": "List All Ground Truths",
+        "operationId": "list_all_ground_truths_v1_ground_truths_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "dataset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tags"
+            }
+          },
+          {
+            "name": "excludeTags",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated list of tags to exclude (items with ANY excluded tag will be filtered out)",
+              "title": "Excludetags"
+            },
+            "description": "Comma-separated list of tags to exclude (items with ANY excluded tag will be filtered out)"
+          },
+          {
+            "name": "itemId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search for items by ID (case-sensitive partial match)",
+              "title": "Itemid"
+            },
+            "description": "Search for items by ID (case-sensitive partial match)"
+          },
+          {
+            "name": "refUrl",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search for items by reference URL (case-sensitive partial match)",
+              "title": "Refurl"
+            },
+            "description": "Search for items by reference URL (case-sensitive partial match)"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search for items by keyword (case-insensitive text search across questions, answers, and history)",
+              "title": "Keyword"
+            },
+            "description": "Search for items by keyword (case-insensitive text search across questions, answers, and history)"
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortField",
+              "default": "reviewedAt"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SortOrder",
+              "default": "desc"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroundTruthListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ground-truths/snapshot": {
+      "get": {
+        "tags": [
+          "ground-truths"
+        ],
+        "summary": "Download Snapshot",
+        "description": "Return approved items as a downloadable JSON attachment.\n\nResponse headers include Content-Disposition so browsers download the file.",
+        "operationId": "download_snapshot_v1_ground_truths_snapshot_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ground-truths"
+        ],
+        "summary": "Snapshot",
+        "operationId": "snapshot_v1_ground_truths_snapshot_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnapshotExportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Snapshot V1 Ground Truths Snapshot Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ground-truths/{datasetName}": {
+      "get": {
+        "tags": [
+          "ground-truths"
+        ],
+        "summary": "List Ground Truths",
+        "operationId": "list_ground_truths_v1_ground_truths__datasetName__get",
+        "parameters": [
+          {
+            "name": "datasetName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Datasetname"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GroundTruthStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GroundTruthItem-Output"
+                  },
+                  "title": "Response List Ground Truths V1 Ground Truths  Datasetname  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ground-truths/{datasetName}/{bucket}/{item_id}": {
+      "get": {
+        "tags": [
+          "ground-truths"
+        ],
+        "summary": "Get Ground Truth",
+        "operationId": "get_ground_truth_v1_ground_truths__datasetName___bucket___item_id__get",
+        "parameters": [
+          {
+            "name": "datasetName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Datasetname"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Bucket"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroundTruthItem-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ground-truths"
+        ],
+        "summary": "Update Ground Truth",
+        "operationId": "update_ground_truth_v1_ground_truths__datasetName___bucket___item_id__put",
+        "parameters": [
+          {
+            "name": "datasetName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Datasetname"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Bucket"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroundTruthItem-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ground-truths"
+        ],
+        "summary": "Delete Item",
+        "description": "Soft-delete a ground truth item.",
+        "operationId": "delete_item_v1_ground_truths__datasetName___bucket___item_id__delete",
+        "parameters": [
+          {
+            "name": "datasetName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Datasetname"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Bucket"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Item V1 Ground Truths  Datasetname   Bucket   Item Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ground-truths/recompute-tags": {
+      "post": {
+        "tags": [
+          "ground-truths"
+        ],
+        "summary": "Recompute Computed Tags",
+        "description": "Recompute computed tags for all matching ground truth items.\n\nThis endpoint recalculates the `computedTags` field for all items matching\nthe optional filter criteria. Use this when:\n- A new computed tag plugin has been added\n- An existing plugin's logic has been modified\n- Data needs to be reprocessed after a bug fix\n\nThe operation is idempotent - running it multiple times with the same\ndata produces the same result.\n\n**Important**: By default, `dry_run=true` for safety. Set `dry_run=false`\nto actually persist changes.",
+        "operationId": "recompute_computed_tags_v1_ground_truths_recompute_tags_post",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to items in a specific dataset. If not provided, processes all datasets.",
+              "title": "Dataset"
+            },
+            "description": "Filter to items in a specific dataset. If not provided, processes all datasets."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GroundTruthStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to items with a specific status (draft, approved, etc.).",
+              "title": "Status"
+            },
+            "description": "Filter to items with a specific status (draft, approved, etc.)."
+          },
+          {
+            "name": "dry_run",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "If true, preview changes without persisting. Defaults to true for safety.",
+              "default": true,
+              "title": "Dry Run"
+            },
+            "description": "If true, preview changes without persisting. Defaults to true for safety."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecomputeTagsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/assignments/self-serve": {
+      "post": {
+        "tags": [
+          "assignments"
+        ],
+        "summary": "Self Serve Assignments",
+        "operationId": "self_serve_assignments_v1_assignments_self_serve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfServeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/assignments/my": {
+      "get": {
+        "tags": [
+          "assignments"
+        ],
+        "summary": "List My Assignments",
+        "operationId": "list_my_assignments_v1_assignments_my_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroundTruthItem-Output"
+                  },
+                  "type": "array",
+                  "title": "Response List My Assignments V1 Assignments My Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/assignments/{dataset}/{bucket}/{item_id}": {
+      "put": {
+        "tags": [
+          "assignments"
+        ],
+        "summary": "Update Item",
+        "operationId": "update_item_v1_assignments__dataset___bucket___item_id__put",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Bucket"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignmentUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroundTruthItem-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/assignments/{dataset}/{bucket}/{item_id}/assign": {
+      "post": {
+        "tags": [
+          "assignments"
+        ],
+        "summary": "Assign Item",
+        "description": "Assign a specific ground truth item to the current user.\n\nThis endpoint:\n- Assigns the item to the current user\n- Sets the item status to draft (even if previously approved/deleted/skipped)\n- Creates an assignment document in the assignments container\n- Returns the updated ground truth item",
+        "operationId": "assign_item_v1_assignments__dataset___bucket___item_id__assign_post",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Bucket"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/assignments/{dataset}/{bucket}/{item_id}/duplicate": {
+      "post": {
+        "tags": [
+          "assignments"
+        ],
+        "summary": "Duplicate Assignment Item",
+        "description": "Duplicate an existing item as a draft rephrase, assign to caller, and return the new item.",
+        "operationId": "duplicate_assignment_item_v1_assignments__dataset___bucket___item_id__duplicate_post",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "bucket",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Bucket"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroundTruthItem-Output"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/schemas": {
+      "get": {
+        "tags": [
+          "schemas"
+        ],
+        "summary": "List Schemas",
+        "description": "List available component schema names from the OpenAPI document.\n\nCompatibility behavior:\n- Returns a list where the first segment contains objects with `name` and `title`\n    (for newer clients/tests that expect objects), followed by the plain string names\n    (to preserve backward-compatibility with older callers/tests).",
+        "operationId": "list_schemas_v1_schemas_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "type": "object"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "type": "array",
+                  "title": "Response List Schemas V1 Schemas Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/schemas/{name}": {
+      "get": {
+        "tags": [
+          "schemas"
+        ],
+        "summary": "Get Schema",
+        "description": "Return a specific component schema by name from the OpenAPI document.",
+        "operationId": "get_schema_v1_schemas__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Schema V1 Schemas  Name  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tags/schema": {
+      "get": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Get Tags Schema",
+        "operationId": "get_tags_schema_v1_tags_schema_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagSchemaResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tags": {
+      "get": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Get Tags",
+        "operationId": "get_tags_v1_tags_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Post Tags",
+        "operationId": "post_tags_v1_tags_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Delete Tags",
+        "operationId": "delete_tags_v1_tags_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/datasets": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "List Datasets",
+        "operationId": "list_datasets_v1_datasets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response List Datasets V1 Datasets Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/datasets/{datasetName}/curation-instructions": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Get Curation Instructions",
+        "operationId": "get_curation_instructions_v1_datasets__datasetName__curation_instructions_get",
+        "parameters": [
+          {
+            "name": "datasetName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Datasetname"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetCurationInstructions"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Put Curation Instructions",
+        "operationId": "put_curation_instructions_v1_datasets__datasetName__curation_instructions_put",
+        "parameters": [
+          {
+            "name": "datasetName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Datasetname"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurationInstructionsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetCurationInstructions"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/datasets/{datasetName}": {
+      "delete": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Delete Dataset",
+        "description": "Hard-delete a dataset.",
+        "operationId": "delete_dataset_v1_datasets__datasetName__delete",
+        "parameters": [
+          {
+            "name": "datasetName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Datasetname"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Dataset V1 Datasets  Datasetname  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/search": {
+      "get": {
+        "tags": [
+          "search"
+        ],
+        "summary": "Search",
+        "operationId": "search_v1_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search query string",
+              "title": "Q"
+            },
+            "description": "Search query string"
+          },
+          {
+            "name": "top",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "description": "Max results (1-50)",
+              "default": 5,
+              "title": "Top"
+            },
+            "description": "Max results (1-50)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Chat",
+        "operationId": "chat_v1_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AddTagsRequest": {
+        "properties": {
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tags"
+        ],
+        "title": "AddTagsRequest"
+      },
+      "AssignmentUpdateRequest": {
+        "properties": {
+          "editedQuestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editedquestion"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GroundTruthStatus"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Reference"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refs"
+          },
+          "manualTags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manualtags"
+          },
+          "approve": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approve"
+          },
+          "etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "AssignmentUpdateRequest",
+        "description": "Payload for SME update (save draft / approve / skip / delete).\n\nUsing a Pydantic model allows camelCase -> snake_case alias handling. All fields optional; we\nonly mutate those explicitly provided (tracked via model_fields_set)."
+      },
+      "BulkImportError": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index",
+            "description": "0-based position in request array"
+          },
+          "itemId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Itemid",
+            "description": "ID of the failed item (if available)"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field",
+            "description": "Field that caused the error (if applicable)"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Error code: INVALID_TAG, DUPLICATE_ID, CREATE_FAILED, etc."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable error description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "code",
+          "message"
+        ],
+        "title": "BulkImportError",
+        "description": "Structured error for bulk import failures."
+      },
+      "ChatReference": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet"
+          },
+          "keyParagraph": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyparagraph"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "ChatReference"
+      },
+      "ChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest"
+      },
+      "ChatResponse": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ChatReference"
+            },
+            "type": "array",
+            "title": "References"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "ChatResponse"
+      },
+      "CurationInstructionsUpdate": {
+        "properties": {
+          "instructions": {
+            "type": "string",
+            "title": "Instructions"
+          },
+          "_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "instructions"
+        ],
+        "title": "CurationInstructionsUpdate"
+      },
+      "DatasetCurationInstructions": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "datasetName": {
+            "type": "string",
+            "title": "Datasetname"
+          },
+          "bucket": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Bucket"
+          },
+          "docType": {
+            "type": "string",
+            "title": "Doctype",
+            "default": "curation-instructions"
+          },
+          "schemaVersion": {
+            "type": "string",
+            "title": "Schemaversion",
+            "default": "v1"
+          },
+          "instructions": {
+            "type": "string",
+            "title": "Instructions"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
+          },
+          "updatedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedby"
+          },
+          "_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "datasetName",
+          "instructions"
+        ],
+        "title": "DatasetCurationInstructions",
+        "description": "Dataset-level curation instructions document (schemaVersion v1).\n\nStored in the same Cosmos container as ground-truth items using MultiHash PK\n[/datasetName, /bucket] with bucket fixed to 0 and a stable id pattern\n\"curation-instructions|{datasetName}\"."
+      },
+      "DependencyDTO": {
+        "properties": {
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "value"
+        ],
+        "title": "DependencyDTO"
+      },
+      "ExpectedBehavior": {
+        "type": "string",
+        "enum": [
+          "tool:search",
+          "generation:answer",
+          "generation:need-context",
+          "generation:clarification",
+          "generation:out-of-domain"
+        ],
+        "title": "ExpectedBehavior",
+        "description": "Expected behavior tags for history items in ground truth evaluation.\n\nThese tags describe what the agent should do at each turn of a conversation:\n- tool:search: Agent should perform a search/retrieval operation\n- generation:answer: Agent should generate a direct answer\n- generation:need-context: Agent should ask for more context\n- generation:clarification: Agent should ask for clarification\n- generation:out-of-domain: Agent should indicate the query is out of domain"
+      },
+      "ExportDeliveryOptions": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "attachment",
+              "artifact"
+            ],
+            "title": "Mode",
+            "default": "artifact"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ExportDeliveryOptions"
+      },
+      "ExportFilters": {
+        "properties": {
+          "datasetNames": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datasetnames"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "approved"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ExportFilters"
+      },
+      "FrontendConfig": {
+        "properties": {
+          "requireReferenceVisit": {
+            "type": "boolean",
+            "title": "Requirereferencevisit"
+          },
+          "requireKeyParagraph": {
+            "type": "boolean",
+            "title": "Requirekeyparagraph"
+          },
+          "selfServeLimit": {
+            "type": "integer",
+            "title": "Selfservelimit"
+          },
+          "trustedReferenceDomains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Trustedreferencedomains"
+          }
+        },
+        "type": "object",
+        "required": [
+          "requireReferenceVisit",
+          "requireKeyParagraph",
+          "selfServeLimit",
+          "trustedReferenceDomains"
+        ],
+        "title": "FrontendConfig",
+        "description": "Frontend runtime configuration."
+      },
+      "GroundTruthItem-Input": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "datasetName": {
+            "type": "string",
+            "title": "Datasetname"
+          },
+          "bucket": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GroundTruthStatus",
+            "default": "draft"
+          },
+          "docType": {
+            "type": "string",
+            "title": "Doctype",
+            "default": "ground-truth-item"
+          },
+          "schemaVersion": {
+            "type": "string",
+            "title": "Schemaversion",
+            "default": "v2"
+          },
+          "synthQuestion": {
+            "type": "string",
+            "title": "Synthquestion"
+          },
+          "editedQuestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editedquestion"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "refs": {
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            },
+            "type": "array",
+            "title": "Refs"
+          },
+          "manualTags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Manualtags"
+          },
+          "computedTags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Computedtags"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/HistoryItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History"
+          },
+          "contextUsedForGeneration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contextusedforgeneration"
+          },
+          "contextSource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contextsource"
+          },
+          "modelUsedForGeneration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelusedforgeneration"
+          },
+          "semanticClusterNumber": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semanticclusternumber"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          },
+          "samplingBucket": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Samplingbucket"
+          },
+          "questionLength": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Questionlength"
+          },
+          "assignedTo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignedto"
+          },
+          "assignedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignedat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
+          },
+          "updatedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedby"
+          },
+          "reviewedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewedat"
+          },
+          "_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          },
+          "totalReferences": {
+            "type": "integer",
+            "title": "Totalreferences",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "datasetName",
+          "synthQuestion"
+        ],
+        "title": "GroundTruthItem",
+        "description": "Canonical Ground Truth item aligned to wire schema (schemaVersion v1).\n\nAll fields with camelCase wire names use aliases; we accept both field names and aliases\non input (populate_by_name=True) and always serialize using by_alias."
+      },
+      "GroundTruthItem-Output": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "datasetName": {
+            "type": "string",
+            "title": "Datasetname"
+          },
+          "bucket": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GroundTruthStatus",
+            "default": "draft"
+          },
+          "docType": {
+            "type": "string",
+            "title": "Doctype",
+            "default": "ground-truth-item"
+          },
+          "schemaVersion": {
+            "type": "string",
+            "title": "Schemaversion",
+            "default": "v2"
+          },
+          "synthQuestion": {
+            "type": "string",
+            "title": "Synthquestion"
+          },
+          "editedQuestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editedquestion"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "refs": {
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            },
+            "type": "array",
+            "title": "Refs"
+          },
+          "manualTags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Manualtags"
+          },
+          "computedTags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Computedtags"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/HistoryItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History"
+          },
+          "contextUsedForGeneration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contextusedforgeneration"
+          },
+          "contextSource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contextsource"
+          },
+          "modelUsedForGeneration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelusedforgeneration"
+          },
+          "semanticClusterNumber": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semanticclusternumber"
+          },
+          "weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight"
+          },
+          "samplingBucket": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Samplingbucket"
+          },
+          "questionLength": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Questionlength"
+          },
+          "assignedTo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignedto"
+          },
+          "assignedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignedat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
+          },
+          "updatedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedby"
+          },
+          "reviewedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewedat"
+          },
+          "_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          },
+          "totalReferences": {
+            "type": "integer",
+            "title": "Totalreferences",
+            "default": 0
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Return a merged, sorted view of manual and computed tags.",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "datasetName",
+          "synthQuestion",
+          "tags"
+        ],
+        "title": "GroundTruthItem",
+        "description": "Canonical Ground Truth item aligned to wire schema (schemaVersion v1).\n\nAll fields with camelCase wire names use aliases; we accept both field names and aliases\non input (populate_by_name=True) and always serialize using by_alias."
+      },
+      "GroundTruthListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GroundTruthItem-Output"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "pagination"
+        ],
+        "title": "GroundTruthListResponse"
+      },
+      "GroundTruthStatus": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "approved",
+          "deleted",
+          "skipped"
+        ],
+        "title": "GroundTruthStatus"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HistoryItem": {
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/HistoryItemRole"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg"
+          },
+          "refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Reference"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refs"
+          },
+          "expectedBehavior": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ExpectedBehavior"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectedbehavior",
+            "description": "Expected behavior(s) for this turn in the conversation (e.g., tool:search, generation:answer)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "msg"
+        ],
+        "title": "HistoryItem",
+        "description": "Represents a single item in the multi-turn history."
+      },
+      "HistoryItemRole": {
+        "type": "string",
+        "enum": [
+          "user",
+          "assistant"
+        ],
+        "title": "HistoryItemRole"
+      },
+      "ImportBulkResponse": {
+        "properties": {
+          "imported": {
+            "type": "integer",
+            "title": "Imported",
+            "description": "Number of items successfully imported."
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "description": "Number of items that failed to import.",
+            "default": 0
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/BulkImportError"
+            },
+            "type": "array",
+            "title": "Errors",
+            "description": "Structured error objects for items that failed to import."
+          },
+          "uuids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Uuids",
+            "description": "The item IDs in the same order as the request payload. Clients may send either 'id' or 'uuid' in each item; when missing or blank, the server generates a two-word, hyphenated string ID (e.g., 'sleek-voxel') via randomname."
+          },
+          "piiWarnings": {
+            "items": {
+              "$ref": "#/components/schemas/PIIWarning"
+            },
+            "type": "array",
+            "title": "Piiwarnings",
+            "description": "Warnings about potential personally identifiable information (PII) detected in imported items. These are informational only and do not block import. Review flagged content for remediation."
+          },
+          "validationSummary": {
+            "$ref": "#/components/schemas/ValidationSummary",
+            "description": "Summary statistics for the bulk import operation."
+          }
+        },
+        "type": "object",
+        "required": [
+          "imported",
+          "validationSummary"
+        ],
+        "title": "ImportBulkResponse"
+      },
+      "PIIWarning": {
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "title": "Item Id",
+            "description": "Item identifier"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field",
+            "description": "Field name where PII was detected (e.g., 'synthQuestion', 'history[2].msg')"
+          },
+          "pattern_type": {
+            "type": "string",
+            "title": "Pattern Type",
+            "description": "Type of PII detected ('email' or 'phone')"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet",
+            "description": "Masked context snippet showing the detected PII"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position",
+            "description": "Character position where the PII was found"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_id",
+          "field",
+          "pattern_type",
+          "snippet",
+          "position"
+        ],
+        "title": "PIIWarning",
+        "description": "Warning about potential PII detected in a ground truth item."
+      },
+      "PaginationMetadata": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Current page number (1-indexed)"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Items per page"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of items matching filters"
+          },
+          "totalPages": {
+            "type": "integer",
+            "title": "Totalpages",
+            "description": "Total number of pages"
+          },
+          "hasNext": {
+            "type": "boolean",
+            "title": "Hasnext",
+            "description": "Whether there is a next page"
+          },
+          "hasPrev": {
+            "type": "boolean",
+            "title": "Hasprev",
+            "description": "Whether there is a previous page"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "limit",
+          "total",
+          "totalPages",
+          "hasNext",
+          "hasPrev"
+        ],
+        "title": "PaginationMetadata",
+        "description": "Pagination metadata for list responses."
+      },
+      "RecomputeTagsResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total items matching the filter criteria."
+          },
+          "processed": {
+            "type": "integer",
+            "title": "Processed",
+            "description": "Number of items successfully processed."
+          },
+          "updated": {
+            "type": "integer",
+            "title": "Updated",
+            "description": "Number of items with changed computed tags."
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped",
+            "description": "Number of items with unchanged computed tags."
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors",
+            "description": "Error messages for failed items."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "description": "Whether this was a dry run (no changes persisted)."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms",
+            "description": "Operation duration in milliseconds."
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "processed",
+          "updated",
+          "skipped",
+          "dry_run",
+          "duration_ms"
+        ],
+        "title": "RecomputeTagsResponse",
+        "description": "Response for bulk computed tag recomputation."
+      },
+      "Reference": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Reference URL (required, non-empty)"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Human-readable title for the reference"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "keyExcerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyexcerpt"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "bonus": {
+            "type": "boolean",
+            "title": "Bonus",
+            "default": false
+          },
+          "messageIndex": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messageindex"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "Reference",
+        "description": "Wire reference object.\n\n{ url, title, content, keyExcerpt, type, bonus, messageIndex }"
+      },
+      "RemoveTagsRequest": {
+        "properties": {
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tags"
+        ],
+        "title": "RemoveTagsRequest"
+      },
+      "SelfServeResponse": {
+        "properties": {
+          "assigned": {
+            "items": {
+              "$ref": "#/components/schemas/GroundTruthItem-Output"
+            },
+            "type": "array",
+            "title": "Assigned"
+          },
+          "requested": {
+            "type": "integer",
+            "title": "Requested"
+          },
+          "assignedCount": {
+            "type": "integer",
+            "title": "Assignedcount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "assigned",
+          "requested",
+          "assignedCount"
+        ],
+        "title": "SelfServeResponse"
+      },
+      "SnapshotExportRequest": {
+        "properties": {
+          "format": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "json_snapshot_payload",
+                  "json_items"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExportFilters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processors": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processors"
+          },
+          "delivery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExportDeliveryOptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SnapshotExportRequest"
+      },
+      "SortField": {
+        "type": "string",
+        "enum": [
+          "reviewedAt",
+          "updatedAt",
+          "id",
+          "hasAnswer",
+          "totalReferences",
+          "tagCount"
+        ],
+        "title": "SortField"
+      },
+      "SortOrder": {
+        "type": "string",
+        "enum": [
+          "asc",
+          "desc"
+        ],
+        "title": "SortOrder"
+      },
+      "TagGroupDTO": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Values"
+          },
+          "exclusive": {
+            "type": "boolean",
+            "title": "Exclusive"
+          },
+          "depends_on": {
+            "items": {
+              "$ref": "#/components/schemas/DependencyDTO"
+            },
+            "type": "array",
+            "title": "Depends On"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "values",
+          "exclusive"
+        ],
+        "title": "TagGroupDTO"
+      },
+      "TagListResponse": {
+        "properties": {
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "computedTags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Computedtags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tags"
+        ],
+        "title": "TagListResponse"
+      },
+      "TagSchemaResponse": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": "v1"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/TagGroupDTO"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "title": "TagSchemaResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ValidationSummary": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total items in request"
+          },
+          "succeeded": {
+            "type": "integer",
+            "title": "Succeeded",
+            "description": "Items successfully imported"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "description": "Items that failed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "succeeded",
+          "failed"
+        ],
+        "title": "ValidationSummary",
+        "description": "Summary statistics for bulk import."
+      }
+    }
+  }
 }
