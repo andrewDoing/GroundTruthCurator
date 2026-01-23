@@ -95,11 +95,9 @@ uv run ty check app/api/v1/ground_truths.py
 ```bash
 cd frontend
 
-# Run tests
-npm test
-
-# Run tests once without watch mode
-npm test -- --run
+# Run unit tests once (preferred for automation/agents)
+# Note: Vitest 3.2.4 doesn't support `--no-threads` at runtime; use the threads pool in single-thread mode to avoid spawning many Node processes.
+npm run test:run -- --pool=threads --poolOptions.threads.singleThread
 
 # Build
 npm run build
