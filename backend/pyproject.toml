@@ -37,6 +37,8 @@ dev = [
 	"black",
 	"ty",
 	"pre-commit",
+	"mkdocs>=1.6.1",
+	"mkdocs-material>=9.5.48",
 ]
 
 [tool.pytest.ini_options]

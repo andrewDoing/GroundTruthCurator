@@ -107,3 +107,16 @@ npm run build
 # Type checking (note: 'typecheck' not 'type-check')
 npm run typecheck
 ```
+
+## Documentation
+
+```bash
+# Build documentation site
+cd backend
+uv run mkdocs build -f ../mkdocs.yml
+
+# Serve documentation locally
+cd backend
+uv run mkdocs serve -f ../mkdocs.yml
+# Then open http://localhost:8000
+```

@@ -1,0 +1,104 @@
+site_name: Ground Truth Curator
+site_description: >-
+  A platform for subject-matter experts to create and maintain high-quality 
+  ground truth datasets for agent evaluation and model accuracy measurement.
+site_author: Ground Truth Curator Team
+repo_url: https://github.com/andrewvineyard/GroundTruthCurator
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - tags
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Overview: getting-started/index.md
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Configuration: getting-started/configuration.md
+  - User Guides:
+    - SME Workflow: guides/sme-workflow.md
+    - Curator Guide: guides/curator-guide.md
+    - Administrator Guide: guides/admin-guide.md
+  - Architecture:
+    - Overview: architecture/index.md
+    - Backend Services: architecture/backend.md
+    - Frontend Components: architecture/frontend.md
+    - Data Models: architecture/data-models.md
+  - Design Documents:
+    - Manual Tags: design/manual-tags.md
+    - Computed Tags: design/computed-tags.md
+    - Export Pipeline: design/json-export-migration-plan.md
+    - Frontend Configuration: design/frontend-runtime-configuration.md
+  - API Reference:
+    - Overview: api/index.md
+    - Ground Truths: api/ground-truths.md
+    - Assignments: api/assignments.md
+    - Tags: api/tags.md
+    - Search: api/search.md
+  - Development:
+    - Contributing: development/contributing.md
+    - Testing: development/testing.md
+    - Code Quality: development/code-quality.md
+    - Agent Integration: development/agents.md
+  - Specifications:
+    - Requirements: specs/requirements.md
+    - Jobs to Be Done: specs/jtbd.md
+  - Business:
+    - Business Value: business/value.md
+    - Roadmap: business/roadmap.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/andrewvineyard/GroundTruthCurator
+  version:
+    provider: mike
