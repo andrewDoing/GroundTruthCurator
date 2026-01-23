@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from app.container import container
-from app.domain.models import GroundTruthItem
+from app.domain.models import GroundTruthItem, BulkImportError
 import logging
 from app.services.tagging_service import validate_tags_with_cache
 
@@ -23,11 +23,11 @@ class ValidationError(Exception):
 
 
 async def validate_ground_truth_item(
-    item: GroundTruthItem, valid_tags_cache: set[str] | None = None
-) -> list[str]:
+    item: GroundTruthItem, item_index: int, valid_tags_cache: set[str] | None = None
+) -> list[BulkImportError]:
     """Validate a ground truth item for bulk import.
 
-    Returns a list of validation error messages. Empty list means valid.
+    Returns a list of structured validation error objects. Empty list means valid.
     Used instead of pydantic as tag validation require an async call for the cache
 
     Validates:
@@ -36,9 +36,10 @@ async def validate_ground_truth_item(
 
     Args:
         item: The ground truth item to validate
+        item_index: The 0-based index of the item in the request array
         valid_tags_cache: Optional pre-fetched set of valid tags to avoid repeated lookups
     """
-    errors: list[str] = []
+    errors: list[BulkImportError] = []
     item_id = item.id or "(no ID)"
 
     # Validate manual tags values (computed tags are system-generated and don't need validation)
@@ -54,7 +55,15 @@ async def validate_ground_truth_item(
             )
 
         except ValueError as e:
-            errors.append(f"Item '{item_id}': Error {str(e)}")
+            errors.append(
+                BulkImportError(
+                    index=item_index,
+                    item_id=item_id,
+                    field="manualTags",
+                    code="INVALID_TAG",
+                    message=str(e),
+                )
+            )
             logger.warning(
                 f"Tag validation failed during bulk import | ID: {item_id} | Dataset: {item.datasetName} | ManualTags: {item.manual_tags} | Error: {str(e)}"
             )
@@ -62,13 +71,13 @@ async def validate_ground_truth_item(
     return errors
 
 
-async def validate_bulk_items(items: list[GroundTruthItem]) -> dict[str, list[str]]:
+async def validate_bulk_items(items: list[GroundTruthItem]) -> dict[str, list[BulkImportError]]:
     """Validate a list of ground truth items for bulk import.
 
-    Returns a dict mapping item ID to list of validation errors.
+    Returns a dict mapping item ID to list of structured validation errors.
     Items with no errors are not included in the result.
     """
-    validation_results: dict[str, list[str]] = {}
+    validation_results: dict[str, list[BulkImportError]] = {}
 
     # Fetch tag registry once for all items with manual tags
     valid_tags_cache: set[str] | None = None
@@ -76,8 +85,11 @@ async def validate_bulk_items(items: list[GroundTruthItem]) -> dict[str, list[st
     if has_items_with_tags:
         valid_tags_cache = set(await container.tag_registry_service.list_tags())
 
-    # Validate all items concurrently
-    validation_tasks = [validate_ground_truth_item(item, valid_tags_cache) for item in items]
+    # Validate all items concurrently, passing index to each validator
+    validation_tasks = [
+        validate_ground_truth_item(item, index, valid_tags_cache)
+        for index, item in enumerate(items)
+    ]
 
     results = await asyncio.gather(*validation_tasks, return_exceptions=False)
 

@@ -22,7 +22,9 @@ class PIIWarning(BaseModel):
     """Warning about potential PII detected in a ground truth item."""
 
     item_id: str = Field(description="Item identifier")
-    field: str = Field(description="Field name where PII was detected (e.g., 'synthQuestion', 'history[2].msg')")
+    field: str = Field(
+        description="Field name where PII was detected (e.g., 'synthQuestion', 'history[2].msg')"
+    )
     pattern_type: str = Field(description="Type of PII detected ('email' or 'phone')")
     snippet: str = Field(description="Masked context snippet showing the detected PII")
     position: int = Field(description="Character position where the PII was found")
@@ -71,7 +73,9 @@ def _mask_match(match_text: str, pattern_type: str) -> str:
             domain_parts = domain.rsplit(".", 1)
             if len(domain_parts) == 2:
                 domain_name, tld = domain_parts
-                masked_domain = domain_name[0] + "***" + domain_name[-1] if len(domain_name) > 1 else "***"
+                masked_domain = (
+                    domain_name[0] + "***" + domain_name[-1] if len(domain_name) > 1 else "***"
+                )
                 return f"{masked_local}@{masked_domain}.{tld}"
             return f"{masked_local}@***"
         return "***@***"
@@ -93,7 +97,9 @@ def _mask_match(match_text: str, pattern_type: str) -> str:
     return "***"
 
 
-def _create_snippet(text: str, match_start: int, match_end: int, masked_match: str, context_chars: int = 20) -> str:
+def _create_snippet(
+    text: str, match_start: int, match_end: int, masked_match: str, context_chars: int = 20
+) -> str:
     """Create a snippet with masked PII and surrounding context.
 
     Returns a string like: "...context [MASKED_PII] context..."

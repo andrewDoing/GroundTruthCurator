@@ -69,3 +69,38 @@ This repository uses [Jujutsu (jj)](https://martinvonz.github.io/jj/) for versio
 - Never automatically move the main bookmark, always prompt the user first
 - Keep commits atomic and focused on a single logical change
 - Write clear, descriptive commit messages
+
+## Testing and Build Commands
+
+### Backend (Python with uv)
+
+```bash
+cd backend
+
+# Run all unit tests
+uv run pytest tests/unit/ -v
+
+# Run specific test file
+uv run pytest tests/unit/test_dos_prevention.py -v
+
+# Run tests matching keyword
+uv run pytest tests/unit/ -k "bulk" -v
+
+# Type checking (uses 'ty' not mypy)
+uv run ty check app/api/v1/ground_truths.py
+```
+
+### Frontend (Node.js)
+
+```bash
+cd frontend
+
+# Run tests
+npm test
+
+# Build
+npm run build
+
+# Type checking
+npm run type-check
+```

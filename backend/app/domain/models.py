@@ -179,6 +179,35 @@ class Stats(BaseModel):
     deleted: int = 0
 
 
+class BulkImportError(BaseModel):
+    """Structured error for bulk import failures."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    index: int = Field(description="0-based position in request array")
+    item_id: str | None = Field(
+        default=None,
+        alias="itemId",
+        description="ID of the failed item (if available)",
+    )
+    field: str | None = Field(
+        default=None,
+        description="Field that caused the error (if applicable)",
+    )
+    code: str = Field(description="Error code: INVALID_TAG, DUPLICATE_ID, CREATE_FAILED, etc.")
+    message: str = Field(description="Human-readable error description")
+
+
+class ValidationSummary(BaseModel):
+    """Summary statistics for bulk import."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    total: int = Field(description="Total items in request")
+    succeeded: int = Field(description="Items successfully imported")
+    failed: int = Field(description="Items that failed")
+
+
 class BulkImportResult(BaseModel):
     """Result for bulk import operations.
 

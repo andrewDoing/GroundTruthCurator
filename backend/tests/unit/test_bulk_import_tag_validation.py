@@ -82,7 +82,10 @@ async def test_bulk_import_rejects_invalid_tags(mock_container, mock_user):
     # Assert
     assert result.imported == 0
     assert len(result.errors) == 1
-    assert "invalid:tag" in result.errors[0]
+    assert result.errors[0].code == "INVALID_TAG"
+    assert result.errors[0].field == "manualTags"
+    assert result.errors[0].item_id == "test-1"
+    assert "invalid:tag" in result.errors[0].message
     mock_container.tag_registry_service.list_tags.assert_called_once()
     # Repo should be called with empty list since no valid items
     mock_container.repo.import_bulk_gt.assert_not_called()
@@ -125,8 +128,11 @@ async def test_bulk_import_mixed_valid_invalid_tags(mock_container, mock_user):
     # Assert
     assert result.imported == 1
     assert len(result.errors) == 1
-    assert "invalid:tag" in result.errors[0]
-    assert "test-2" in result.errors[0]
+    assert result.errors[0].code == "INVALID_TAG"
+    assert result.errors[0].field == "manualTags"
+    assert result.errors[0].item_id == "test-2"
+    assert result.errors[0].index == 1
+    assert "invalid:tag" in result.errors[0].message
     mock_container.repo.import_bulk_gt.assert_called_once()
 
     # Check that only the valid item was passed to the repo

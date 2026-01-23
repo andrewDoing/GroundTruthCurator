@@ -19,8 +19,6 @@ from app.services.pii_service import (
     scan_bulk_items_for_pii,
     _mask_match,
     _create_snippet,
-    EMAIL_PATTERN,
-    PHONE_PATTERN,
 )
 from app.domain.models import GroundTruthItem, HistoryItem
 from app.domain.enums import HistoryItemRole

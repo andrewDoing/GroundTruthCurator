@@ -14,7 +14,14 @@ from fastapi.responses import JSONResponse
 
 from app.core.auth import get_current_user, UserContext
 from app.core.config import settings
-from app.domain.models import GroundTruthItem, Reference, GroundTruthListResponse, HistoryItem
+from app.domain.models import (
+    GroundTruthItem,
+    Reference,
+    GroundTruthListResponse,
+    HistoryItem,
+    BulkImportError,
+    ValidationSummary,
+)
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.plugins import get_default_registry
 from app.container import container
@@ -33,7 +40,11 @@ class ImportBulkResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     imported: int = Field(description="Number of items successfully imported.")
-    errors: list[str] = Field(description="List of error messages for items that failed to import.")
+    failed: int = Field(default=0, description="Number of items that failed to import.")
+    errors: list[BulkImportError] = Field(
+        default_factory=list,
+        description="Structured error objects for items that failed to import.",
+    )
     uuids: list[str] = Field(
         default_factory=list,
         description=(
@@ -48,6 +59,10 @@ class ImportBulkResponse(BaseModel):
             "Warnings about potential personally identifiable information (PII) detected in imported items. "
             "These are informational only and do not block import. Review flagged content for remediation."
         ),
+    )
+    validation_summary: ValidationSummary = Field(
+        alias="validationSummary",
+        description="Summary statistics for the bulk import operation.",
     )
 
 
@@ -82,7 +97,7 @@ async def import_bulk(
     - Duplicate handling: Existing items are not overwritten; per-item errors are returned in `errors`.
     - Optional approval: `approve=true` marks all items approved and sets review metadata.
     """
-    errors: list[str] = []
+    errors: list[BulkImportError] = []
     uuids: list[str] = []
     gt_items: list[GroundTruthItem] = []
 
@@ -103,8 +118,7 @@ async def import_bulk(
         for item in items:
             if item.id in validation_errors:
                 # Collect all validation errors for this item
-                for error in validation_errors[item.id]:
-                    errors.append(error)
+                errors.extend(validation_errors[item.id])
             else:
                 # Only include valid items
                 gt_items.append(item)
@@ -130,7 +144,22 @@ async def import_bulk(
             apply_computed_tags(it, registry)
 
         result = await container.repo.import_bulk_gt(gt_items, buckets=buckets)
-        errors.extend(result.errors)
+
+        # Convert repository errors (plain strings) to structured errors
+        # Repository doesn't provide index, so we can't map back to original position
+        # These are persistence errors after validation passed
+        for error_msg in result.errors:
+            errors.append(
+                BulkImportError(
+                    index=-1,  # Index unknown for persistence errors
+                    item_id=None,  # Parse from error message if needed
+                    field=None,
+                    code="CREATE_FAILED"
+                    if "create_failed" in error_msg.lower()
+                    else "DUPLICATE_ID",
+                    message=error_msg,
+                )
+            )
         imported_count = result.imported
     else:
         imported_count = 0
@@ -141,11 +170,26 @@ async def import_bulk(
         pii_warnings = scan_bulk_items_for_pii(items)
         if pii_warnings:
             logger.info(
-                f"api.import_bulk.pii_detected - "
-                f"items={len(items)}, warnings={len(pii_warnings)}"
+                f"api.import_bulk.pii_detected - items={len(items)}, warnings={len(pii_warnings)}"
             )
 
-    return ImportBulkResponse(imported=imported_count, errors=errors, uuids=uuids, pii_warnings=pii_warnings)
+    # Build validation summary
+    total_items = len(items)
+    failed_count = len(errors)
+    validation_summary = ValidationSummary(
+        total=total_items,
+        succeeded=imported_count,
+        failed=failed_count,
+    )
+
+    return ImportBulkResponse(  # type: ignore[call-arg]
+        imported=imported_count,
+        failed=failed_count,
+        errors=errors,
+        uuids=uuids,
+        pii_warnings=pii_warnings,
+        validation_summary=validation_summary,
+    )
 
 
 @router.post("/snapshot")
