@@ -259,6 +259,11 @@ export interface paths {
          *     - Sets the item status to draft (even if previously approved/deleted/skipped)
          *     - Creates an assignment document in the assignments container
          *     - Returns the updated ground truth item
+         *
+         *     With force=true:
+         *     - Requires admin or team-lead role
+         *     - Allows taking over items assigned to other users
+         *     - Cleans up the previous user's assignment document
          */
         post: operations["assign_item_v1_assignments__dataset___bucket___item_id__assign_post"];
         delete?: never;
@@ -368,6 +373,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tags/glossary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tags Glossary
+         * @description Returns comprehensive tag glossary with definitions from all sources.
+         */
+        get: operations["get_tags_glossary_v1_tags_glossary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/datasets": {
         parameters: {
             query?: never;
@@ -465,6 +490,18 @@ export interface components {
         AddTagsRequest: {
             /** Tags */
             tags: string[];
+        };
+        /**
+         * AssignItemRequest
+         * @description Request body for assignment endpoint.
+         */
+        AssignItemRequest: {
+            /**
+             * Force
+             * @description Force assignment even if item is assigned to another user (requires admin or team-lead role)
+             * @default false
+             */
+            force: boolean;
         };
         /**
          * AssignmentUpdateRequest
@@ -612,6 +649,37 @@ export interface components {
             value: string;
         };
         /**
+         * DuplicateWarning
+         * @description Warning about a likely duplicate of an approved item.
+         */
+        DuplicateWarning: {
+            /**
+             * Itemid
+             * @description Draft item identifier
+             */
+            itemId: string;
+            /**
+             * Duplicateid
+             * @description ID of the likely duplicate approved item
+             */
+            duplicateId: string;
+            /**
+             * Duplicatequestion
+             * @description Question text from the duplicate item
+             */
+            duplicateQuestion: string;
+            /**
+             * Duplicatestatus
+             * @description Status of the duplicate item
+             */
+            duplicateStatus: string;
+            /**
+             * Matchreason
+             * @description Why this was flagged as a duplicate (e.g., 'exact question match', 'question and answer match')
+             */
+            matchReason: string;
+        };
+        /**
          * ExpectedBehavior
          * @description Expected behavior tags for history items in ground truth evaluation.
          *
@@ -656,6 +724,16 @@ export interface components {
             selfServeLimit: number;
             /** Trustedreferencedomains */
             trustedReferenceDomains: string[];
+        };
+        /** GlossaryResponse */
+        GlossaryResponse: {
+            /**
+             * Version
+             * @default v1
+             */
+            version: string;
+            /** Groups */
+            groups: components["schemas"]["TagGroupGlossaryDTO"][];
         };
         /**
          * GroundTruthItem
@@ -881,6 +959,11 @@ export interface components {
              * @description Warnings about potential personally identifiable information (PII) detected in imported items. These are informational only and do not block import. Review flagged content for remediation.
              */
             piiWarnings?: components["schemas"]["PIIWarning"][];
+            /**
+             * Duplicatewarnings
+             * @description Warnings about draft items that appear to be duplicates of approved items. These are informational only and do not block import. Review for potential duplicates.
+             */
+            duplicateWarnings?: components["schemas"]["DuplicateWarning"][];
             /** @description Summary statistics for the bulk import operation. */
             validationSummary: components["schemas"]["ValidationSummary"];
         };
@@ -1056,6 +1139,13 @@ export interface components {
          * @enum {string}
          */
         SortOrder: "asc" | "desc";
+        /** TagDefinitionDTO */
+        TagDefinitionDTO: {
+            /** Key */
+            key: string;
+            /** Description */
+            description?: string | null;
+        };
         /** TagGroupDTO */
         TagGroupDTO: {
             /** Name */
@@ -1066,6 +1156,17 @@ export interface components {
             exclusive: boolean;
             /** Depends On */
             depends_on?: components["schemas"]["DependencyDTO"][];
+        };
+        /** TagGroupGlossaryDTO */
+        TagGroupGlossaryDTO: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Type */
+            type: string;
+            /** Tags */
+            tags: components["schemas"]["TagDefinitionDTO"][];
         };
         /** TagListResponse */
         TagListResponse: {
@@ -1603,7 +1704,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AssignItemRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -1815,6 +1920,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tags_glossary_v1_tags_glossary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossaryResponse"];
                 };
             };
         };

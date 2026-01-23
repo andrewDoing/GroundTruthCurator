@@ -4,9 +4,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.domain.tags import TAG_SCHEMA
+from app.domain.manual_tags_provider import JsonFileManualTagProvider
 from app.container import container
 from app.plugins import get_default_registry
 from app.core.config import settings
+from pathlib import Path
 
 
 router = APIRouter()
@@ -104,3 +106,79 @@ async def delete_tags(req: RemoveTagsRequest) -> TagListResponse:
     registry = get_default_registry()
     computed_tag_keys = sorted(registry.get_static_keys())
     return TagListResponse(tags=tags, computedTags=computed_tag_keys)
+
+
+# --- Glossary endpoint ---
+
+
+class TagDefinitionDTO(BaseModel):
+    key: str
+    description: str | None = None
+
+
+class TagGroupGlossaryDTO(BaseModel):
+    name: str
+    description: str | None = None
+    type: str  # "manual" | "computed" | "custom"
+    tags: list[TagDefinitionDTO]
+
+
+class GlossaryResponse(BaseModel):
+    version: str = "v1"
+    groups: list[TagGroupGlossaryDTO]
+
+
+@router.get("/tags/glossary", response_model=GlossaryResponse)
+async def get_tags_glossary() -> GlossaryResponse:
+    """Returns comprehensive tag glossary with definitions from all sources."""
+    groups: list[TagGroupGlossaryDTO] = []
+
+    # Load manual tag groups with descriptions
+    config_path = settings.MANUAL_TAGS_CONFIG_PATH
+    if config_path:
+        path = Path(config_path)
+        provider = JsonFileManualTagProvider(path)
+        manual_groups = provider.get_default_tag_groups()
+
+        for group in manual_groups:
+            tags_with_desc: list[TagDefinitionDTO] = []
+
+            # Use tag_definitions if available (new format), otherwise fall back to tags
+            if group.tag_definitions:
+                for tag_def in group.tag_definitions:
+                    key = f"{group.group}:{tag_def.value}"
+                    tags_with_desc.append(
+                        TagDefinitionDTO(key=key, description=tag_def.description)
+                    )
+            else:
+                for tag_val in group.tags:
+                    key = f"{group.group}:{tag_val}"
+                    tags_with_desc.append(TagDefinitionDTO(key=key, description=None))
+
+            groups.append(
+                TagGroupGlossaryDTO(
+                    name=group.group,
+                    description=group.description,
+                    type="manual",
+                    tags=tags_with_desc,
+                )
+            )
+
+    # Add computed tags from registry
+    # For now, computed tags have no descriptions (Phase 1)
+    # Phase 2 can add plugin.description property
+    registry = get_default_registry()
+    computed_keys = sorted(registry.get_static_keys())
+
+    if computed_keys:
+        computed_tags = [TagDefinitionDTO(key=key, description=None) for key in computed_keys]
+        groups.append(
+            TagGroupGlossaryDTO(
+                name="computed",
+                description="Automatically computed tags based on item content",
+                type="computed",
+                tags=computed_tags,
+            )
+        )
+
+    return GlossaryResponse(version="v1", groups=groups)

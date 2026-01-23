@@ -11,10 +11,18 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class ManualTagValue:
+    value: str
+    description: str | None = None
+
+
+@dataclass(frozen=True)
 class ManualTagGroup:
     group: str
-    tags: List[str]
+    tags: List[str]  # Tag values only (for backward compatibility)
     mutually_exclusive: bool
+    description: str | None = None
+    tag_definitions: List[ManualTagValue] | None = None  # Full tag definitions with descriptions
 
 
 class ManualTagProvider(ABC):
@@ -49,8 +57,9 @@ class JsonFileManualTagProvider(ManualTagProvider):
                 continue
 
             group = group_data.get("group")
-            tags = group_data.get("tags", [])
+            tags_raw = group_data.get("tags", [])
             mutually_exclusive = bool(group_data.get("mutuallyExclusive", False))
+            group_description = group_data.get("description")
 
             if not isinstance(group, str):
                 continue
@@ -58,18 +67,52 @@ class JsonFileManualTagProvider(ManualTagProvider):
             if not group:
                 continue
 
-            if not isinstance(tags, list):
-                tags = []
-            normalized_tags = [t.strip().lower() for t in tags if isinstance(t, str) and t.strip()]
+            # Handle both formats: list of strings (old) or list of objects (new)
+            normalized_tags: List[str] = []
+            tag_definitions: List[ManualTagValue] = []
+
+            if not isinstance(tags_raw, list):
+                tags_raw = []
+
+            for tag_item in tags_raw:
+                # Old format: string
+                if isinstance(tag_item, str):
+                    tag_val = tag_item.strip().lower()
+                    if tag_val:
+                        normalized_tags.append(tag_val)
+                        tag_definitions.append(ManualTagValue(value=tag_val, description=None))
+                # New format: object with value and description
+                elif isinstance(tag_item, dict):
+                    tag_val = tag_item.get("value", "").strip().lower()
+                    tag_desc = tag_item.get("description")
+                    if tag_val:
+                        normalized_tags.append(tag_val)
+                        tag_definitions.append(ManualTagValue(value=tag_val, description=tag_desc))
+
             if not normalized_tags:
                 continue
 
-            deduped = sorted(set(normalized_tags))
+            # Deduplicate while preserving descriptions
+            seen_values: set[str] = set()
+            deduped_tags: List[str] = []
+            deduped_definitions: List[ManualTagValue] = []
+
+            for tag_val, tag_def in zip(normalized_tags, tag_definitions):
+                if tag_val not in seen_values:
+                    seen_values.add(tag_val)
+                    deduped_tags.append(tag_val)
+                    deduped_definitions.append(tag_def)
+
+            deduped_tags.sort()
+            deduped_definitions.sort(key=lambda x: x.value)
+
             result.append(
                 ManualTagGroup(
                     group=group,
-                    tags=deduped,
+                    tags=deduped_tags,
                     mutually_exclusive=mutually_exclusive,
+                    description=group_description,
+                    tag_definitions=deduped_definitions,
                 )
             )
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from app.domain.manual_tags_provider import (
     JsonFileManualTagProvider,
     ManualTagGroup,
+    ManualTagValue,
     expand_manual_tags,
 )
 
@@ -29,7 +30,15 @@ def test_provider_normalizes_groups_and_tags(tmp_path: Path) -> None:
 
     groups = JsonFileManualTagProvider(path).get_default_tag_groups()
 
-    assert groups == [ManualTagGroup(group="priority", tags=["high"], mutually_exclusive=True)]
+    assert groups == [
+        ManualTagGroup(
+            group="priority",
+            tags=["high"],
+            mutually_exclusive=True,
+            description=None,
+            tag_definitions=[ManualTagValue(value="high", description=None)],
+        )
+    ]
 
 
 def test_provider_ignores_invalid_entries(tmp_path: Path) -> None:

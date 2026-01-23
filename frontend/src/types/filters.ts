@@ -3,7 +3,12 @@
  */
 
 export type FilterType = "all" | "draft" | "approved" | "skipped" | "deleted";
-export type SortColumn = "refs" | "reviewedAt" | "hasAnswer" | "tagCount" | null;
+export type SortColumn =
+	| "refs"
+	| "reviewedAt"
+	| "hasAnswer"
+	| "tagCount"
+	| null;
 export type SortDirection = "asc" | "desc";
 
 export interface TagFilterState {

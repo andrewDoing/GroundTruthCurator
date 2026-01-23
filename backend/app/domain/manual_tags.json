@@ -2,33 +2,70 @@
   "manualTagGroups": [
     {
       "group": "source",
+      "description": "Origin of the ground truth content",
       "mutuallyExclusive": true,
-      "tags": ["sme", "sa", "synthetic", "sme_curated", "user", "other"]
+      "tags": [
+        { "value": "sme", "description": "Created by subject matter expert" },
+        { "value": "sa", "description": "Created by solution architect" },
+        { "value": "synthetic", "description": "AI-generated content" },
+        { "value": "sme_curated", "description": "AI-generated content reviewed by SME" },
+        { "value": "user", "description": "Derived from user interactions" },
+        { "value": "other", "description": "Other source" }
+      ]
     },
     {
       "group": "answerability",
+      "description": "Whether the question can be answered based on available information",
       "mutuallyExclusive": true,
-      "tags": ["answerable", "not_answerable", "should_not_answer"]
+      "tags": [
+        { "value": "answerable", "description": "Question can be answered with available information" },
+        { "value": "not_answerable", "description": "Insufficient information to answer" },
+        { "value": "should_not_answer", "description": "Question should not be answered (e.g., harmful, out of scope)" }
+      ]
     },
     {
       "group": "topic",
+      "description": "Subject matter or domain of the question",
       "mutuallyExclusive": false,
-      "tags": ["general", "compatibility", "install", "license", "performance", "security"]
+      "tags": [
+        { "value": "general", "description": "General topic or cross-cutting concern" },
+        { "value": "compatibility", "description": "Version or platform compatibility" },
+        { "value": "install", "description": "Installation or setup" },
+        { "value": "license", "description": "Licensing or legal matters" },
+        { "value": "performance", "description": "Performance or optimization" },
+        { "value": "security", "description": "Security or privacy" }
+      ]
     },
     {
       "group": "intent",
+      "description": "User's goal or purpose for asking the question",
       "mutuallyExclusive": false,
-      "tags": ["informational", "action", "feedback", "clarification", "other"]
+      "tags": [
+        { "value": "informational", "description": "Seeking information or explanation" },
+        { "value": "action", "description": "Seeking instructions to perform a task" },
+        { "value": "feedback", "description": "Seeking validation or assessment" },
+        { "value": "clarification", "description": "Resolving ambiguity or confirming understanding" },
+        { "value": "other", "description": "Other intent" }
+      ]
     },
     {
       "group": "expertise",
+      "description": "Expected audience expertise level",
       "mutuallyExclusive": true,
-      "tags": ["expert", "novice"]
+      "tags": [
+        { "value": "expert", "description": "Requires expert-level knowledge" },
+        { "value": "novice", "description": "Suitable for beginners" }
+      ]
     },
     {
       "group": "difficulty",
+      "description": "Complexity of the question or answer",
       "mutuallyExclusive": true,
-      "tags": ["easy", "medium", "hard"]
+      "tags": [
+        { "value": "easy", "description": "Simple question with straightforward answer" },
+        { "value": "medium", "description": "Moderate complexity" },
+        { "value": "hard", "description": "Complex question requiring deep knowledge" }
+      ]
     }
   ]
 }

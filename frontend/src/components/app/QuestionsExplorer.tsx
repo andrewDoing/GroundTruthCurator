@@ -11,7 +11,7 @@ import type {
 	FilterType,
 	SortColumn,
 	SortDirection,
-	TagFilterState
+	TagFilterState,
 } from "../../types/filters";
 import {
 	filterStateToUrlParams,
@@ -245,8 +245,14 @@ export default function QuestionsExplorer({
 			status: appliedFilter.status !== "all" ? appliedFilter.status : undefined,
 			dataset:
 				appliedFilter.dataset !== "all" ? appliedFilter.dataset : undefined,
-			tags: appliedFilter.tags.include.length > 0 ? appliedFilter.tags.include : undefined,
-			excludeTags: appliedFilter.tags.exclude.length > 0 ? appliedFilter.tags.exclude : undefined,
+			tags:
+				appliedFilter.tags.include.length > 0
+					? appliedFilter.tags.include
+					: undefined,
+			excludeTags:
+				appliedFilter.tags.exclude.length > 0
+					? appliedFilter.tags.exclude
+					: undefined,
 			itemId: appliedFilter.itemId || undefined,
 			refUrl: appliedFilter.refUrl || undefined,
 			keyword: appliedFilter.keyword || undefined,
@@ -326,7 +332,10 @@ export default function QuestionsExplorer({
 		const newFilter: FilterState = {
 			status: activeFilter,
 			dataset: selectedDataset,
-			tags: { include: [...selectedTags.include], exclude: [...selectedTags.exclude] },
+			tags: {
+				include: [...selectedTags.include],
+				exclude: [...selectedTags.exclude],
+			},
 			itemId: itemIdFilter,
 			refUrl: referenceUrlFilter,
 			keyword: keywordFilter,
@@ -338,7 +347,9 @@ export default function QuestionsExplorer({
 		// Page reset is handled by useEffect that watches appliedFilter
 	};
 
-	const handleSort = (column: "refs" | "reviewedAt" | "hasAnswer" | "tagCount") => {
+	const handleSort = (
+		column: "refs" | "reviewedAt" | "hasAnswer" | "tagCount",
+	) => {
 		if (sortColumn === column) {
 			// If already sorting by this column, toggle direction
 			if (sortDirection === "desc") {
@@ -730,13 +741,15 @@ export default function QuestionsExplorer({
 									{isTagFilterExpanded ? "▼" : "▶"}
 								</span>
 								<span>Filter by Tags</span>
-								{(selectedTags.include.length > 0 || selectedTags.exclude.length > 0) && (
+								{(selectedTags.include.length > 0 ||
+									selectedTags.exclude.length > 0) && (
 									<span className="inline-flex items-center justify-center rounded-full bg-violet-600 px-2 py-0.5 text-xs font-semibold text-white">
 										{selectedTags.include.length + selectedTags.exclude.length}
 									</span>
 								)}
 							</button>
-							{(selectedTags.include.length > 0 || selectedTags.exclude.length > 0) && (
+							{(selectedTags.include.length > 0 ||
+								selectedTags.exclude.length > 0) && (
 								<button
 									type="button"
 									onClick={() => setSelectedTags({ include: [], exclude: [] })}
@@ -823,7 +836,8 @@ export default function QuestionsExplorer({
 										</div>
 									</div>
 								)}
-								{(selectedTags.include.length > 0 || selectedTags.exclude.length > 0) && (
+								{(selectedTags.include.length > 0 ||
+									selectedTags.exclude.length > 0) && (
 									<p className="text-xs text-slate-600">
 										{selectedTags.include.length > 0 && (
 											<span>
@@ -834,9 +848,8 @@ export default function QuestionsExplorer({
 												</span>
 											</span>
 										)}
-										{selectedTags.include.length > 0 && selectedTags.exclude.length > 0 && (
-											<span> • </span>
-										)}
+										{selectedTags.include.length > 0 &&
+											selectedTags.exclude.length > 0 && <span> • </span>}
 										{selectedTags.exclude.length > 0 && (
 											<span>
 												Excluding{" "}
