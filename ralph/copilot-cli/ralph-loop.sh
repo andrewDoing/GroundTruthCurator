@@ -105,7 +105,6 @@ Implement the next task from the implementation plan.
 7. Update AGENTS.md with any operational learnings (keep it brief).
 
 IMPORTANT: Implement functionality completely. Placeholders and stubs waste efforts.
-When you are done and no further work is needed, output a single line: COMPLETE
 EOF
     fi
 }
@@ -130,11 +129,11 @@ while true; do
     copilot_output_file=$(mktemp)
     copilot -p "$PROMPT" --agent "$AGENT" --model "$MODEL" --yolo | tee "$copilot_output_file"
 
-    if grep -q "^COMPLETE$" "$copilot_output_file"; then
-        rm -f "$copilot_output_file"
-        echo "Completion signal received. Exiting loop."
-        break
-    fi
+    # if grep -q "^COMPLETE$" "$copilot_output_file"; then
+    #     rm -f "$copilot_output_file"
+    #     echo "Completion signal received. Exiting loop."
+    #     break
+    # fi
 
     rm -f "$copilot_output_file"
 

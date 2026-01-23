@@ -238,6 +238,10 @@ async def list_all_ground_truths(
         alias="refUrl",
         description="Search for items by reference URL (case-sensitive partial match)",
     ),
+    keyword: str | None = Query(
+        default=None,
+        description="Search for items by keyword (case-insensitive text search across questions, answers, and history)",
+    ),
     sort_by: SortField = Query(default=SortField.reviewed_at.value, alias="sortBy"),
     sort_order: SortOrder = Query(default=SortOrder.desc.value, alias="sortOrder"),
     page: int = Query(default=1),
@@ -278,6 +282,18 @@ async def list_all_ground_truths(
         else:
             ref_url_search = ref_url
 
+    # Keyword search validation
+    keyword_search = None
+    if keyword is not None:
+        keyword = keyword.strip()
+        if not keyword:
+            # Empty after trim - treat as if parameter not provided
+            keyword = None
+        elif len(keyword) > 200:
+            raise HTTPException(status_code=400, detail="keyword must be 200 characters or less")
+        else:
+            keyword_search = keyword
+
     # Tag validation constants
     MAX_TAGS_PER_QUERY = 10
     MAX_TAG_LENGTH = 100
@@ -310,6 +326,7 @@ async def list_all_ground_truths(
         tags=tag_list,
         item_id=item_id_search,
         ref_url=ref_url_search,
+        keyword=keyword_search,
         sort_by=sort_by,
         sort_order=sort_order,
         page=page,

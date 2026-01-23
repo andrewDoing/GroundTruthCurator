@@ -63,6 +63,7 @@ export default function QuestionsExplorer({
 		tags: [],
 		itemId: "",
 		refUrl: "",
+		keyword: "",
 		sortColumn: null,
 		sortDirection: "desc",
 	};
@@ -76,6 +77,7 @@ export default function QuestionsExplorer({
 			tags: urlFilters.tags ?? defaultFilter.tags,
 			itemId: urlFilters.itemId ?? defaultFilter.itemId,
 			refUrl: urlFilters.refUrl ?? defaultFilter.refUrl,
+			keyword: urlFilters.keyword ?? defaultFilter.keyword,
 			sortColumn: urlFilters.sortColumn ?? defaultFilter.sortColumn,
 			sortDirection: urlFilters.sortDirection ?? defaultFilter.sortDirection,
 		};
@@ -97,6 +99,9 @@ export default function QuestionsExplorer({
 	);
 	const [referenceUrlFilter, setReferenceUrlFilter] = useState<string>(
 		initialFilterState.refUrl,
+	);
+	const [keywordFilter, setKeywordFilter] = useState<string>(
+		initialFilterState.keyword,
 	);
 	const [sortColumn, setSortColumn] = useState<SortColumn>(
 		initialFilterState.sortColumn,
@@ -135,6 +140,7 @@ export default function QuestionsExplorer({
 			!areArraysEqual(selectedTags, appliedFilter.tags) ||
 			itemIdFilter !== appliedFilter.itemId ||
 			referenceUrlFilter !== appliedFilter.refUrl ||
+			keywordFilter !== appliedFilter.keyword ||
 			sortColumn !== appliedFilter.sortColumn ||
 			sortDirection !== appliedFilter.sortDirection
 		);
@@ -144,6 +150,7 @@ export default function QuestionsExplorer({
 		selectedTags,
 		itemIdFilter,
 		referenceUrlFilter,
+		keywordFilter,
 		appliedFilter,
 		sortColumn,
 		sortDirection,
@@ -234,6 +241,7 @@ export default function QuestionsExplorer({
 			tags: appliedFilter.tags.length > 0 ? appliedFilter.tags : undefined,
 			itemId: appliedFilter.itemId || undefined,
 			refUrl: appliedFilter.refUrl || undefined,
+			keyword: appliedFilter.keyword || undefined,
 			sortBy: sortByParam,
 			sortOrder: sortByParam ? appliedFilter.sortDirection : undefined,
 			page: safePage,
@@ -294,6 +302,7 @@ export default function QuestionsExplorer({
 			tags: [...selectedTags],
 			itemId: itemIdFilter,
 			refUrl: referenceUrlFilter,
+			keyword: keywordFilter,
 			sortColumn,
 			sortDirection,
 		};
@@ -569,6 +578,39 @@ export default function QuestionsExplorer({
 									onClick={() => setReferenceUrlFilter("")}
 									className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 transition-colors"
 									title="Clear Reference URL filter"
+								>
+									Clear
+								</button>
+							)}
+						</div>
+					</div>
+
+					{/* Keyword Search Filter */}
+					<div className="flex-1 min-w-[300px]">
+						<div className="flex items-center gap-2 mb-2">
+							<label
+								htmlFor="keywordFilter"
+								className="text-base font-semibold text-slate-800"
+							>
+								Keyword Search:
+							</label>
+						</div>
+						<div className="flex items-center gap-2">
+							<input
+								id="keywordFilter"
+								type="text"
+								value={keywordFilter}
+								onChange={(e) => setKeywordFilter(e.target.value)}
+								placeholder="Search questions, answers, and history..."
+								className="flex-1 rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-base text-slate-800 shadow-sm hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-colors"
+								title="Search for items containing this keyword (case-insensitive)"
+							/>
+							{keywordFilter && (
+								<button
+									type="button"
+									onClick={() => setKeywordFilter("")}
+									className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 transition-colors"
+									title="Clear keyword search"
 								>
 									Clear
 								</button>

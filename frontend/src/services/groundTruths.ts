@@ -139,6 +139,7 @@ interface ListAllGroundTruthsParams {
 	tags?: string[];
 	itemId?: string | null;
 	refUrl?: string | null;
+	keyword?: string | null;
 	sortBy?: string | null;
 	sortOrder?: "asc" | "desc" | null;
 	page?: number;
@@ -160,6 +161,7 @@ export async function listAllGroundTruths(
 	if (params.tags?.length) query.tags = params.tags.join(",");
 	if (params.itemId) query.itemId = params.itemId;
 	if (params.refUrl) query.refUrl = params.refUrl;
+	if (params.keyword) query.keyword = params.keyword;
 	if (params.sortBy)
 		query.sortBy = params.sortBy as components["schemas"]["SortField"];
 	if (params.sortOrder) query.sortOrder = params.sortOrder;

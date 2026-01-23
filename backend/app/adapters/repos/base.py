@@ -32,6 +32,7 @@ class GroundTruthRepo(Protocol):
         tags: list[str] | None = None,
         item_id: str | None = None,
         ref_url: str | None = None,
+        keyword: str | None = None,
         sort_by: SortField | None = None,
         sort_order: SortOrder | None = None,
         page: int = 1,

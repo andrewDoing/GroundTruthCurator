@@ -639,6 +639,38 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         """Detect if Cosmos DB emulator is in use based on endpoint URL."""
         return "localhost" in self._endpoint or "127.0.0.1" in self._endpoint
 
+    @staticmethod
+    def _item_matches_keyword(item: GroundTruthItem, keyword: str) -> bool:
+        """Check if item matches keyword search (case-insensitive substring match).
+
+        Searches across:
+        - synth_question and edited_question fields
+        - answer field
+        - history[*].msg content (all turns)
+        """
+        if not keyword:
+            return True
+
+        search_term = keyword.lower()
+
+        # Search question fields
+        if item.synth_question and search_term in item.synth_question.lower():
+            return True
+        if item.edited_question and search_term in item.edited_question.lower():
+            return True
+
+        # Search answer field
+        if item.answer and search_term in item.answer.lower():
+            return True
+
+        # Search history messages
+        if item.history:
+            for turn in item.history:
+                if turn.msg and search_term in turn.msg.lower():
+                    return True
+
+        return False
+
     # Security: Comprehensive input validation and parameterization
     def _build_secure_sort_clause(self, sort_field: SortField, sort_direction: SortOrder) -> str:
         """Build secure ORDER BY clause with validation and parameterization."""
@@ -680,6 +712,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         tags: list[str] | None = None,
         item_id: str | None = None,
         ref_url: str | None = None,
+        keyword: str | None = None,
         sort_by: SortField | None = None,
         sort_order: SortOrder | None = None,
         page: int = 1,
@@ -696,14 +729,18 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         # For queries with tags, we need to filter in-memory since ARRAY_CONTAINS
         # doesn't work well with ORDER BY in Cosmos DB
         # Also use in-memory filtering for ref_url if Cosmos emultor is used since EXISTS is not supported by emulator
+        # Keyword search also requires in-memory filtering (no full-text index)
 
-        if (normalized_tags or ref_url) and self.is_cosmos_emulator_in_use():
+        if normalized_tags or ref_url or keyword:
+            # Always use in-memory filtering path for these filters
+            # (Cosmos emulator has limitations, and keyword search needs in-memory filtering regardless)
             return await self._list_gt_paginated_with_emulator(
                 status,
                 dataset,
                 normalized_tags,
                 item_id,
                 ref_url,
+                keyword,
                 sort_by,
                 sort_order,
                 safe_page,
@@ -782,6 +819,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         tags: list[str],
         item_id: str | None,
         ref_url: str | None,
+        keyword: str | None,
         sort_by: SortField | None,
         sort_order: SortOrder | None,
         page: int,
@@ -890,6 +928,25 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 f"ref_url_length: {len(ref_url)}, "
             )
             raw_items = filtered_items_ref
+
+        # Filter by keyword in-memory (case-insensitive substring match)
+        if keyword:
+            start = time.time()
+            filtered_items_keyword: list[GroundTruthItem] = []
+
+            for item in raw_items:
+                if self._item_matches_keyword(item, keyword):
+                    filtered_items_keyword.append(item)
+
+            elapsed = time.time() - start
+            self._logger.info(
+                "repo.keyword_filter.performance"
+                f"items_checked: {len(raw_items)}, "
+                f"items_matched: {len(filtered_items_keyword)}, "
+                f"elapsed_ms: {elapsed * 1000}, "
+                f"keyword_length: {len(keyword)}, "
+            )
+            raw_items = filtered_items_keyword
 
         # Sort in-memory (required since ORDER BY conflicts with ARRAY_CONTAINS in Cosmos DB)
         reverse_sort = sort_direction == SortOrder.desc

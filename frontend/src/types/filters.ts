@@ -12,6 +12,7 @@ export interface FilterState {
 	tags: string[];
 	itemId: string;
 	refUrl: string;
+	keyword: string;
 	sortColumn: SortColumn;
 	sortDirection: SortDirection;
 }

@@ -57,6 +57,12 @@ export function parseFilterStateFromUrl(search: string): Partial<FilterState> {
 		filterState.refUrl = decodeURIComponent(refUrl);
 	}
 
+	// Parse keyword (using 'q' as the URL parameter per spec)
+	const keyword = params.get("q");
+	if (keyword) {
+		filterState.keyword = decodeURIComponent(keyword);
+	}
+
 	// Parse sort column
 	const sortColumn = params.get("sortColumn");
 	if (
@@ -111,6 +117,10 @@ export function filterStateToUrlParams(
 
 	if (filters.refUrl !== defaults.refUrl && filters.refUrl) {
 		params.set("refUrl", encodeURIComponent(filters.refUrl));
+	}
+
+	if (filters.keyword !== defaults.keyword && filters.keyword) {
+		params.set("q", encodeURIComponent(filters.keyword));
 	}
 
 	if (filters.sortColumn !== defaults.sortColumn && filters.sortColumn) {
