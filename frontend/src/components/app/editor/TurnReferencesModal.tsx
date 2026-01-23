@@ -5,7 +5,7 @@ import {
 	Upload,
 	X,
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import useModalKeys from "../../../hooks/useModalKeys";
 import { useToasts } from "../../../hooks/useToasts";
 import type { Reference } from "../../../models/groundTruth";
@@ -88,13 +88,22 @@ export default function TurnReferencesModal({
 	// 	}
 	// }, [isOpen]);
 
-	if (!isOpen) return null;
+	// FR-003: Memoize expensive derived computations to avoid recomputation on every render
+	// Note: These hooks must be called before any early returns to satisfy Rules of Hooks
 
 	// Filter references for this specific turn only
-	const turnRefs = references.filter((r) => r.messageIndex === messageIndex);
+	const turnRefs = useMemo(
+		() => references.filter((r) => r.messageIndex === messageIndex),
+		[references, messageIndex],
+	);
 
 	// References already added to this turn (by URL for duplicate prevention)
-	const urlsInTurn = new Set(turnRefs.map((r) => normalizeUrl(r.url)));
+	const urlsInTurn = useMemo(
+		() => new Set(turnRefs.map((r) => normalizeUrl(r.url))),
+		[turnRefs],
+	);
+
+	if (!isOpen) return null;
 
 	const handleSearchSubmit = () => {
 		const q = (query || "").trim();

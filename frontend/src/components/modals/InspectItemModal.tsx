@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useGroundTruthCache } from "../../hooks/useGroundTruthCache";
 import useModalKeys from "../../hooks/useModalKeys";
 import type { GroundTruthItem } from "../../models/groundTruth";
 import { getGroundTruth } from "../../services/groundTruths";
@@ -25,6 +26,8 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 		string[]
 	>([]);
 
+	const cache = useGroundTruthCache();
+
 	useModalKeys({
 		enabled: isOpen,
 		onClose,
@@ -49,21 +52,29 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 				setTrustedReferenceDomains([]);
 			});
 
-		// Always fetch fresh data to ensure we get complete conversation history
+		// Validate required fields before proceeding
+		if (!item.datasetName || !item.bucket || !item.id) {
+			setLoadError("Missing required item identifiers");
+			setCompleteItem(item);
+			return;
+		}
+
+		// Check cache first (FR-001: in-memory session cache)
+		const cachedItem = cache.get(item.datasetName, item.bucket, item.id);
+
+		if (cachedItem) {
+			// Use cached data to avoid redundant network call
+			setCompleteItem(cachedItem);
+			return;
+		}
+
+		// Fetch fresh data if not in cache
 		// (List endpoint returns truncated data for performance, but individual endpoint has complete history)
 		setIsLoading(true);
 		setLoadError(null);
 
 		(async () => {
 			try {
-				// Validate required fields before API call
-				if (!item.datasetName || !item.bucket || !item.id) {
-					setLoadError("Missing required item identifiers");
-					setCompleteItem(item);
-					setIsLoading(false);
-					return;
-				}
-
 				// Fetch complete item data from individual endpoint
 				const completeItemData = await getGroundTruth(
 					item.datasetName || "",
@@ -76,6 +87,14 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 					setCompleteItem(item); // Fallback to original
 					return;
 				}
+
+				// Store in cache for future inspections (FR-001)
+				cache.set(
+					item.datasetName || "",
+					item.bucket || "",
+					item.id,
+					completeItemData,
+				);
 
 				setCompleteItem(completeItemData);
 			} catch (error) {
@@ -90,7 +109,7 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 		})().finally(() => {
 			setIsLoading(false);
 		});
-	}, [isOpen, item]);
+	}, [isOpen, item, cache]);
 
 	if (!isOpen || !item) return null;
 

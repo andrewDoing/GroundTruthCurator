@@ -18,6 +18,7 @@ import {
 import { mapApiErrorToMessage } from "../services/http";
 import { addTags } from "../services/tags";
 import { logEvent } from "../services/telemetry";
+import { invalidateGroundTruthCache } from "./useGroundTruthCache";
 import { useReferencesEditor } from "./useReferencesEditor";
 import { useReferencesSearch } from "./useReferencesSearch";
 
@@ -327,6 +328,12 @@ function useGroundTruth(): UseGroundTruth {
 				setLastSavedStateFp(stateSignature(saved));
 				if (qaChanged)
 					qaBaseline.current = { q: saved.question, a: saved.answer };
+
+				// FR-002: Invalidate cache after successful save to ensure fresh data on next inspection
+				if (saved.datasetName && saved.bucket && saved.id) {
+					invalidateGroundTruthCache(saved.datasetName, saved.bucket, saved.id);
+				}
+
 				// Persist any new manual tags only after a successful save; fire-and-forget
 				try {
 					const tags = Array.from(
