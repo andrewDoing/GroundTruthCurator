@@ -49,6 +49,16 @@ class _InMemoryRepo:
     async def list_unassigned(self, limit: int):  # pragma: no cover
         raise NotImplementedError
 
+    async def query_unassigned_by_dataset_prefix(
+        self, dataset_prefix: str, user_id: str, take: int, exclude_ids: list[str] | None = None
+    ) -> list[GroundTruthItem]:  # pragma: no cover
+        raise NotImplementedError
+
+    async def query_unassigned_global(
+        self, user_id: str, take: int, exclude_ids: list[str] | None = None
+    ) -> list[GroundTruthItem]:  # pragma: no cover
+        raise NotImplementedError
+
     async def sample_unassigned(
         self, user_id: str, limit: int, exclude_ids: list[str] | None = None
     ) -> list[GroundTruthItem]:  # pragma: no cover
@@ -87,6 +97,9 @@ class _InMemoryRepo:
         raise NotImplementedError
 
     async def delete_assignment_doc(self, *args, **kwargs):  # pragma: no cover
+        raise NotImplementedError
+
+    async def clear_assignment(self, *args, **kwargs):  # pragma: no cover
         raise NotImplementedError
 
     async def get_curation_instructions(self, dataset: str):  # pragma: no cover

@@ -118,12 +118,12 @@ def test_sort_key_has_answer(repo: CosmosGroundTruthRepo) -> None:
 
 
 # =============================================================================
-# Tests for _compute_total_references
+# Tests for totalReferences auto-computation (domain model validator)
 # =============================================================================
 
 
 class TestComputeTotalReferences:
-    """Unit tests for CosmosGroundTruthRepo._compute_total_references.
+    """Unit tests for GroundTruthItem.compute_total_references_if_needed.
 
     The method calculates total references with the following logic:
     - If history has refs, count only history refs (history takes priority)
@@ -160,9 +160,9 @@ class TestComputeTotalReferences:
                 {"role": "assistant", "msg": "Hi", "refs": [{"url": "https://history-ref.com"}]},
             ],
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
+        # totalReferences is auto-computed by model_validator
         # Should count only history refs (1), not item refs (2)
-        assert result == 1
+        assert item.totalReferences == 1
 
     def test_history_refs_from_multiple_turns(self) -> None:
         """Refs from all history turns are summed."""
@@ -179,9 +179,9 @@ class TestComputeTotalReferences:
                 {"role": "assistant", "msg": "A2", "refs": [{"url": "https://ref3.com"}]},
             ],
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
+        # totalReferences is auto-computed by model_validator
         # Should count all history refs: 2 + 1 = 3
-        assert result == 3
+        assert item.totalReferences == 3
 
     # -------------------------------------------------------------------------
     # Item refs used when no history refs exist
@@ -197,8 +197,7 @@ class TestComputeTotalReferences:
             ],
             history=None,
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
-        assert result == 3
+        assert item.totalReferences == 3
 
     def test_item_refs_fallback_when_history_empty(self) -> None:
         """Item refs are counted when history is an empty list."""
@@ -206,8 +205,7 @@ class TestComputeTotalReferences:
             refs=[{"url": "https://ref1.com"}, {"url": "https://ref2.com"}],
             history=[],
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
-        assert result == 2
+        assert item.totalReferences == 2
 
     def test_item_refs_fallback_when_history_has_no_refs(self) -> None:
         """Item refs are counted when history exists but contains no refs."""
@@ -218,9 +216,8 @@ class TestComputeTotalReferences:
                 {"role": "assistant", "msg": "Hi"},  # No refs
             ],
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
         # History has 0 refs, so item refs (1) should be used
-        assert result == 1
+        assert item.totalReferences == 1
 
     def test_item_refs_fallback_when_history_refs_are_empty_lists(self) -> None:
         """Item refs are counted when history refs are empty lists."""
@@ -231,9 +228,8 @@ class TestComputeTotalReferences:
                 {"role": "assistant", "msg": "Hi", "refs": []},  # Empty refs list
             ],
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
         # History refs total is 0, so item refs (1) should be used
-        assert result == 1
+        assert item.totalReferences == 1
 
     # -------------------------------------------------------------------------
     # Handle empty/null refs and history
@@ -242,20 +238,17 @@ class TestComputeTotalReferences:
     def test_zero_when_no_refs_anywhere(self) -> None:
         """Returns 0 when there are no refs at any level."""
         item = self._make_item(refs=None, history=None)
-        result = CosmosGroundTruthRepo._compute_total_references(item)
-        assert result == 0
+        assert item.totalReferences == 0
 
     def test_zero_when_empty_refs_and_no_history(self) -> None:
         """Returns 0 when refs is empty list and no history."""
         item = self._make_item(refs=[], history=None)
-        result = CosmosGroundTruthRepo._compute_total_references(item)
-        assert result == 0
+        assert item.totalReferences == 0
 
     def test_zero_when_empty_refs_and_empty_history(self) -> None:
         """Returns 0 when refs is empty and history is empty list."""
         item = self._make_item(refs=[], history=[])
-        result = CosmosGroundTruthRepo._compute_total_references(item)
-        assert result == 0
+        assert item.totalReferences == 0
 
     def test_handles_none_refs_in_history_turn(self) -> None:
         """Handles history turns where refs is explicitly None."""
@@ -266,9 +259,8 @@ class TestComputeTotalReferences:
                 {"role": "assistant", "msg": "Hi", "refs": None},  # Explicitly None
             ],
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
         # History refs is 0, fallback to item refs
-        assert result == 1
+        assert item.totalReferences == 1
 
     # -------------------------------------------------------------------------
     # Complex scenarios with partial data
@@ -293,9 +285,8 @@ class TestComputeTotalReferences:
                 },
             ],
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
         # History refs: 0 + 1 + 0 + 2 = 3
-        assert result == 3
+        assert item.totalReferences == 3
 
     def test_user_turns_with_refs_are_counted(self) -> None:
         """Refs on user turns are also counted (not just assistant turns)."""
@@ -310,9 +301,8 @@ class TestComputeTotalReferences:
                 },
             ],
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
         # Both user and assistant refs are counted: 1 + 1 = 2
-        assert result == 2
+        assert item.totalReferences == 2
 
     def test_many_refs_in_single_turn(self) -> None:
         """Handles turns with many references."""
@@ -323,8 +313,7 @@ class TestComputeTotalReferences:
                 {"role": "assistant", "msg": "A", "refs": many_refs},
             ],
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
-        assert result == 10
+        assert item.totalReferences == 10
 
     def test_item_only_no_history_field_at_all(self) -> None:
         """Item created without history field entirely."""
@@ -335,8 +324,7 @@ class TestComputeTotalReferences:
             "refs": [{"url": "https://only-ref.com"}],
         }
         item = GroundTruthItem.model_validate(data)
-        result = CosmosGroundTruthRepo._compute_total_references(item)
-        assert result == 1
+        assert item.totalReferences == 1
 
     def test_complex_real_world_scenario(self) -> None:
         """Realistic multi-turn conversation with various ref patterns."""
@@ -369,6 +357,5 @@ class TestComputeTotalReferences:
                 {"role": "assistant", "msg": "Glad I could help!"},
             ],
         )
-        result = CosmosGroundTruthRepo._compute_total_references(item)
         # History refs: 2 + 1 = 3 (item-level ref is ignored)
-        assert result == 3
+        assert item.totalReferences == 3

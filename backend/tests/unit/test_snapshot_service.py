@@ -51,10 +51,19 @@ class _FakeRepo:
     async def list_unassigned(self, *args, **kwargs):  # pragma: no cover
         raise NotImplementedError
 
+    async def query_unassigned_by_dataset_prefix(self, *args, **kwargs):  # pragma: no cover
+        raise NotImplementedError
+
+    async def query_unassigned_global(self, *args, **kwargs):  # pragma: no cover
+        raise NotImplementedError
+
     async def sample_unassigned(self, *args, **kwargs):  # pragma: no cover
         raise NotImplementedError
 
     async def assign_to(self, *args, **kwargs):  # pragma: no cover
+        raise NotImplementedError
+
+    async def clear_assignment(self, *args, **kwargs):  # pragma: no cover
         raise NotImplementedError
 
     async def list_assigned(self, *args, **kwargs):  # pragma: no cover

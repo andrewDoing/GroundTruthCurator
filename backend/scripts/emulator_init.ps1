@@ -7,15 +7,16 @@ This script mirrors the CD workflow's Cosmos DB creation steps, but targets
 the local Cosmos DB Emulator (key auth + SSL verify disabled).
 
 It creates:
-- Database:                 $DbName
-- Ground truth container:   $GtContainer           (HPK: /datasetName + /bucket, with indexing policy)
-- Assignments container:    $AssignmentsContainer  (PK: /pk)
-- Tags container:           $TagsContainer         (PK: /pk)
+- Database:                    $DbName
+- Ground truth container:      $GtContainer            (HPK: /datasetName + /bucket, with indexing policy)
+- Assignments container:       $AssignmentsContainer   (PK: /pk)
+- Tags container:              $TagsContainer          (PK: /pk)
+- Tag definitions container:   $TagDefinitionsContainer (PK: /tag_key)
 
 Environment variable shortcuts (override defaults):
   COSMOS_EMULATOR_ENDPOINT, COSMOS_EMULATOR_KEY,
   GTC_COSMOS_DB_NAME, GTC_COSMOS_CONTAINER_GT, GTC_COSMOS_CONTAINER_ASSIGNMENTS, GTC_COSMOS_CONTAINER_TAGS,
-  GTC_COSMOS_DB_INDEXING_POLICY
+  GTC_COSMOS_CONTAINER_TAG_DEFINITIONS, GTC_COSMOS_DB_INDEXING_POLICY
 #>
 
 param(
@@ -33,6 +34,8 @@ param(
     [string]$AssignmentsContainer,
 
     [string]$TagsContainer,
+
+    [string]$TagDefinitionsContainer,
 
     [Alias('i')]
     [string]$IndexingPolicy,
@@ -57,6 +60,7 @@ Options:
   -GtContainer NAME          Ground truth container name (default: env GTC_COSMOS_CONTAINER_GT or 'ground_truth')
   -AssignmentsContainer NAME Assignments container name (default: env GTC_COSMOS_CONTAINER_ASSIGNMENTS or 'assignments')
   -TagsContainer NAME        Tags container name (default: env GTC_COSMOS_CONTAINER_TAGS or 'tags')
+  -TagDefinitionsContainer NAME Tag definitions container name (default: env GTC_COSMOS_CONTAINER_TAG_DEFINITIONS or 'tag_definitions')
   -IndexingPolicy PATH       Indexing policy JSON for ground truth container
                              (default: scripts/indexing-policy.json)
   -DryRun                    Print the command without running it
@@ -65,7 +69,7 @@ Options:
 Environment variable shortcuts (override defaults):
   COSMOS_EMULATOR_ENDPOINT, COSMOS_EMULATOR_KEY,
   GTC_COSMOS_DB_NAME, GTC_COSMOS_CONTAINER_GT, GTC_COSMOS_CONTAINER_ASSIGNMENTS, GTC_COSMOS_CONTAINER_TAGS,
-  GTC_COSMOS_DB_INDEXING_POLICY
+  GTC_COSMOS_CONTAINER_TAG_DEFINITIONS, GTC_COSMOS_DB_INDEXING_POLICY
 
 Notes:
   - Requires Cosmos Emulator to be running and reachable at the endpoint.
@@ -118,6 +122,9 @@ if ([string]::IsNullOrWhiteSpace($AssignmentsContainer)) {
 if ([string]::IsNullOrWhiteSpace($TagsContainer)) {
     $TagsContainer = if ($env:GTC_COSMOS_CONTAINER_TAGS) { $env:GTC_COSMOS_CONTAINER_TAGS } else { 'tags' }
 }
+if ([string]::IsNullOrWhiteSpace($TagDefinitionsContainer)) {
+    $TagDefinitionsContainer = if ($env:GTC_COSMOS_CONTAINER_TAG_DEFINITIONS) { $env:GTC_COSMOS_CONTAINER_TAG_DEFINITIONS } else { 'tag_definitions' }
+}
 if ([string]::IsNullOrWhiteSpace($IndexingPolicy)) {
     $IndexingPolicy = if ($env:GTC_COSMOS_DB_INDEXING_POLICY) { $env:GTC_COSMOS_DB_INDEXING_POLICY } else { $defaultIndexingPolicy }
 }
@@ -159,6 +166,7 @@ $cmd += @(
     '--gt-container', $GtContainer,
     '--assignments-container', $AssignmentsContainer,
     '--tags-container', $TagsContainer,
+    '--tag-definitions-container', $TagDefinitionsContainer,
     '--indexing-policy', $IndexingPolicy
 )
 
@@ -166,7 +174,7 @@ Write-Host "Repo root:   $repoRoot"
 Write-Host "Backend dir: $backendDir"
 Write-Host "Endpoint:    $Endpoint"
 Write-Host "Database:    $DbName"
-Write-Host "Containers:  GT=$GtContainer, assignments=$AssignmentsContainer, tags=$TagsContainer"
+Write-Host "Containers:  GT=$GtContainer, assignments=$AssignmentsContainer, tags=$TagsContainer, tag_def=$TagDefinitionsContainer"
 Write-Host "Indexing:    $IndexingPolicy"
 Write-Host ""
 

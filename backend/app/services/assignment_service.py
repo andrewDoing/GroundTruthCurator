@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import re
 from app.adapters.repos.base import GroundTruthRepo
 from app.domain.models import GroundTruthItem, AssignmentDocument, Reference
 from app.plugins import get_default_registry
 from app.core.errors import AssignmentConflictError
+from app.core.config import get_sampling_allocation
 from uuid import UUID
 import random
 import logging
@@ -13,6 +15,10 @@ from app.domain.enums import GroundTruthStatus
 
 
 logger = logging.getLogger(__name__)
+
+# Regex pattern for valid user IDs (alphanumeric, @, ., -, _)
+# Used to prevent SQL injection in user_id values
+USER_ID_PATTERN = re.compile(r"^[a-zA-Z0-9@.\-_]+$")
 
 
 class AssignmentService:
@@ -39,8 +45,273 @@ class AssignmentService:
             context["dataset"] = dataset
         return context
 
+    @staticmethod
+    def validate_user_id(user_id: str) -> bool:
+        """Validate user_id format for safe use in database queries.
+
+        Allows alphanumeric characters, @, ., -, and _ (common in email addresses and user IDs).
+        Returns False if user_id contains invalid characters.
+        """
+        if not user_id:
+            return False
+        return bool(USER_ID_PATTERN.match(user_id))
+
+    @staticmethod
+    def compute_quotas(weights: dict[str, float], k: int) -> dict[str, int]:
+        """Largest remainder method to convert weights to integer quotas summing to k.
+
+        This is a pure business logic function that distributes a total count (k)
+        across multiple categories based on their relative weights.
+
+        Args:
+            weights: Dict of category -> weight (e.g., {"dsA": 0.5, "dsB": 0.3, "dsC": 0.2})
+            k: Total count to distribute
+
+        Returns:
+            Dict of category -> integer quota that sums to k
+        """
+        if k <= 0 or not weights:
+            return {ds: 0 for ds in weights}
+        # Normalize weights just in case
+        total = sum(w for w in weights.values() if w > 0)
+        if total <= 0:
+            return {ds: 0 for ds in weights}
+        normalized = {ds: (w / total) for ds, w in weights.items() if w > 0}
+        # Floor allocations and track remainders
+        floors: dict[str, int] = {}
+        remainders: list[tuple[str, float]] = []
+        allocated = 0
+        for ds, w in normalized.items():
+            raw = w * k
+            fl = int(raw // 1)
+            floors[ds] = fl
+            allocated += fl
+            remainders.append((ds, raw - fl))
+        remaining = max(0, k - allocated)
+        if remaining > 0:
+            # Distribute remaining to largest remainders; stable sort by remainder desc then name
+            remainders.sort(key=lambda t: (t[1], t[0]), reverse=True)
+            for i in range(remaining):
+                ds = remainders[i % len(remainders)][0]
+                floors[ds] += 1
+        return floors
+
+    def can_assign_item(
+        self,
+        item: GroundTruthItem,
+        user_id: str,
+        force: bool = False,
+        user_roles: list[str] | None = None,
+    ) -> tuple[bool, str | None]:
+        """Check if an item can be assigned to a user.
+
+        Business rules for assignment:
+        - Item must not be already assigned to another user in draft state (unless force=True)
+        - Force assignment requires admin or team-lead role
+
+        Args:
+            item: The ground truth item to check
+            user_id: The user attempting to claim the item
+            force: Whether to allow force takeover
+            user_roles: User roles for permission checking
+
+        Returns:
+            Tuple of (can_assign, rejection_reason)
+        """
+        # Check if already assigned to another user in draft state
+        if (
+            item.assignedTo
+            and item.assignedTo != user_id
+            and item.status == GroundTruthStatus.draft
+        ):
+            if not force:
+                return False, "already_assigned"
+
+            # Force assignment - validate permission
+            roles = user_roles or []
+            if not self._has_takeover_permission(roles):
+                return False, "permission_denied"
+
+        return True, None
+
     async def get_assigned(self, user_id: str) -> list[GroundTruthItem]:
         return await self.repo.list_assigned(user_id)
+
+    async def sample_candidates(
+        self, user_id: str, limit: int, exclude_ids: list[str] | None = None
+    ) -> list[GroundTruthItem]:
+        """Sample unassigned items with weighted allocation across datasets.
+
+        This method implements the business logic for sampling candidates:
+        1. Include items already assigned to the user first
+        2. Apply weighted allocation from GTC_SAMPLING_ALLOCATION config
+        3. Round-robin interleave by weight order
+        4. Fill any remaining quota from global pool
+
+        Args:
+            user_id: The user requesting candidates
+            limit: Maximum number of items to return
+            exclude_ids: Item IDs to exclude from sampling
+
+        Returns:
+            List of candidate items up to limit
+        """
+        if limit <= 0:
+            logger.warning(
+                "service.sample_candidates.invalid_limit",
+                extra={"limit": limit},
+            )
+            return []
+
+        # 1) Include already assigned items first
+        logger.debug(
+            "service.sample_candidates.start",
+            extra={
+                "limit": limit,
+                "exclude_count": len(exclude_ids) if exclude_ids else 0,
+            },
+        )
+        results: list[GroundTruthItem] = await self.repo.list_assigned(user_id)
+        seen_ids: set[str] = {it.id for it in results}
+        # Add caller-provided excludes
+        if exclude_ids:
+            seen_ids.update(exclude_ids)
+        logger.debug(
+            "service.sample_candidates.already_assigned",
+            extra={"count": len(results)},
+        )
+        if len(results) >= limit:
+            logger.debug(
+                "service.sample_candidates.already_assigned_satisfies",
+                extra={"count": len(results), "limit": limit},
+            )
+            return results[:limit]
+
+        remaining = limit - len(results)
+
+        # 2) Read allocation config
+        weights = get_sampling_allocation()
+        logger.debug(
+            "service.sample_candidates.weights_config",
+            extra={"weights": weights, "has_weights": bool(weights)},
+        )
+        if not weights:
+            # No allocation configured -> simple global fill of unassigned/skipped
+            logger.debug(
+                "service.sample_candidates.no_weights_global_query",
+                extra={"remaining": remaining},
+            )
+            more = await self.repo.query_unassigned_global(
+                user_id, remaining, exclude_ids=list(seen_ids)
+            )
+            logger.debug(
+                "service.sample_candidates.global_fill",
+                extra={"remaining": remaining, "candidates": len(more)},
+            )
+            # Shuffle to reduce any cross-partition bias from Cosmos
+            random.shuffle(more)
+            for it in more:
+                if it.id not in seen_ids:
+                    results.append(it)
+                    seen_ids.add(it.id)
+                    if len(results) >= limit:
+                        break
+            logger.debug(
+                "service.sample_candidates.global_fill_complete",
+                extra={"final_count": len(results), "limit": limit},
+            )
+            return results[:limit]
+
+        # 3) Compute quotas using largest remainder method
+        quotas = self.compute_quotas(weights, remaining)
+        logger.debug(
+            "service.sample_candidates.quotas",
+            extra={"remaining": remaining, "quotas": quotas},
+        )
+
+        # 4) Query each dataset up to its quota (single pass)
+        per_dataset_results: dict[str, list[GroundTruthItem]] = {}
+        for ds, q in quotas.items():
+            if q <= 0:
+                logger.debug(
+                    "service.sample_candidates.skip_zero_quota",
+                    extra={"dataset": ds, "quota": q},
+                )
+                continue
+            items = await self.repo.query_unassigned_by_dataset_prefix(
+                ds, user_id, q, exclude_ids=list(seen_ids)
+            )
+            logger.debug(
+                "service.sample_candidates.dataset_candidates",
+                extra={"dataset": ds, "quota": q, "candidates": len(items)},
+            )
+            # Shuffle each bucket to de-bias ordering
+            random.shuffle(items)
+            per_dataset_results[ds] = items
+
+        # 5) Round-robin interleave by weight order until limit reached or supply exhausted
+        order = [ds for ds, _w in sorted(weights.items(), key=lambda kv: kv[1], reverse=True)]
+        to_take = limit - len(results)
+        logger.debug(
+            "service.sample_candidates.round_robin_start",
+            extra={"to_take": to_take, "dataset_order": order},
+        )
+        while to_take > 0:
+            progressed = False
+            for ds in order:
+                if to_take <= 0:
+                    break
+                lst = per_dataset_results.get(ds, [])
+                while lst and lst[0].id in seen_ids:
+                    lst.pop(0)
+                if lst:
+                    it = lst.pop(0)
+                    results.append(it)
+                    seen_ids.add(it.id)
+                    to_take -= 1
+                    progressed = True
+            if not progressed:
+                logger.debug(
+                    "service.sample_candidates.round_robin_exhausted",
+                    extra={"collected": len(results), "limit": limit},
+                )
+                break
+
+        logger.debug(
+            "service.sample_candidates.round_robin_complete",
+            extra={"collected": len(results), "limit": limit},
+        )
+        if len(results) >= limit:
+            return results[:limit]
+
+        # 6) Final global fill if still short (single pass)
+        remaining_needed = max(0, limit - len(results))
+        if remaining_needed > 0:
+            logger.debug(
+                "service.sample_candidates.global_fill_tail_start",
+                extra={"remaining_needed": remaining_needed},
+            )
+            more = await self.repo.query_unassigned_global(
+                user_id, remaining_needed, exclude_ids=list(seen_ids)
+            )
+            logger.debug(
+                "service.sample_candidates.global_fill_tail",
+                extra={"remaining": remaining_needed, "candidates": len(more)},
+            )
+            random.shuffle(more)
+            for it in more:
+                if it.id not in seen_ids:
+                    results.append(it)
+                    seen_ids.add(it.id)
+                    if len(results) >= limit:
+                        break
+
+        final = results[:limit]
+        logger.debug(
+            "service.sample_candidates.done",
+            extra={"limit": limit, "return_count": len(final)},
+        )
+        return final
 
     async def self_assign(self, user_id: str, limit: int) -> list[GroundTruthItem]:
         if limit <= 0:
@@ -111,9 +382,9 @@ class AssignmentService:
                     )
                     break
 
-        # First pass
+        # First pass - use sample_candidates which includes weighted allocation logic
         logger.info("self_assign.start", extra={**self._log_context(), "limit": limit})
-        initial = await self.repo.sample_unassigned(user_id=user_id, limit=limit)
+        initial = await self.sample_candidates(user_id=user_id, limit=limit)
         logger.debug(
             "self_assign.initial_candidates",
             extra={**self._log_context(), "count": len(initial)},
@@ -131,7 +402,7 @@ class AssignmentService:
                     "seen_count": len(seen_ids),
                 },
             )
-            retry = await self.repo.sample_unassigned(
+            retry = await self.sample_candidates(
                 user_id=user_id, limit=remaining, exclude_ids=list(seen_ids)
             )
             logger.debug(

@@ -6,10 +6,11 @@
 # the local Cosmos DB Emulator (key auth + SSL verify disabled).
 #
 # It creates:
-# - Database:                 $DB_NAME
-# - Ground truth container:   $GT_CONTAINER   (HPK: /datasetName + /bucket, with indexing policy)
-# - Assignments container:    $ASSIGNMENTS_CONTAINER (PK: /pk)
-# - Tags container:           $TAGS_CONTAINER (PK: /pk)
+# - Database:                    $DB_NAME
+# - Ground truth container:      $GT_CONTAINER          (HPK: /datasetName + /bucket, with indexing policy)
+# - Assignments container:       $ASSIGNMENTS_CONTAINER (PK: /pk)
+# - Tags container:              $TAGS_CONTAINER        (PK: /pk)
+# - Tag definitions container:   $TAG_DEFINITIONS_CONTAINER (PK: /tag_key)
 
 set -euo pipefail
 
@@ -34,6 +35,7 @@ DB_NAME="${GTC_COSMOS_DB_NAME:-gt-curator}"
 GT_CONTAINER="${GTC_COSMOS_CONTAINER_GT:-ground_truth}"
 ASSIGNMENTS_CONTAINER="${GTC_COSMOS_CONTAINER_ASSIGNMENTS:-assignments}"
 TAGS_CONTAINER="${GTC_COSMOS_CONTAINER_TAGS:-tags}"
+TAG_DEFINITIONS_CONTAINER="${GTC_COSMOS_CONTAINER_TAG_DEFINITIONS:-tag_definitions}"
 INDEXING_POLICY_PATH="${GTC_COSMOS_DB_INDEXING_POLICY:-$DEFAULT_INDEXING_POLICY}"
 
 DRY_RUN=0
@@ -49,6 +51,7 @@ Options:
       --gt-container NAME    Ground truth container name (default: env GTC_COSMOS_CONTAINER_GT or 'ground_truth')
       --assignments NAME     Assignments container name (default: env GTC_COSMOS_CONTAINER_ASSIGNMENTS or 'assignments')
       --tags NAME            Tags container name (default: env GTC_COSMOS_CONTAINER_TAGS or 'tags')
+      --tag-definitions NAME Tag definitions container name (default: env GTC_COSMOS_CONTAINER_TAG_DEFINITIONS or 'tag_definitions')
   -i, --indexing-policy PATH Indexing policy JSON for ground truth container
                              (default: scripts/indexing-policy.json)
       --dry-run              Print the command without running it
@@ -57,7 +60,7 @@ Options:
 Environment variable shortcuts (override defaults):
   COSMOS_EMULATOR_ENDPOINT, COSMOS_EMULATOR_KEY,
   GTC_COSMOS_DB_NAME, GTC_COSMOS_CONTAINER_GT, GTC_COSMOS_CONTAINER_ASSIGNMENTS, GTC_COSMOS_CONTAINER_TAGS,
-  GTC_COSMOS_DB_INDEXING_POLICY
+  GTC_COSMOS_CONTAINER_TAG_DEFINITIONS, GTC_COSMOS_DB_INDEXING_POLICY
 
 Notes:
   - Requires Cosmos Emulator to be running and reachable at the endpoint.
@@ -79,6 +82,8 @@ while ((${#})); do
       ASSIGNMENTS_CONTAINER="$2"; shift 2 ;;
     --tags)
       TAGS_CONTAINER="$2"; shift 2 ;;
+    --tag-definitions)
+      TAG_DEFINITIONS_CONTAINER="$2"; shift 2 ;;
     -i|--indexing-policy)
       INDEXING_POLICY_PATH="$2"; shift 2 ;;
     --dry-run)
@@ -127,6 +132,7 @@ CMD=(
   --gt-container "$GT_CONTAINER"
   --assignments-container "$ASSIGNMENTS_CONTAINER"
   --tags-container "$TAGS_CONTAINER"
+  --tag-definitions-container "$TAG_DEFINITIONS_CONTAINER"
   --indexing-policy "$INDEXING_POLICY_PATH"
 )
 
@@ -134,7 +140,7 @@ echo "Repo root:   $REPO_ROOT"
 echo "Backend dir: $BACKEND_DIR"
 echo "Endpoint:    $ENDPOINT"
 echo "Database:    $DB_NAME"
-echo "Containers:  GT=$GT_CONTAINER, assignments=$ASSIGNMENTS_CONTAINER, tags=$TAGS_CONTAINER"
+echo "Containers:  GT=$GT_CONTAINER, assignments=$ASSIGNMENTS_CONTAINER, tags=$TAGS_CONTAINER, tag_def=$TAG_DEFINITIONS_CONTAINER"
 echo "Indexing:    $INDEXING_POLICY_PATH"
 echo
 

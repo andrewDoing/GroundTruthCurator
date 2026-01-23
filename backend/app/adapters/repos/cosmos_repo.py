@@ -381,28 +381,17 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         except Exception:
             return sanitized
 
-    @staticmethod
-    def _compute_total_references(item: GroundTruthItem) -> int:
-        """Calculate total reference count from item.refs and item.history[].refs.
-
-        Replicates the logic from the original computed field.
-        """
-        # Count refs in all history turns
-        history_refs = sum(len(turn.refs or []) for turn in (item.history or []))
-        # if no turn ref (history_refs =0), then return the item refs if any
-        if history_refs == 0:
-            return len(item.refs or [])
-        return history_refs
-
     def _to_doc(self, item: GroundTruthItem) -> dict[str, Any]:
         # Check if the doc has dataset and bucket fields, since they make the PK
         if not item.datasetName:
             self._logger.error(f"Document missing datasetName: {item!r}")
             raise ValueError("Document must have datasetName")
 
-        # Calculate totalReferences and update the item object
-        calculated_total_refs = CosmosGroundTruthRepo._compute_total_references(item)
-        item.totalReferences = calculated_total_refs
+        # The domain model's model_validator computes totalReferences automatically.
+        # Trigger it now if the item was modified after initial validation.
+        if item.totalReferences == 0:
+            # Re-validate to ensure totalReferences is computed
+            item = GroundTruthItem.model_validate(item.model_dump(by_alias=True))
 
         # Dump in JSON mode so datetimes/enums are serialized to strings
         d = item.model_dump(mode="json", by_alias=True)
@@ -411,9 +400,6 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         # Ensure updatedAt present as ISO string
         if "updatedAt" not in d or d["updatedAt"] is None:
             d["updatedAt"] = datetime.now(timezone.utc).isoformat()
-
-        # Ensure totalReferences is set correctly (should already be from model_dump above)
-        d["totalReferences"] = calculated_total_refs
 
         return d
 
@@ -698,6 +684,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             )
 
         if field == SortField.has_answer:
+            # In-memory sort: Primary by presence of non-empty answer, secondary by reviewed_at
+            # (Cosmos ORDER BY uses c.reviewedAt placeholder - see _build_secure_sort_clause)
             has_answer = 1 if item.answer and item.answer.strip() else 0
             reference_time = (
                 item.reviewed_at or item.updated_at or datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -757,12 +745,15 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         """Build secure ORDER BY clause with validation and parameterization."""
 
         # Security: Safe field mapping (no user input)
-        # TODO: revisit the mapping SortField.has_answer: "c.reviewedAt"
+        # Note: has_answer uses c.reviewedAt as a placeholder for Cosmos DB ORDER BY syntax.
+        # Actual sorting is performed in-memory (see _make_sort_key) where has_answer
+        # becomes a derived boolean (1 if answer exists and non-empty, else 0).
+        # This approach works around Cosmos DB's inability to sort by computed expressions.
         secure_field_map = {
             SortField.id: "c.id",
             SortField.updated_at: "c.updatedAt",
             SortField.reviewed_at: "c.reviewedAt",
-            SortField.has_answer: "c.reviewedAt",
+            SortField.has_answer: "c.reviewedAt",  # Placeholder - actual sort is in-memory
             SortField.totalReferences: "c.totalReferences",
         }
 
@@ -1639,7 +1630,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 "repo.sample_unassigned.no_weights_global_query",
                 extra={"remaining": remaining},
             )
-            more = await self._query_unassigned_global_excluding_user(
+            more = await self.query_unassigned_global(
                 user_id, remaining, exclude_ids=list(seen_ids)
             )
             self._logger.debug(
@@ -1676,7 +1667,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                     extra={"dataset": ds, "quota": q},
                 )
                 continue
-            items = await self._query_unassigned_by_selector(
+            items = await self.query_unassigned_by_dataset_prefix(
                 ds, user_id, q, exclude_ids=list(seen_ids)
             )
             self._logger.debug(
@@ -1729,7 +1720,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 "repo.sample_unassigned.global_fill_tail_start",
                 extra={"remaining_needed": remaining_needed},
             )
-            more = await self._query_unassigned_global_excluding_user(
+            more = await self.query_unassigned_global(
                 user_id, remaining_needed, exclude_ids=list(seen_ids)
             )
             self._logger.debug(
@@ -1751,7 +1742,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         )
         return final
 
-    async def _query_unassigned_by_selector(
+    async def query_unassigned_by_dataset_prefix(
         self, dataset_prefix: str, user_id: str, take: int, exclude_ids: list[str] | None = None
     ) -> list[GroundTruthItem]:
         if take <= 0:
@@ -1812,7 +1803,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         )
         return res
 
-    async def _query_unassigned_global_excluding_user(
+    async def query_unassigned_global(
         self, user_id: str, take: int, exclude_ids: list[str] | None = None
     ) -> list[GroundTruthItem]:
         if take <= 0:
@@ -1892,13 +1883,26 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         return floors
 
     async def assign_to(self, item_id: str, user_id: str) -> bool:
+        """Assign an item to a user.
+
+        NOTE: User ID validation should be performed by the service layer before
+        calling this method. A defensive check is kept here for safety, but the
+        primary validation belongs in AssignmentService.validate_user_id().
+
+        Args:
+            item_id: The ground truth item ID to assign
+            user_id: The user ID to assign to (must be alphanumeric with @, ., -, _)
+
+        Returns:
+            True if assignment succeeded, False otherwise
+        """
         await self._ensure_initialized()
 
         # State-agnostic assignment: caller is responsible for validating state before calling
         # For MultiHash PK [/datasetName, /bucket], pass both PK values in order.
 
-        # Validate user_id: reject if it contains characters that could break SQL escaping
-        # Allow only alphanumeric, @, ., -, and _ (common in email addresses and user IDs)
+        # Defensive validation: reject if user_id contains characters that could break SQL escaping
+        # Primary validation should happen at service layer (AssignmentService.validate_user_id)
         if not re.match(r"^[a-zA-Z0-9@.\-_]+$", user_id):
             self._logger.warning(
                 f"repo.assign_to.invalid_user_id - user_id={user_id}, reason=contains_invalid_characters_or_whitespace"

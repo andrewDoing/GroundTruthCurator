@@ -96,6 +96,7 @@ async def init_emulator_containers(test_db_name: str):
         gt_container=settings.COSMOS_CONTAINER_GT,
         assignments_container=settings.COSMOS_CONTAINER_ASSIGNMENTS,
         tags_container=settings.COSMOS_CONTAINER_TAGS,
+        tag_definitions_container=settings.COSMOS_CONTAINER_TAG_DEFINITIONS,
     )
 
     # Create client and initialize containers

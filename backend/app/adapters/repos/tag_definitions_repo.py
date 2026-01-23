@@ -136,7 +136,7 @@ class CosmosTagDefinitionsRepo:
         items = []
 
         async for item in self._container.query_items(
-            query=query, enable_cross_partition_query=True
+            query=query, enable_scan_in_query=True
         ):  # type: ignore
             try:
                 items.append(TagDefinition.model_validate(item))

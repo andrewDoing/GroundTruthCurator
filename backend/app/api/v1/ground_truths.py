@@ -471,6 +471,8 @@ async def update_ground_truth(
         # Validate minimal Reference structure; rely on Pydantic validation when saving
         refs_payload = cast(list[Reference | dict[str, Any]], payload["refs"])
         it.refs = [r if isinstance(r, Reference) else Reference(**r) for r in refs_payload]
+        # Reset totalReferences to force recalculation by model_validator
+        it.totalReferences = 0
 
     # Tags handling: Only accept 'manualTags' in payload
     # computedTags are system-generated and cannot be set by clients
@@ -495,6 +497,8 @@ async def update_ground_truth(
     if "history" in payload:
         if payload["history"] is None:
             it.history = None
+            # Reset totalReferences to force recalculation by model_validator
+            it.totalReferences = 0
         elif isinstance(payload["history"], list):
             try:
                 # Convert dict representations to HistoryItem models
@@ -521,6 +525,8 @@ async def update_ground_truth(
                         )
                     )
                 it.history = history_items
+                # Reset totalReferences to force recalculation by model_validator
+                it.totalReferences = 0
             except (KeyError, ValueError) as e:
                 raise HTTPException(status_code=400, detail=f"Invalid history format: {str(e)}")
     # Concurrency: use If-Match header or etag field in body

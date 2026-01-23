@@ -11,6 +11,14 @@ export interface TagGlossary {
 const isTestEnvironment =
 	typeof process !== "undefined" && process.env.NODE_ENV === "test";
 
+// Snapshot type for useSyncExternalStore
+interface GlossarySnapshot {
+	glossary: TagGlossary;
+	rawGlossary: GlossaryResponse | null;
+	loading: boolean;
+	error: Error | null;
+}
+
 // Singleton store for tag glossary
 class GlossaryStore {
 	private glossary: TagGlossary = {};
@@ -19,6 +27,21 @@ class GlossaryStore {
 	private error: Error | null = null;
 	private fetchPromise: Promise<void> | null = null;
 	private listeners = new Set<() => void>();
+	// Cached snapshot to satisfy useSyncExternalStore's referential stability requirement
+	private cachedSnapshot: GlossarySnapshot;
+
+	constructor() {
+		this.cachedSnapshot = this.buildSnapshot();
+	}
+
+	private buildSnapshot(): GlossarySnapshot {
+		return {
+			glossary: this.glossary,
+			rawGlossary: this.rawGlossary,
+			loading: this.loading,
+			error: this.error,
+		};
+	}
 
 	subscribe = (listener: () => void) => {
 		this.listeners.add(listener);
@@ -27,16 +50,13 @@ class GlossaryStore {
 		};
 	};
 
-	getSnapshot = () => {
-		return {
-			glossary: this.glossary,
-			rawGlossary: this.rawGlossary,
-			loading: this.loading,
-			error: this.error,
-		};
+	getSnapshot = (): GlossarySnapshot => {
+		return this.cachedSnapshot;
 	};
 
 	private notify() {
+		// Update cached snapshot before notifying listeners
+		this.cachedSnapshot = this.buildSnapshot();
 		for (const listener of this.listeners) {
 			listener();
 		}
