@@ -73,6 +73,10 @@ nav:
     - Backend Services: architecture/backend.md
     - Frontend Components: architecture/frontend.md
     - Data Models: architecture/data-models.md
+    - Cosmos Indexing: architecture/cosmos-indexing-analysis.md
+  - Operations:
+    - Cosmos Optimization: operations/COSMOS-OPTIMIZATION-README.md
+    - Index Comparison: operations/COSMOS-INDEX-COMPARISON.md
   - Design Documents:
     - Manual Tags: design/manual-tags.md
     - Computed Tags: design/computed-tags.md

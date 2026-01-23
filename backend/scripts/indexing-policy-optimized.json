@@ -1,0 +1,154 @@
+{
+    "indexingMode": "consistent",
+    "automatic": true,
+    "includedPaths": [
+        {
+            "path": "/*"
+        }
+    ],
+    "excludedPaths": [
+        {
+            "path": "/\"_etag\"/?"
+        }
+    ],
+    "compositeIndexes": [
+        [
+            {
+                "path": "/reviewedAt",
+                "order": "descending"
+            },
+            {
+                "path": "/id",
+                "order": "ascending"
+            }
+        ],
+        [
+            {
+                "path": "/updatedAt",
+                "order": "descending"
+            },
+            {
+                "path": "/id",
+                "order": "ascending"
+            }
+        ],
+        [
+            {
+                "path": "/reviewedAt",
+                "order": "ascending"
+            },
+            {
+                "path": "/id",
+                "order": "ascending"
+            }
+        ],
+        [
+            {
+                "path": "/status",
+                "order": "ascending"
+            },
+            {
+                "path": "/reviewedAt",
+                "order": "descending"
+            },
+            {
+                "path": "/id",
+                "order": "ascending"
+            }
+        ], 
+        [
+            {"path": "/totalReferences", "order": "ascending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/totalReferences", "order": "descending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/totalReferences", "order": "ascending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/totalReferences", "order": "descending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/reviewedAt", "order": "descending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/reviewedAt", "order": "ascending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/updatedAt", "order": "descending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/updatedAt", "order": "ascending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/totalReferences", "order": "descending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/totalReferences", "order": "ascending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/id", "order": "descending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/reviewedAt", "order": "descending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/updatedAt", "order": "descending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/totalReferences", "order": "descending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/datasetName", "order": "ascending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/updatedAt", "order": "descending"},
+            {"path": "/id", "order": "ascending"}
+        ],
+        [
+            {"path": "/status", "order": "ascending"},
+            {"path": "/updatedAt", "order": "ascending"},
+            {"path": "/id", "order": "ascending"}
+        ]
+    ],
+    "fullTextIndexes": []
+}

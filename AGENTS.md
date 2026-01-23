@@ -120,3 +120,27 @@ cd backend
 uv run mkdocs serve -f ../mkdocs.yml
 # Then open http://localhost:8000
 ```
+
+## Cosmos DB Operations
+
+### Indexing Policy Updates
+
+To update the Cosmos DB indexing policy:
+
+```bash
+cd backend/scripts
+
+# For local emulator
+python cosmos_container_manager.py update-gt \
+  --endpoint https://localhost:8081 \
+  --indexing-policy indexing-policy-optimized.json
+
+# For production (requires connection string)
+python cosmos_container_manager.py update-gt \
+  --connection-string "$COSMOS_CONNECTION_STRING" \
+  --indexing-policy indexing-policy-optimized.json
+```
+
+**Note**: Reindexing takes 1-6 hours depending on data size. Monitor progress in Azure Portal or via SDK.
+
+See `docs/operations/COSMOS-OPTIMIZATION-README.md` for detailed deployment guide.
