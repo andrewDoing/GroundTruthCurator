@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.adapters.repos.base import GroundTruthRepo
 from app.domain.models import GroundTruthItem, AssignmentDocument, Reference
 from app.plugins import get_default_registry
+from app.core.errors import AssignmentConflictError
 from uuid import UUID
 import random
 import logging
@@ -203,7 +204,11 @@ class AssignmentService:
                 f"assignment_service.assign_single_item.already_assigned - dataset={dataset}, bucket={bucket}, item_id={item_id}, "
                 f"current_assigned_to={item.assignedTo}, current_status={item.status.value}"
             )
-            raise ValueError("Item is already assigned to another user")
+            raise AssignmentConflictError(
+                "Item is already assigned to another user",
+                assigned_to=item.assignedTo,
+                assigned_at=item.assigned_at,
+            )
 
         # Assign to user (will set status to draft regardless of previous state)
         success = await self.repo.assign_to(item_id, user_id)

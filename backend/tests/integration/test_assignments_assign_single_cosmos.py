@@ -78,12 +78,13 @@ async def test_assign_single_item_not_found(
 async def test_assign_single_item_already_assigned(
     async_client: AsyncClient, user_headers: dict[str, str]
 ):
-    """Test assigning an item already assigned to another user returns 409."""
+    """Test assigning an item already assigned to another user returns 409 with structured payload."""
     ds = f"assign-409-{uuid.uuid4().hex[:6]}"
     other_user = "someone-else@example.com"
     item = make_item(ds, status="draft", assigned_to=other_user)
     bucket = item["bucket"]
     item_id = item["id"]
+    assigned_at = item["assignedAt"]
 
     # Import item assigned to another user
     r = await async_client.post("/v1/ground-truths", json=[item], headers=user_headers)
@@ -94,6 +95,14 @@ async def test_assign_single_item_already_assigned(
         f"/v1/assignments/{ds}/{bucket}/{item_id}/assign", headers=user_headers
     )
     assert r.status_code == 409
+
+    # Verify structured response includes assignment details
+    body = r.json()
+    assert "assignedTo" in body
+    assert body["assignedTo"] == other_user
+    assert "assignedAt" in body
+    assert body["assignedAt"] == assigned_at
+    assert "detail" in body
 
 
 @pytest.mark.anyio

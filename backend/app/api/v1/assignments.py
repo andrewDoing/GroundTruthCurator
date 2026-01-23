@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi.responses import JSONResponse
 from typing import Any, cast, Optional, Set
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field, ConfigDict
 import logging
 
 from app.core.auth import get_current_user, UserContext
+from app.core.errors import AssignmentConflictError
 from app.domain.models import GroundTruthItem, Reference, AssignmentDocument, HistoryItem
 from app.domain.enums import GroundTruthStatus
 from app.container import container
@@ -254,13 +256,13 @@ async def update_item(
     return res_item
 
 
-@router.post("/{dataset}/{bucket}/{item_id}/assign", status_code=200)
+@router.post("/{dataset}/{bucket}/{item_id}/assign", status_code=200, response_model=None)
 async def assign_item(
     dataset: str,
     bucket: UUID,
     item_id: str,
     user: UserContext = Depends(get_current_user),
-) -> GroundTruthItem:
+) -> GroundTruthItem | JSONResponse:
     """Assign a specific ground truth item to the current user.
 
     This endpoint:
@@ -275,6 +277,20 @@ async def assign_item(
         )
 
         return assigned
+    except AssignmentConflictError as e:
+        # Return structured 409 response with assignment details
+        payload = {
+            "detail": str(e),
+            "assignedTo": e.assigned_to,
+        }
+        if e.assigned_at:
+            payload["assignedAt"] = e.assigned_at.isoformat()
+
+        logger.warning(
+            f"api.assign_item.conflict - dataset={dataset}, bucket={bucket}, item_id={item_id}, "
+            f"assigned_to={e.assigned_to}"
+        )
+        return JSONResponse(status_code=409, content=payload)
     except ValueError as e:
         error_msg = str(e)
         # Log original error for debugging
