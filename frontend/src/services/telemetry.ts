@@ -101,7 +101,9 @@ async function initWithOTel(opts: TelemetryOptions): Promise<TelemetryFacade> {
 				const span = tracer.startSpan(`event:${name}`);
 				try {
 					const attrs = { ...mkCommonProps(), ...(properties || {}) };
-					Object.entries(attrs).forEach(([k, v]) => span.setAttribute(k, v));
+					Object.entries(attrs).forEach(([k, v]) => {
+						span.setAttribute(k, v);
+					});
 				} finally {
 					span.end();
 				}
@@ -118,7 +120,9 @@ async function initWithOTel(opts: TelemetryOptions): Promise<TelemetryFacade> {
 						severity: severity || "error",
 						...(properties || {}),
 					};
-					Object.entries(attrs).forEach(([k, v]) => span.setAttribute(k, v));
+					Object.entries(attrs).forEach(([k, v]) => {
+						span.setAttribute(k, v);
+					});
 				} finally {
 					span.end();
 				}
@@ -127,7 +131,9 @@ async function initWithOTel(opts: TelemetryOptions): Promise<TelemetryFacade> {
 				const span = tracer.startSpan("trace");
 				try {
 					const attrs = { ...mkCommonProps(), message, ...(properties || {}) };
-					Object.entries(attrs).forEach(([k, v]) => span.setAttribute(k, v));
+					Object.entries(attrs).forEach(([k, v]) => {
+						span.setAttribute(k, v);
+					});
 				} finally {
 					span.end();
 				}

@@ -440,7 +440,9 @@ export default function GTAppDemo() {
 			/>
 
 			{/* Tag Glossary Modal */}
-			{glossaryOpen && <TagGlossaryModal onClose={() => setGlossaryOpen(false)} />}
+			{glossaryOpen && (
+				<TagGlossaryModal onClose={() => setGlossaryOpen(false)} />
+			)}
 
 			{/* Toasts */}
 			<Toasts

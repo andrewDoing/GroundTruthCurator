@@ -1,5 +1,5 @@
 import { CircleAlert, Clipboard, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { GroundTruthItem } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
 
@@ -29,6 +29,7 @@ export default function QueueSidebar({
 	selfServeBusy,
 	onCopied,
 }: Props) {
+	const labelId = useId();
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const [hoverIndex, setHoverIndex] = useState<number>(-1);
 	const ids = useMemo(() => items.map((it) => it.id), [items]);
@@ -82,7 +83,7 @@ export default function QueueSidebar({
 			)}
 		>
 			<div className="mb-2 flex items-center justify-between">
-				<div className="font-medium" id="queue-sidebar-label">
+				<div className="font-medium" id={labelId}>
 					Queue
 				</div>
 				<button
@@ -98,7 +99,7 @@ export default function QueueSidebar({
 				tabIndex={0}
 				onKeyDown={onKeyDown}
 				role="listbox"
-				aria-labelledby="queue-sidebar-label"
+				aria-labelledby={labelId}
 				aria-activedescendant={
 					hoverIndex >= 0 ? getItemId(hoverIndex) : undefined
 				}

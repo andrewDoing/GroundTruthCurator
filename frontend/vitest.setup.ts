@@ -1,7 +1,7 @@
 // Extend Vitest's expect with jest-dom matchers
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 
 // Mock global fetch to prevent network calls in tests
 const mockFetch = vi.fn(() =>

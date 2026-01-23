@@ -14,7 +14,7 @@ const item: GroundTruthItem = {
 };
 
 describe("CuratePane", () => {
-	it("disables Approve when deleted", () =>
+	it("disables Approve when deleted", () => {
 		render(
 			<CuratePane
 				current={{ ...item, deleted: true }}
@@ -40,9 +40,10 @@ describe("CuratePane", () => {
 				onRemoveReference={vi.fn()}
 				onOpenReference={vi.fn()}
 			/>,
-		));
+		);
 
-	expect(screen.getByRole("button", { name: /Approve/i })).toBeDisabled();
+		expect(screen.getByRole("button", { name: /Approve/i })).toBeDisabled();
+	});
 
 	it("switches to multi-turn mode for items with history", () => {
 		const itemWithHistory: GroundTruthItem = {

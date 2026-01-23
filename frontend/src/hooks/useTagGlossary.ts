@@ -8,7 +8,8 @@ export interface TagGlossary {
 }
 
 // Detect test environment
-const isTestEnvironment = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
+const isTestEnvironment =
+	typeof process !== "undefined" && process.env.NODE_ENV === "test";
 
 // Singleton store for tag glossary
 class GlossaryStore {
@@ -27,11 +28,11 @@ class GlossaryStore {
 	};
 
 	getSnapshot = () => {
-		return { 
-			glossary: this.glossary, 
+		return {
+			glossary: this.glossary,
 			rawGlossary: this.rawGlossary,
-			loading: this.loading, 
-			error: this.error 
+			loading: this.loading,
+			error: this.error,
 		};
 	};
 
@@ -100,6 +101,11 @@ class GlossaryStore {
 		this.notify();
 	}
 
+	refresh() {
+		this.fetchPromise = null;
+		return this.fetch();
+	}
+
 	setGlossary(glossary: TagGlossary) {
 		this.glossary = glossary;
 		this.loading = false;
@@ -113,21 +119,24 @@ const glossaryStore = new GlossaryStore();
 /**
  * Fetches the tag glossary from the API and transforms it into a lookup map
  * of tag key -> description.
- * 
+ *
  * Uses a singleton store to prevent duplicate fetches when multiple components
  * mount simultaneously. In test environments, fetching is disabled.
  */
 export function useTagGlossary() {
 	const state = useSyncExternalStore(
 		glossaryStore.subscribe,
-		glossaryStore.getSnapshot
+		glossaryStore.getSnapshot,
 	);
 
 	useEffect(() => {
 		glossaryStore.fetch();
 	}, []);
 
-	return state;
+	return {
+		...state,
+		refresh: () => glossaryStore.refresh(),
+	};
 }
 
 /**

@@ -69,7 +69,7 @@
 			"post": {
 				"tags": ["ground-truths"],
 				"summary": "Import Bulk",
-				"description": "Bulk import ground truth items.\n\nBehavior:\n- ID field: Each item may include 'id' (alias 'uuid'); missing/blank values are generated server-side using\n  randomname to produce a two-word, hyphenated string (e.g., 'sleek-voxel').\n- Order preservation: Response `uuids` mirrors request order for easy correlation.\n- Duplicate handling: Existing items are not overwritten; per-item errors are returned in `errors`.\n- Optional approval: `approve=true` marks all items approved and sets review metadata.\n- Size limit: Requests exceeding BULK_IMPORT_MAX_ITEMS return HTTP 413.",
+				"description": "Bulk import ground truth items.\n\nBehavior:\n- ID field: Each item may include 'id' (alias 'uuid'); missing/blank values are generated server-side using\n  randomname to produce a two-word, hyphenated string (e.g., 'sleek-voxel').\n- Order preservation: Response `uuids` mirrors request order for easy correlation.\n- Duplicate handling: Existing items are not overwritten; per-item errors are returned in `errors`.\n- Optional approval: `approve=true` marks all items approved and sets review metadata.",
 				"operationId": "import_bulk_v1_ground_truths_post",
 				"parameters": [
 					{
@@ -1214,6 +1214,92 @@
 							"application/json": {
 								"schema": {
 									"$ref": "#/components/schemas/GlossaryResponse"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/tags/definitions": {
+			"post": {
+				"tags": ["tags"],
+				"summary": "Create Tag Definition",
+				"description": "Create or update a custom tag definition.\n\nNote: In production, user_id should be obtained from authentication (e.g., via Depends(get_current_user)).\nFor now, we use a default value to keep the implementation simple.",
+				"operationId": "create_tag_definition_v1_tags_definitions_post",
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"default": "system",
+							"title": "User Id"
+						}
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/TagDefinitionRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"201": {
+						"description": "Successful Response",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TagDefinitionResponse"
+								}
+							}
+						}
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/v1/tags/definitions/{tag_key}": {
+			"delete": {
+				"tags": ["tags"],
+				"summary": "Delete Tag Definition",
+				"description": "Delete a custom tag definition by tag_key.",
+				"operationId": "delete_tag_definition_v1_tags_definitions__tag_key__delete",
+				"parameters": [
+					{
+						"name": "tag_key",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string",
+							"title": "Tag Key"
+						}
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "Successful Response"
+					},
+					"422": {
+						"description": "Validation Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HTTPValidationError"
 								}
 							}
 						}
@@ -3028,6 +3114,58 @@
 				"type": "object",
 				"required": ["key"],
 				"title": "TagDefinitionDTO"
+			},
+			"TagDefinitionRequest": {
+				"properties": {
+					"tag_key": {
+						"type": "string",
+						"title": "Tag Key",
+						"description": "Unique tag key (e.g., 'source:custom_value')"
+					},
+					"description": {
+						"type": "string",
+						"title": "Description",
+						"description": "Human-readable description of the tag"
+					}
+				},
+				"type": "object",
+				"required": ["tag_key", "description"],
+				"title": "TagDefinitionRequest",
+				"description": "Request model for creating/updating a custom tag definition."
+			},
+			"TagDefinitionResponse": {
+				"properties": {
+					"tag_key": {
+						"type": "string",
+						"title": "Tag Key"
+					},
+					"description": {
+						"type": "string",
+						"title": "Description"
+					},
+					"created_by": {
+						"type": "string",
+						"title": "Created By"
+					},
+					"created_at": {
+						"type": "string",
+						"title": "Created At"
+					},
+					"updated_at": {
+						"type": "string",
+						"title": "Updated At"
+					}
+				},
+				"type": "object",
+				"required": [
+					"tag_key",
+					"description",
+					"created_by",
+					"created_at",
+					"updated_at"
+				],
+				"title": "TagDefinitionResponse",
+				"description": "Response model for a custom tag definition."
 			},
 			"TagGroupDTO": {
 				"properties": {

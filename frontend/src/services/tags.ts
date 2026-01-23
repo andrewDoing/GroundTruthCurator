@@ -144,3 +144,25 @@ export async function addTags(tags: string[]): Promise<string[]> {
 	const list = response?.tags || [];
 	return [...list].sort((a, b) => a.localeCompare(b));
 }
+
+/** Create or update a custom tag definition */
+export async function createTagDefinition(
+	tagKey: string,
+	description: string,
+): Promise<void> {
+	const { error } = await client.POST("/v1/tags/definitions", {
+		body: {
+			tag_key: tagKey,
+			description,
+		} as unknown as components["schemas"]["TagDefinitionRequest"],
+	});
+	if (error) throw error;
+}
+
+/** Delete a custom tag definition */
+export async function deleteTagDefinition(tagKey: string): Promise<void> {
+	const { error } = await client.DELETE("/v1/tags/definitions/{tag_key}", {
+		params: { path: { tag_key: tagKey } },
+	});
+	if (error) throw error;
+}
