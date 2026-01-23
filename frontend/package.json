@@ -7,13 +7,15 @@
 		"dev": "vite",
 		"build": "tsc -b && vite build",
 		"lint": "biome check --write",
+		"lint:check": "biome check",
 		"preview": "vite preview",
 		"api:types": "openapi-typescript src/api/openapi.json -o src/api/generated.ts",
 		"api:types:check": "npm run api:types && git --no-pager diff --exit-code -- src/api/generated.ts || (echo 'Regenerate API types: npm run api:types' && exit 1)",
 		"test": "vitest",
 		"test:run": "vitest run",
 		"test:ui": "vitest --ui",
-		"typecheck": "tsc -b --pretty false"
+		"typecheck": "tsc -b --pretty false",
+		"pre-commit": "npm run lint:check && npm run typecheck"
 	},
 	"dependencies": {
 		"@microsoft/applicationinsights-web": "^3.0.4",

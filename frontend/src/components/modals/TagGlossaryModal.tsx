@@ -8,6 +8,7 @@ interface TagGlossaryModalProps {
 }
 
 export default function TagGlossaryModal({ onClose }: TagGlossaryModalProps) {
+	const formId = useId();
 	const { rawGlossary: glossary, loading, error, refresh } = useTagGlossary();
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedType, setSelectedType] = useState<string>("all");
@@ -17,8 +18,6 @@ export default function TagGlossaryModal({ onClose }: TagGlossaryModalProps) {
 	const [newTagKey, setNewTagKey] = useState("");
 	const [newTagDescription, setNewTagDescription] = useState("");
 	const [submitting, setSubmitting] = useState(false);
-	const tagKeyId = useId();
-	const tagDescriptionId = useId();
 
 	const filteredGroups = useMemo(() => {
 		if (!glossary?.groups) return [];
@@ -148,10 +147,13 @@ export default function TagGlossaryModal({ onClose }: TagGlossaryModalProps) {
 		}
 	};
 
+	const tagKeyId = `${formId}-tag-key`;
+	const tagDescriptionId = `${formId}-tag-description`;
+
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: Modal backdrop requires click-to-dismiss
-		// biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled separately
+		// biome-ignore lint/a11y/noStaticElementInteractions: Modal backdrop with click-to-close is a common accessible pattern
 		<div
+			role="presentation"
 			className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
 			onClick={(e) => {
 				if (e.target === e.currentTarget) onClose();

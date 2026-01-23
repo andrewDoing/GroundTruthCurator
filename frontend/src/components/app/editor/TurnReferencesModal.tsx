@@ -89,7 +89,7 @@ export default function TurnReferencesModal({
 	// }, [isOpen]);
 
 	// FR-003: Memoize expensive derived computations to avoid recomputation on every render
-	// Note: These hooks must be called before any early returns to satisfy Rules of Hooks
+	// Note: useMemo hooks must be called before early returns to follow React rules of hooks
 
 	// Filter references for this specific turn only
 	const turnRefs = useMemo(

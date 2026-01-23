@@ -106,11 +106,20 @@ cd frontend
 # Note: Vitest 3.2.4 doesn't support `--no-threads` at runtime; use the threads pool in single-thread mode to avoid spawning many Node processes.
 npm run test:run -- --pool=threads --poolOptions.threads.singleThread
 
+# Pre-commit validation (lint + typecheck, no auto-fix)
+npm run pre-commit
+
 # Build
 npm run build
 
 # Type checking (note: 'typecheck' not 'type-check')
 npm run typecheck
+
+# Linting (auto-fix)
+npm run lint
+
+# Linting check only (no auto-fix)
+npm run lint:check
 ```
 
 ## Documentation

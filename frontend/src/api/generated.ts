@@ -87,7 +87,6 @@ export interface paths {
          *     - Order preservation: Response `uuids` mirrors request order for easy correlation.
          *     - Duplicate handling: Existing items are not overwritten; per-item errors are returned in `errors`.
          *     - Optional approval: `approve=true` marks all items approved and sets review metadata.
-         *     - Size limit: Requests exceeding BULK_IMPORT_MAX_ITEMS return HTTP 413.
          */
         post: operations["import_bulk_v1_ground_truths_post"];
         delete?: never;
@@ -388,6 +387,49 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tags/definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Tag Definition
+         * @description Create or update a custom tag definition.
+         *
+         *     Note: In production, user_id should be obtained from authentication (e.g., via Depends(get_current_user)).
+         *     For now, we use a default value to keep the implementation simple.
+         */
+        post: operations["create_tag_definition_v1_tags_definitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tags/definitions/{tag_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Tag Definition
+         * @description Delete a custom tag definition by tag_key.
+         */
+        delete: operations["delete_tag_definition_v1_tags_definitions__tag_key__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1145,6 +1187,38 @@ export interface components {
             key: string;
             /** Description */
             description?: string | null;
+        };
+        /**
+         * TagDefinitionRequest
+         * @description Request model for creating/updating a custom tag definition.
+         */
+        TagDefinitionRequest: {
+            /**
+             * Tag Key
+             * @description Unique tag key (e.g., 'source:custom_value')
+             */
+            tag_key: string;
+            /**
+             * Description
+             * @description Human-readable description of the tag
+             */
+            description: string;
+        };
+        /**
+         * TagDefinitionResponse
+         * @description Response model for a custom tag definition.
+         */
+        TagDefinitionResponse: {
+            /** Tag Key */
+            tag_key: string;
+            /** Description */
+            description: string;
+            /** Created By */
+            created_by: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
         };
         /** TagGroupDTO */
         TagGroupDTO: {
@@ -1940,6 +2014,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GlossaryResponse"];
+                };
+            };
+        };
+    };
+    create_tag_definition_v1_tags_definitions_post: {
+        parameters: {
+            query?: {
+                user_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagDefinitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_tag_definition_v1_tags_definitions__tag_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
