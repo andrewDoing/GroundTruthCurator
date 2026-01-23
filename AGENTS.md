@@ -98,9 +98,12 @@ cd frontend
 # Run tests
 npm test
 
+# Run tests once without watch mode
+npm test -- --run
+
 # Build
 npm run build
 
-# Type checking
-npm run type-check
+# Type checking (note: 'typecheck' not 'type-check')
+npm run typecheck
 ```
