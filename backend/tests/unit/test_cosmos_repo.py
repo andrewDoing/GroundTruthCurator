@@ -23,25 +23,25 @@ def repo() -> CosmosGroundTruthRepo:
 
 
 def test_build_query_filter_no_filters(repo: CosmosGroundTruthRepo) -> None:
-    where, params = repo._build_query_filter(None, None, None)
+    where, params = repo._build_query_filter(None, None, None, None)
     assert where == " WHERE c.docType = 'ground-truth-item'"
     assert params == []
 
 
 def test_build_query_filter_with_status(repo: CosmosGroundTruthRepo) -> None:
-    where, params = repo._build_query_filter(GroundTruthStatus.draft, None, None)
+    where, params = repo._build_query_filter(GroundTruthStatus.draft, None, None, None)
     assert "c.status = @status" in where
     assert {"name": "@status", "value": GroundTruthStatus.draft.value} in params
 
 
 def test_build_query_filter_with_dataset(repo: CosmosGroundTruthRepo) -> None:
-    where, params = repo._build_query_filter(None, "faq", None)
+    where, params = repo._build_query_filter(None, "faq", None, None)
     assert "c.datasetName = @dataset" in where
     assert {"name": "@dataset", "value": "faq"} in params
 
 
 def test_build_query_filter_with_tags_and_logic(repo: CosmosGroundTruthRepo) -> None:
-    where, params = repo._build_query_filter(None, None, ["sme", "validation"])
+    where, params = repo._build_query_filter(None, None, ["sme", "validation"], None)
     # Tags search across manualTags and computedTags
     assert "ARRAY_CONTAINS(c.manualTags, @tag0)" in where
     assert "ARRAY_CONTAINS(c.computedTags, @tag0)" in where
@@ -56,6 +56,7 @@ def test_build_query_filter_all_filters_combined(repo: CosmosGroundTruthRepo) ->
         GroundTruthStatus.approved,
         "kb",
         ["tag-a", "tag-b"],
+        None,
     )
     assert "c.status = @status" in where
     assert "c.datasetName = @dataset" in where
@@ -66,9 +67,27 @@ def test_build_query_filter_all_filters_combined(repo: CosmosGroundTruthRepo) ->
 
 
 def test_build_query_filter_ignore_tags_when_disabled(repo: CosmosGroundTruthRepo) -> None:
-    where, params = repo._build_query_filter(None, None, ["sme"], include_tags=False)
+    where, params = repo._build_query_filter(None, None, ["sme"], None, include_tags=False)
     assert "ARRAY_CONTAINS" not in where
     assert params == []
+
+
+def test_build_query_filter_with_exclude_tags(repo: CosmosGroundTruthRepo) -> None:
+    where, params = repo._build_query_filter(None, None, None, ["archived", "spam"])
+    # Exclude tags use NOT logic
+    assert "NOT (ARRAY_CONTAINS(c.manualTags, @excludeTag0)" in where
+    assert "NOT (ARRAY_CONTAINS(c.manualTags, @excludeTag1)" in where
+    assert {"name": "@excludeTag0", "value": "archived"} in params
+    assert {"name": "@excludeTag1", "value": "spam"} in params
+
+
+def test_build_query_filter_with_include_and_exclude_tags(repo: CosmosGroundTruthRepo) -> None:
+    where, params = repo._build_query_filter(None, None, ["important"], ["spam"])
+    # Should have both include and exclude clauses
+    assert "ARRAY_CONTAINS(c.manualTags, @tag0)" in where
+    assert "NOT (ARRAY_CONTAINS(c.manualTags, @excludeTag0)" in where
+    assert {"name": "@tag0", "value": "important"} in params
+    assert {"name": "@excludeTag0", "value": "spam"} in params
 
 
 def test_resolve_sort_defaults(repo: CosmosGroundTruthRepo) -> None:

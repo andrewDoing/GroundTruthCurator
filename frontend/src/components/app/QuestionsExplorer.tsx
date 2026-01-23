@@ -11,6 +11,7 @@ import type {
 	FilterType,
 	SortColumn,
 	SortDirection,
+	TagFilterState
 } from "../../types/filters";
 import {
 	filterStateToUrlParams,
@@ -60,7 +61,7 @@ export default function QuestionsExplorer({
 	const defaultFilter: FilterState = {
 		status: "all",
 		dataset: "all",
-		tags: [],
+		tags: { include: [], exclude: [] },
 		itemId: "",
 		refUrl: "",
 		keyword: "",
@@ -91,7 +92,7 @@ export default function QuestionsExplorer({
 	const [selectedDataset, setSelectedDataset] = useState<string>(
 		initialFilterState.dataset,
 	);
-	const [selectedTags, setSelectedTags] = useState<string[]>(
+	const [selectedTags, setSelectedTags] = useState<TagFilterState>(
 		initialFilterState.tags,
 	);
 	const [itemIdFilter, setItemIdFilter] = useState<string>(
@@ -134,10 +135,14 @@ export default function QuestionsExplorer({
 
 	// Check if filters have changed from applied state (optimized with useMemo)
 	const hasUnappliedChanges = useMemo(() => {
+		const tagsChanged =
+			!areArraysEqual(selectedTags.include, appliedFilter.tags.include) ||
+			!areArraysEqual(selectedTags.exclude, appliedFilter.tags.exclude);
+
 		return (
 			activeFilter !== appliedFilter.status ||
 			selectedDataset !== appliedFilter.dataset ||
-			!areArraysEqual(selectedTags, appliedFilter.tags) ||
+			tagsChanged ||
 			itemIdFilter !== appliedFilter.itemId ||
 			referenceUrlFilter !== appliedFilter.refUrl ||
 			keywordFilter !== appliedFilter.keyword ||
@@ -238,7 +243,8 @@ export default function QuestionsExplorer({
 			status: appliedFilter.status !== "all" ? appliedFilter.status : undefined,
 			dataset:
 				appliedFilter.dataset !== "all" ? appliedFilter.dataset : undefined,
-			tags: appliedFilter.tags.length > 0 ? appliedFilter.tags : undefined,
+			tags: appliedFilter.tags.include.length > 0 ? appliedFilter.tags.include : undefined,
+			excludeTags: appliedFilter.tags.exclude.length > 0 ? appliedFilter.tags.exclude : undefined,
 			itemId: appliedFilter.itemId || undefined,
 			refUrl: appliedFilter.refUrl || undefined,
 			keyword: appliedFilter.keyword || undefined,
@@ -290,16 +296,35 @@ export default function QuestionsExplorer({
 	};
 
 	const handleTagToggle = (tag: string) => {
-		setSelectedTags((prev) =>
-			prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-		);
+		setSelectedTags((prev) => {
+			// Three-state toggle: neutral → include → exclude → neutral
+			if (prev.include.includes(tag)) {
+				// Include → Exclude
+				return {
+					include: prev.include.filter((t) => t !== tag),
+					exclude: [...prev.exclude, tag],
+				};
+			} else if (prev.exclude.includes(tag)) {
+				// Exclude → Neutral
+				return {
+					...prev,
+					exclude: prev.exclude.filter((t) => t !== tag),
+				};
+			} else {
+				// Neutral → Include
+				return {
+					...prev,
+					include: [...prev.include, tag],
+				};
+			}
+		});
 	};
 
 	const handleApplyFilters = () => {
 		const newFilter: FilterState = {
 			status: activeFilter,
 			dataset: selectedDataset,
-			tags: [...selectedTags],
+			tags: { include: [...selectedTags.include], exclude: [...selectedTags.exclude] },
 			itemId: itemIdFilter,
 			refUrl: referenceUrlFilter,
 			keyword: keywordFilter,
@@ -483,7 +508,7 @@ export default function QuestionsExplorer({
 						</div>
 						<div className="flex items-center gap-2">
 							<input
-								id="itemIdFilter"
+								id={useId()}
 								type="text"
 								value={itemIdFilter}
 								onChange={(e) => setItemIdFilter(e.target.value)}
@@ -564,7 +589,7 @@ export default function QuestionsExplorer({
 						</div>
 						<div className="flex items-center gap-2">
 							<input
-								id="referenceUrlFilter"
+								id={useId()}
 								type="text"
 								value={referenceUrlFilter}
 								onChange={(e) => setReferenceUrlFilter(e.target.value)}
@@ -597,7 +622,7 @@ export default function QuestionsExplorer({
 						</div>
 						<div className="flex items-center gap-2">
 							<input
-								id="keywordFilter"
+								id={useId()}
 								type="text"
 								value={keywordFilter}
 								onChange={(e) => setKeywordFilter(e.target.value)}
@@ -703,16 +728,16 @@ export default function QuestionsExplorer({
 									{isTagFilterExpanded ? "▼" : "▶"}
 								</span>
 								<span>Filter by Tags</span>
-								{selectedTags.length > 0 && (
+								{(selectedTags.include.length > 0 || selectedTags.exclude.length > 0) && (
 									<span className="inline-flex items-center justify-center rounded-full bg-violet-600 px-2 py-0.5 text-xs font-semibold text-white">
-										{selectedTags.length}
+										{selectedTags.include.length + selectedTags.exclude.length}
 									</span>
 								)}
 							</button>
-							{selectedTags.length > 0 && (
+							{(selectedTags.include.length > 0 || selectedTags.exclude.length > 0) && (
 								<button
 									type="button"
-									onClick={() => setSelectedTags([])}
+									onClick={() => setSelectedTags({ include: [], exclude: [] })}
 									className="text-xs text-violet-600 hover:text-violet-800 underline"
 								>
 									Clear all
@@ -729,7 +754,8 @@ export default function QuestionsExplorer({
 										</h4>
 										<div className="flex flex-wrap gap-2">
 											{manualTags.map((tag) => {
-												const isSelected = selectedTags.includes(tag);
+												const isIncluded = selectedTags.include.includes(tag);
+												const isExcluded = selectedTags.exclude.includes(tag);
 												return (
 													<button
 														key={tag}
@@ -737,14 +763,19 @@ export default function QuestionsExplorer({
 														onClick={() => handleTagToggle(tag)}
 														className={cn(
 															"rounded-full px-3 py-1 text-xs font-medium transition-all border",
-															isSelected
+															isIncluded
 																? "bg-violet-600 text-white border-violet-600 shadow-sm"
-																: "bg-white text-slate-700 border-slate-300 hover:border-violet-400 hover:bg-violet-50",
+																: isExcluded
+																	? "bg-red-600 text-white border-red-600 shadow-sm"
+																	: "bg-white text-slate-700 border-slate-300 hover:border-violet-400 hover:bg-violet-50",
 														)}
 													>
 														{tag}
-														{isSelected && (
-															<span className="ml-1.5 font-bold">×</span>
+														{isIncluded && (
+															<span className="ml-1.5 font-bold">✓</span>
+														)}
+														{isExcluded && (
+															<span className="ml-1.5 font-bold">✕</span>
 														)}
 													</button>
 												);
@@ -761,7 +792,8 @@ export default function QuestionsExplorer({
 										</h4>
 										<div className="flex flex-wrap gap-2">
 											{computedTags.map((tag) => {
-												const isSelected = selectedTags.includes(tag);
+												const isIncluded = selectedTags.include.includes(tag);
+												const isExcluded = selectedTags.exclude.includes(tag);
 												return (
 													<button
 														key={tag}
@@ -769,14 +801,19 @@ export default function QuestionsExplorer({
 														onClick={() => handleTagToggle(tag)}
 														className={cn(
 															"rounded-full px-3 py-1 text-xs font-medium transition-all border italic",
-															isSelected
+															isIncluded
 																? "bg-slate-600 text-white border-slate-600 shadow-sm"
-																: "bg-slate-50 text-slate-600 border-slate-300 hover:border-slate-400 hover:bg-slate-100",
+																: isExcluded
+																	? "bg-red-600 text-white border-red-600 shadow-sm"
+																	: "bg-slate-50 text-slate-600 border-slate-300 hover:border-slate-400 hover:bg-slate-100",
 														)}
 													>
 														{tag}
-														{isSelected && (
-															<span className="ml-1.5 font-bold">×</span>
+														{isIncluded && (
+															<span className="ml-1.5 font-bold">✓</span>
+														)}
+														{isExcluded && (
+															<span className="ml-1.5 font-bold">✕</span>
 														)}
 													</button>
 												);
@@ -784,13 +821,29 @@ export default function QuestionsExplorer({
 										</div>
 									</div>
 								)}
-								{selectedTags.length > 0 && (
+								{(selectedTags.include.length > 0 || selectedTags.exclude.length > 0) && (
 									<p className="text-xs text-slate-600">
-										Showing items with{" "}
-										{selectedTags.length === 1 ? "tag" : "all tags"}:{" "}
-										<span className="font-medium">
-											{selectedTags.join(", ")}
-										</span>
+										{selectedTags.include.length > 0 && (
+											<span>
+												Including{" "}
+												{selectedTags.include.length === 1 ? "tag" : "tags"}:{" "}
+												<span className="font-medium text-violet-600">
+													{selectedTags.include.join(", ")}
+												</span>
+											</span>
+										)}
+										{selectedTags.include.length > 0 && selectedTags.exclude.length > 0 && (
+											<span> • </span>
+										)}
+										{selectedTags.exclude.length > 0 && (
+											<span>
+												Excluding{" "}
+												{selectedTags.exclude.length === 1 ? "tag" : "tags"}:{" "}
+												<span className="font-medium text-red-600">
+													{selectedTags.exclude.join(", ")}
+												</span>
+											</span>
+										)}
 									</p>
 								)}
 							</div>

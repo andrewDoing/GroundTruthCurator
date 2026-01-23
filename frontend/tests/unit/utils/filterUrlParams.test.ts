@@ -11,9 +11,10 @@ describe("filterUrlParams utilities", () => {
 	const defaultFilter: FilterState = {
 		status: "all",
 		dataset: "all",
-		tags: [],
+		tags: { include: [], exclude: [] },
 		itemId: "",
 		refUrl: "",
+		keyword: "",
 		sortColumn: null,
 		sortDirection: "desc",
 	};
@@ -51,7 +52,10 @@ describe("filterUrlParams utilities", () => {
 
 		it("should parse tags as comma-separated list", () => {
 			const result = parseFilterStateFromUrl("?tags=tag1,tag2,tag3");
-			expect(result.tags).toEqual(["tag1", "tag2", "tag3"]);
+			expect(result.tags).toEqual({
+				include: ["tag1", "tag2", "tag3"],
+				exclude: [],
+			});
 		});
 
 		it("should parse itemId filter", () => {
@@ -84,7 +88,7 @@ describe("filterUrlParams utilities", () => {
 			expect(result).toEqual({
 				status: "approved",
 				dataset: "my-dataset",
-				tags: ["important", "validated"],
+				tags: { include: ["important", "validated"], exclude: [] },
 				sortColumn: "reviewedAt",
 				sortDirection: "asc",
 			});
@@ -112,12 +116,15 @@ describe("filterUrlParams utilities", () => {
 
 		it("should trim whitespace from tags", () => {
 			const result = parseFilterStateFromUrl("?tags=tag1%20,tag2,tag3%20");
-			expect(result.tags).toEqual(["tag1", "tag2", "tag3"]);
+			expect(result.tags).toEqual({
+				include: ["tag1", "tag2", "tag3"],
+				exclude: [],
+			});
 		});
 
 		it("should filter out empty tags", () => {
 			const result = parseFilterStateFromUrl("?tags=tag1,,tag2");
-			expect(result.tags).toEqual(["tag1", "tag2"]);
+			expect(result.tags).toEqual({ include: ["tag1", "tag2"], exclude: [] });
 		});
 	});
 
@@ -141,7 +148,10 @@ describe("filterUrlParams utilities", () => {
 		});
 
 		it("should include non-empty tags", () => {
-			const filter: FilterState = { ...defaultFilter, tags: ["tag1", "tag2"] };
+			const filter: FilterState = {
+				...defaultFilter,
+				tags: { include: ["tag1", "tag2"], exclude: [] },
+			};
 			const params = filterStateToUrlParams(filter, defaultFilter);
 			expect(params.get("tags")).toBe("tag1,tag2");
 		});
@@ -175,7 +185,7 @@ describe("filterUrlParams utilities", () => {
 			const filter: FilterState = {
 				status: "approved",
 				dataset: "my-dataset",
-				tags: ["important"],
+				tags: { include: ["important"], exclude: [] },
 				itemId: "item-456",
 				refUrl: "https://example.com",
 				sortColumn: "reviewedAt",
@@ -191,7 +201,10 @@ describe("filterUrlParams utilities", () => {
 		});
 
 		it("should omit empty tags", () => {
-			const filter: FilterState = { ...defaultFilter, tags: [] };
+			const filter: FilterState = {
+				...defaultFilter,
+				tags: { include: [], exclude: [] },
+			};
 			const params = filterStateToUrlParams(filter, defaultFilter);
 			expect(params.get("tags")).toBeNull();
 		});
@@ -276,7 +289,7 @@ describe("filterUrlParams utilities", () => {
 			const originalFilter: FilterState = {
 				status: "approved",
 				dataset: "production",
-				tags: ["validated", "important"],
+				tags: { include: ["validated", "important"], exclude: [] },
 				itemId: "item-789",
 				refUrl: "https://example.com/reference",
 				sortColumn: "reviewedAt",

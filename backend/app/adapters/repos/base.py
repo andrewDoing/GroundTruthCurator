@@ -30,6 +30,7 @@ class GroundTruthRepo(Protocol):
         status: Optional[GroundTruthStatus] = None,
         dataset: str | None = None,
         tags: list[str] | None = None,
+        exclude_tags: list[str] | None = None,
         item_id: str | None = None,
         ref_url: str | None = None,
         keyword: str | None = None,

@@ -14,14 +14,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.auth import get_current_user, UserContext
 from app.core.config import settings
-from app.domain.models import (
-    GroundTruthItem,
-    Reference,
-    GroundTruthListResponse,
-    HistoryItem,
-    BulkImportError,
-    ValidationSummary,
-)
+from app.domain.models import GroundTruthItem, Reference, GroundTruthListResponse, HistoryItem, BulkImportError, ValidationSummary
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.plugins import get_default_registry
 from app.container import container
@@ -97,7 +90,7 @@ async def import_bulk(
     - Duplicate handling: Existing items are not overwritten; per-item errors are returned in `errors`.
     - Optional approval: `approve=true` marks all items approved and sets review metadata.
     """
-    errors: list[BulkImportError] = []
+    errors: list[str] = []
     uuids: list[str] = []
     gt_items: list[GroundTruthItem] = []
 
@@ -144,7 +137,7 @@ async def import_bulk(
             apply_computed_tags(it, registry)
 
         result = await container.repo.import_bulk_gt(gt_items, buckets=buckets)
-
+        
         # Convert repository errors (plain strings) to structured errors
         # Repository doesn't provide index, so we can't map back to original position
         # These are persistence errors after validation passed
@@ -154,9 +147,7 @@ async def import_bulk(
                     index=-1,  # Index unknown for persistence errors
                     item_id=None,  # Parse from error message if needed
                     field=None,
-                    code="CREATE_FAILED"
-                    if "create_failed" in error_msg.lower()
-                    else "DUPLICATE_ID",
+                    code="CREATE_FAILED" if "create_failed" in error_msg.lower() else "DUPLICATE_ID",
                     message=error_msg,
                 )
             )
@@ -170,7 +161,8 @@ async def import_bulk(
         pii_warnings = scan_bulk_items_for_pii(items)
         if pii_warnings:
             logger.info(
-                f"api.import_bulk.pii_detected - items={len(items)}, warnings={len(pii_warnings)}"
+                f"api.import_bulk.pii_detected - "
+                f"items={len(items)}, warnings={len(pii_warnings)}"
             )
 
     # Build validation summary
@@ -228,6 +220,11 @@ async def list_all_ground_truths(
     status: str | None = Query(default=None),
     dataset: str | None = Query(default=None),
     tags: str | None = Query(default=None),
+    exclude_tags: str | None = Query(
+        default=None,
+        alias="excludeTags",
+        description="Comma-separated list of tags to exclude (items with ANY excluded tag will be filtered out)",
+    ),
     item_id: str | None = Query(
         default=None,
         alias="itemId",
@@ -320,10 +317,33 @@ async def list_all_ground_truths(
 
         tag_list = cleaned if cleaned else None
 
+    exclude_tag_list = None
+    if exclude_tags is not None:
+        raw_exclude_tags = [tag.strip() for tag in exclude_tags.split(",")]
+        cleaned_exclude = [tag for tag in raw_exclude_tags if tag]
+
+        # Validate exclude tag count
+        if len(cleaned_exclude) > MAX_TAGS_PER_QUERY:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Too many exclude tags specified. Maximum allowed is {MAX_TAGS_PER_QUERY}.",
+            )
+
+        # Validate individual exclude tag lengths
+        for tag in cleaned_exclude:
+            if len(tag) > MAX_TAG_LENGTH:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Exclude tag '{tag[:50]}...' exceeds maximum length of {MAX_TAG_LENGTH} characters.",
+                )
+
+        exclude_tag_list = cleaned_exclude if cleaned_exclude else None
+
     items, pagination = await container.repo.list_gt_paginated(
         status=status_enum,
         dataset=dataset,
         tags=tag_list,
+        exclude_tags=exclude_tag_list,
         item_id=item_id_search,
         ref_url=ref_url_search,
         keyword=keyword_search,

@@ -531,6 +531,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         status: GroundTruthStatus | None,
         dataset: str | None,
         tags: list[str] | None,
+        exclude_tags: list[str] | None,
         item_id: str | None = None,
         ref_url: str | None = None,
         *,
@@ -565,6 +566,17 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 # Search across manualTags and computedTags
                 clauses.append(
                     f"(ARRAY_CONTAINS(c.manualTags, {pname}) OR "
+                    f"ARRAY_CONTAINS(c.computedTags, {pname}))"
+                )
+                params.append({"name": pname, "value": tag})
+
+        if include_tags and exclude_tags:
+            normalized_exclude = [tag for tag in (tag.strip() for tag in exclude_tags) if tag]
+            for idx, tag in enumerate(normalized_exclude):
+                pname = f"@excludeTag{idx}"
+                # Exclude items that have this tag in either manualTags or computedTags
+                clauses.append(
+                    f"NOT (ARRAY_CONTAINS(c.manualTags, {pname}) OR "
                     f"ARRAY_CONTAINS(c.computedTags, {pname}))"
                 )
                 params.append({"name": pname, "value": tag})
@@ -710,6 +722,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         status: Optional[GroundTruthStatus] = None,
         dataset: str | None = None,
         tags: list[str] | None = None,
+        exclude_tags: list[str] | None = None,
         item_id: str | None = None,
         ref_url: str | None = None,
         keyword: str | None = None,
@@ -725,19 +738,23 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         offset = (safe_page - 1) * safe_limit
 
         normalized_tags = [tag for tag in (tag.strip() for tag in (tags or [])) if tag]
+        normalized_exclude_tags = [
+            tag for tag in (tag.strip() for tag in (exclude_tags or [])) if tag
+        ]
 
         # For queries with tags, we need to filter in-memory since ARRAY_CONTAINS
         # doesn't work well with ORDER BY in Cosmos DB
         # Also use in-memory filtering for ref_url if Cosmos emultor is used since EXISTS is not supported by emulator
         # Keyword search also requires in-memory filtering (no full-text index)
 
-        if normalized_tags or ref_url or keyword:
+        if normalized_tags or normalized_exclude_tags or ref_url or keyword:
             # Always use in-memory filtering path for these filters
             # (Cosmos emulator has limitations, and keyword search needs in-memory filtering regardless)
             return await self._list_gt_paginated_with_emulator(
                 status,
                 dataset,
                 normalized_tags,
+                normalized_exclude_tags,
                 item_id,
                 ref_url,
                 keyword,
@@ -753,6 +770,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             status,
             dataset,
             normalized_tags,
+            normalized_exclude_tags,
             item_id,
             ref_url,
             include_tags=True,
@@ -817,6 +835,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         status: Optional[GroundTruthStatus],
         dataset: str | None,
         tags: list[str],
+        exclude_tags: list[str],
         item_id: str | None,
         ref_url: str | None,
         keyword: str | None,
@@ -842,6 +861,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             status,
             dataset,
             tags,
+            exclude_tags,
             item_id,
             ref_url,
             include_tags=False,  # Disable SQL-level tag filtering - filter in-memory instead
@@ -895,6 +915,16 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 if item.tags and tags_set.issubset(set(item.tags)):
                     filtered_items_tag.append(item)
             raw_items = filtered_items_tag
+
+        # Filter excluded tags in-memory (items with ANY excluded tag are filtered out)
+        if exclude_tags:
+            filtered_items_exclude: list[GroundTruthItem] = []
+            exclude_tags_set = set(exclude_tags)
+            for item in raw_items:
+                # Keep item only if it has NO tags from the exclude list
+                if not item.tags or not exclude_tags_set.intersection(set(item.tags)):
+                    filtered_items_exclude.append(item)
+            raw_items = filtered_items_exclude
 
         # Filter by ref_url in-memory (EXISTS not supported by Cosmos DB emulator)
         if ref_url:
@@ -984,7 +1014,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                     status,
                     dataset,
                     None,  # Don't include tags in SQL query for emulator
-                    item_id,
+                    exclude_tags=None,
+                    item_id=item_id,
                     include_tags=False,
                 )
 
@@ -1016,7 +1047,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                     status,
                     dataset,
                     tags,
-                    item_id,
+                    exclude_tags=None,
+                    item_id=item_id,
                     include_tags=True,
                 )
 
@@ -1050,8 +1082,9 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         where_clause, filter_params = self._build_query_filter(
             status,
             dataset,
-            None,
-            item_id,
+            tags,
+            item_id=item_id,
+            exclude_tags=None,
             include_tags=False,
         )
         # Returns a single scalar value (e.g., [42])

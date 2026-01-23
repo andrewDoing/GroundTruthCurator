@@ -137,6 +137,7 @@ interface ListAllGroundTruthsParams {
 	status?: components["schemas"]["GroundTruthStatus"] | string | null;
 	dataset?: string | null;
 	tags?: string[];
+	excludeTags?: string[];
 	itemId?: string | null;
 	refUrl?: string | null;
 	keyword?: string | null;
@@ -159,6 +160,8 @@ export async function listAllGroundTruths(
 	if (params.status) query.status = params.status as string;
 	if (params.dataset) query.dataset = params.dataset;
 	if (params.tags?.length) query.tags = params.tags.join(",");
+	if (params.excludeTags?.length)
+		query.excludeTags = params.excludeTags.join(",");
 	if (params.itemId) query.itemId = params.itemId;
 	if (params.refUrl) query.refUrl = params.refUrl;
 	if (params.keyword) query.keyword = params.keyword;

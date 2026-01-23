@@ -36,13 +36,25 @@ export function parseFilterStateFromUrl(search: string): Partial<FilterState> {
 		filterState.dataset = dataset;
 	}
 
-	// Parse tags (comma-separated)
-	const tagsParam = params.get("tags");
-	if (tagsParam) {
-		filterState.tags = tagsParam
-			.split(",")
-			.map((tag) => tag.trim())
-			.filter((tag) => tag.length > 0);
+	// Parse tags (comma-separated for include, excludeTags for exclude)
+	const includeTagsParam = params.get("tags");
+	const excludeTagsParam = params.get("excludeTags");
+
+	if (includeTagsParam || excludeTagsParam) {
+		filterState.tags = {
+			include: includeTagsParam
+				? includeTagsParam
+						.split(",")
+						.map((tag) => tag.trim())
+						.filter((tag) => tag.length > 0)
+				: [],
+			exclude: excludeTagsParam
+				? excludeTagsParam
+						.split(",")
+						.map((tag) => tag.trim())
+						.filter((tag) => tag.length > 0)
+				: [],
+		};
 	}
 
 	// Parse itemId
@@ -105,10 +117,16 @@ export function filterStateToUrlParams(
 
 	if (
 		filters.tags &&
-		filters.tags.length > 0 &&
-		(defaults.tags?.length ?? 0) === 0
+		(filters.tags.include.length > 0 || filters.tags.exclude.length > 0) &&
+		(defaults.tags?.include?.length ?? 0) === 0 &&
+		(defaults.tags?.exclude?.length ?? 0) === 0
 	) {
-		params.set("tags", filters.tags.join(","));
+		if (filters.tags.include.length > 0) {
+			params.set("tags", filters.tags.include.join(","));
+		}
+		if (filters.tags.exclude.length > 0) {
+			params.set("excludeTags", filters.tags.exclude.join(","));
+		}
 	}
 
 	if (filters.itemId !== defaults.itemId && filters.itemId) {
