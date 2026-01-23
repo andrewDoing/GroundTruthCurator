@@ -1,5 +1,6 @@
 import { Lock, Plus, Tag, X } from "lucide-react";
 import { useId, useState } from "react";
+import useModalKeys from "../../../hooks/useModalKeys";
 import { addTags, validateExclusiveTags } from "../../../services/tags";
 import ModalPortal from "../../modals/ModalPortal";
 
@@ -29,6 +30,12 @@ export default function TagsModal({
 	const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 	const [validationError, setValidationError] = useState<string | null>(null);
 	const [schemaError, setSchemaError] = useState<string | null>(null);
+
+	// Handle keyboard shortcuts (Escape to close)
+	useModalKeys({
+		enabled: isOpen,
+		onClose,
+	});
 
 	// Derive grouped tags by prefix before ':'
 	const grouped = (() => {

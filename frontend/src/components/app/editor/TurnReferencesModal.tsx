@@ -6,6 +6,7 @@ import {
 	X,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import useModalKeys from "../../../hooks/useModalKeys";
 import { useToasts } from "../../../hooks/useToasts";
 import type { Reference } from "../../../models/groundTruth";
 import { cn, normalizeUrl, urlToTitle } from "../../../models/utils";
@@ -57,6 +58,12 @@ export default function TurnReferencesModal({
 	const requireKeyPara = config?.requireKeyParagraph ?? false;
 	const { toasts, showToast, dismiss } = useToasts();
 	const undoTimerRef = useRef<number | null>(null);
+
+	// Handle keyboard shortcuts (Escape to close)
+	useModalKeys({
+		enabled: isOpen,
+		onClose,
+	});
 
 	// Clear selections when modal closes
 	useEffect(() => {
