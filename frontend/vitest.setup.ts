@@ -1,9 +1,9 @@
 // Extend Vitest's expect with jest-dom matchers
 import "@testing-library/jest-dom/vitest";
-import { vi } from "vitest";
+import { cleanup } from "@testing-library/react";
+import { vi, beforeEach, afterEach } from "vitest";
 
 // Mock global fetch to prevent network calls in tests
-// This is especially important for hooks like useTagGlossary that fetch on mount
 const mockFetch = vi.fn(() =>
 	Promise.resolve({
 		ok: true,
@@ -15,3 +15,26 @@ const mockFetch = vi.fn(() =>
 );
 
 global.fetch = mockFetch;
+
+// Mock the useTagGlossary hook to prevent async fetch calls during tests
+vi.mock("./src/hooks/useTagGlossary", () => ({
+	useTagGlossary: () => ({
+		glossary: {},
+		loading: false,
+		error: null,
+	}),
+	useTagDescription: () => undefined,
+	clearGlossaryCache: vi.fn(),
+	setMockGlossary: vi.fn(),
+}));
+
+// Clear mocks before each test
+beforeEach(() => {
+	mockFetch.mockClear();
+});
+
+// Cleanup after each test to prevent DOM pollution
+afterEach(() => {
+	cleanup();
+	vi.clearAllTimers();
+});

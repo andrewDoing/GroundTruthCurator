@@ -16,8 +16,6 @@ describe("useGroundTruthCache", () => {
 		references: [],
 		manualTags: [],
 		computedTags: [],
-		createdAt: "2026-01-23T00:00:00Z",
-		updatedAt: "2026-01-23T00:00:00Z",
 		providerId: "api",
 	};
 

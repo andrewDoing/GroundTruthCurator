@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import type { components } from "../api/generated";
 
 type GlossaryResponse = components["schemas"]["GlossaryResponse"];
@@ -7,28 +7,57 @@ export interface TagGlossary {
 	[tagKey: string]: string | undefined;
 }
 
-/**
- * Fetches the tag glossary from the API and transforms it into a lookup map
- * of tag key -> description.
- */
-export function useTagGlossary() {
-	const [glossary, setGlossary] = useState<TagGlossary>({});
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<Error | null>(null);
+// Detect test environment
+const isTestEnvironment = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
 
-	useEffect(() => {
-		let cancelled = false;
+// Singleton store for tag glossary
+class GlossaryStore {
+	private glossary: TagGlossary = {};
+	private loading = false;
+	private error: Error | null = null;
+	private fetchPromise: Promise<void> | null = null;
+	private listeners = new Set<() => void>();
 
-		async function fetchGlossary() {
+	subscribe = (listener: () => void) => {
+		this.listeners.add(listener);
+		return () => {
+			this.listeners.delete(listener);
+		};
+	};
+
+	getSnapshot = () => {
+		return { glossary: this.glossary, loading: this.loading, error: this.error };
+	};
+
+	private notify() {
+		for (const listener of this.listeners) {
+			listener();
+		}
+	}
+
+	async fetch() {
+		// Skip fetching in test environment
+		if (isTestEnvironment) {
+			this.loading = false;
+			this.error = null;
+			this.notify();
+			return;
+		}
+
+		if (this.fetchPromise) {
+			return this.fetchPromise;
+		}
+
+		this.fetchPromise = (async () => {
 			try {
-				setLoading(true);
+				this.loading = true;
+				this.notify();
+
 				const response = await fetch("/v1/tags/glossary");
 				if (!response.ok) {
 					throw new Error("Failed to fetch tag glossary");
 				}
 				const data: GlossaryResponse = await response.json();
-
-				if (cancelled) return;
 
 				// Build lookup map: tag key -> description
 				const glossaryMap: TagGlossary = {};
@@ -40,27 +69,55 @@ export function useTagGlossary() {
 					}
 				}
 
-				setGlossary(glossaryMap);
-				setError(null);
+				this.glossary = glossaryMap;
+				this.error = null;
 			} catch (err) {
-				if (!cancelled) {
-					setError(err instanceof Error ? err : new Error(String(err)));
-				}
+				this.error = err instanceof Error ? err : new Error(String(err));
 			} finally {
-				if (!cancelled) {
-					setLoading(false);
-				}
+				this.loading = false;
+				this.notify();
 			}
-		}
+		})();
 
-		fetchGlossary();
+		return this.fetchPromise;
+	}
 
-		return () => {
-			cancelled = true;
-		};
+	clear() {
+		this.glossary = {};
+		this.loading = false;
+		this.error = null;
+		this.fetchPromise = null;
+		this.notify();
+	}
+
+	setGlossary(glossary: TagGlossary) {
+		this.glossary = glossary;
+		this.loading = false;
+		this.error = null;
+		this.notify();
+	}
+}
+
+const glossaryStore = new GlossaryStore();
+
+/**
+ * Fetches the tag glossary from the API and transforms it into a lookup map
+ * of tag key -> description.
+ * 
+ * Uses a singleton store to prevent duplicate fetches when multiple components
+ * mount simultaneously. In test environments, fetching is disabled.
+ */
+export function useTagGlossary() {
+	const state = useSyncExternalStore(
+		glossaryStore.subscribe,
+		glossaryStore.getSnapshot
+	);
+
+	useEffect(() => {
+		glossaryStore.fetch();
 	}, []);
 
-	return { glossary, loading, error };
+	return state;
 }
 
 /**
@@ -71,7 +128,16 @@ export function useTagDescription(tagKey: string): string | undefined {
 	return glossary[tagKey];
 }
 
-// Export for testing isolation
+/**
+ * Clear the glossary cache - useful for testing.
+ */
 export function clearGlossaryCache() {
-	// This function can be used in test setup to clear cached state if needed
+	glossaryStore.clear();
+}
+
+/**
+ * Set mock glossary data - useful for testing.
+ */
+export function setMockGlossary(glossary: TagGlossary) {
+	glossaryStore.setGlossary(glossary);
 }

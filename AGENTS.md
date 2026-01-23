@@ -72,7 +72,9 @@ This repository uses [Jujutsu (jj)](https://martinvonz.github.io/jj/) for versio
 
 ## Operational Learnings
 
-- **Frontend Tag Glossary**: The `useTagGlossary` hook makes API calls on mount, causing test isolation issues when components using `TagChip` are tested. Added global `fetch` mock in `vitest.setup.ts` to prevent network calls. Some tests still fail when run together due to React state updates - tests pass individually but fail in full suite. Issue tracked in implementation plan.
+### Test Isolation
+- **Frontend Tag Glossary**: The `useTagGlossary` hook caused 40 test failures when run in full suite due to async fetch calls and missing DOM cleanup. Fixed by: (1) mocking the hook at module level in `vitest.setup.ts`, and (2) adding `cleanup()` from `@testing-library/react` in afterEach hook. All 236 frontend tests now pass.
+>>>>>>> conflict 1 of 1 ends
 
 ## Testing and Build Commands
 
