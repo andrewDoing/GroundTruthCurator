@@ -136,7 +136,8 @@ class Settings(BaseSettings):
 
     # Duplicate detection settings
     DUPLICATE_DETECTION_ENABLED: bool = Field(
-        default=True, description="Enable duplicate detection during bulk import (informational warnings only)"
+        default=True,
+        description="Enable duplicate detection during bulk import (informational warnings only)",
     )
 
     # Observability / Telemetry

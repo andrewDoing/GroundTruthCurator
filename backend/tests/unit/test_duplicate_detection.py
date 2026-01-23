@@ -1,6 +1,5 @@
 """Unit tests for duplicate detection service."""
 
-import pytest
 from app.services.duplicate_detection_service import (
     DuplicateWarning,
     _normalize_text,
@@ -64,7 +63,7 @@ def test_items_are_duplicates_exact_question_match():
         synth_question="WHAT IS THE CAPITAL OF FRANCE?",  # Different case
         status=GroundTruthStatus.approved,
     )
-    
+
     is_dup, reason = _items_are_duplicates(draft, approved)
     assert is_dup
     assert reason == "exact question match"
@@ -86,7 +85,7 @@ def test_items_are_duplicates_question_and_answer_match():
         answer="THE ANSWER IS 4",
         status=GroundTruthStatus.approved,
     )
-    
+
     is_dup, reason = _items_are_duplicates(draft, approved)
     assert is_dup
     assert reason == "exact question and answer match"
@@ -106,7 +105,7 @@ def test_items_are_duplicates_whitespace_normalized():
         synth_question="What is the answer?",
         status=GroundTruthStatus.approved,
     )
-    
+
     is_dup, reason = _items_are_duplicates(draft, approved)
     assert is_dup
     assert "question match" in reason
@@ -126,7 +125,7 @@ def test_items_are_not_duplicates_different_questions():
         synth_question="What is the capital of Germany?",
         status=GroundTruthStatus.approved,
     )
-    
+
     is_dup, reason = _items_are_duplicates(draft, approved)
     assert not is_dup
     assert reason == ""
@@ -146,8 +145,8 @@ def test_items_are_not_duplicates_missing_question():
         synth_question="What is the answer?",
         status=GroundTruthStatus.approved,
     )
-    
-    is_dup, reason = _items_are_duplicates(draft, approved)
+
+    is_dup, _reason = _items_are_duplicates(draft, approved)
     assert not is_dup
 
 
@@ -173,7 +172,7 @@ def test_detect_duplicates_for_item_finds_match():
             status=GroundTruthStatus.approved,
         ),
     ]
-    
+
     warnings = detect_duplicates_for_item(draft, approved_items)
     assert len(warnings) == 1
     assert warnings[0].item_id == "draft-1"
@@ -198,7 +197,7 @@ def test_detect_duplicates_for_item_respects_max_results():
         )
         for i in range(10)
     ]
-    
+
     warnings = detect_duplicates_for_item(draft, approved_items, max_results=2)
     assert len(warnings) == 2
 
@@ -225,7 +224,7 @@ def test_detect_duplicates_for_item_ignores_non_approved():
             status=GroundTruthStatus.deleted,  # Not approved
         ),
     ]
-    
+
     warnings = detect_duplicates_for_item(draft, other_items)
     assert len(warnings) == 0
 
@@ -238,7 +237,7 @@ def test_detect_duplicates_for_item_ignores_self():
         synth_question="What is the answer?",
         status=GroundTruthStatus.approved,
     )
-    
+
     # Check item against itself
     warnings = detect_duplicates_for_item(item, [item])
     assert len(warnings) == 0
@@ -274,7 +273,7 @@ def test_detect_duplicates_for_bulk_items():
             status=GroundTruthStatus.approved,
         ),
     ]
-    
+
     warnings = detect_duplicates_for_bulk_items(draft_items, approved_items)
     assert len(warnings) == 1
     assert warnings[0].item_id == "draft-1"
@@ -305,7 +304,7 @@ def test_detect_duplicates_for_bulk_items_only_checks_drafts():
             status=GroundTruthStatus.approved,
         ),
     ]
-    
+
     warnings = detect_duplicates_for_bulk_items(items, approved_items)
     # Should not flag approved-new as duplicate of approved-1
     assert len(warnings) == 0
@@ -320,7 +319,7 @@ def test_duplicate_warning_model():
         duplicate_status="approved",
         match_reason="exact question match",
     )
-    
+
     data = warning.model_dump(by_alias=True)
     assert data["itemId"] == "draft-1"
     assert data["duplicateId"] == "approved-1"
@@ -345,7 +344,7 @@ def test_detect_duplicates_uses_edited_question():
         edited_question="What is the edited question?",
         status=GroundTruthStatus.approved,
     )
-    
+
     warnings = detect_duplicates_for_item(draft, [approved])
     assert len(warnings) == 1
     assert warnings[0].duplicate_id == "approved-1"

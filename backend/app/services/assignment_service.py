@@ -170,8 +170,25 @@ class AssignmentService:
         assert it.bucket is not None
         await self.repo.soft_delete_gt(it.datasetName, it.bucket, item_id)
 
+    def _has_takeover_permission(self, roles: list[str]) -> bool:
+        """Check if user has permission to force-assign items.
+
+        Args:
+            roles: List of user roles from authentication context
+
+        Returns:
+            True if user has admin or team-lead role, False otherwise
+        """
+        return "admin" in roles or "team-lead" in roles
+
     async def assign_single_item(
-        self, dataset: str, bucket: UUID, item_id: str, user_id: str
+        self,
+        dataset: str,
+        bucket: UUID,
+        item_id: str,
+        user_id: str,
+        force: bool = False,
+        user_roles: list[str] | None = None,
     ) -> GroundTruthItem:
         """Assign a single ground truth item to a user.
 
@@ -182,8 +199,23 @@ class AssignmentService:
         - Creates an assignment document in the assignments container
         - Returns the updated ground truth item
 
+        With force=True:
+        - Requires admin or team-lead role (raises PermissionError if not)
+        - Allows taking over items assigned to other users
+        - Cleans up the previous user's assignment document
+
+        Args:
+            dataset: Dataset name
+            bucket: Bucket UUID
+            item_id: Ground truth item ID
+            user_id: User ID to assign to
+            force: Whether to force assignment even if already assigned
+            user_roles: User roles for permission checking
+
         Raises:
         - ValueError if item not found or assignment fails
+        - PermissionError if force=True without proper role
+        - AssignmentConflictError if already assigned and force=False
         """
         # Fetch the item first to verify it exists and check assignability
         item = await self.repo.get_gt(dataset, bucket, item_id)
@@ -193,6 +225,9 @@ class AssignmentService:
             )
             raise ValueError("Item not found")
 
+        # Track the previous assignee for cleanup and logging
+        previous_assignee = None
+
         # Validate item can be assigned
         # Don't allow assignment of items already assigned to another user in draft state
         if (
@@ -200,14 +235,42 @@ class AssignmentService:
             and item.assignedTo != user_id
             and item.status == GroundTruthStatus.draft
         ):
-            logger.warning(
-                f"assignment_service.assign_single_item.already_assigned - dataset={dataset}, bucket={bucket}, item_id={item_id}, "
-                f"current_assigned_to={item.assignedTo}, current_status={item.status.value}"
+            if not force:
+                # Normal assignment blocked by existing assignment
+                logger.warning(
+                    f"assignment_service.assign_single_item.already_assigned - dataset={dataset}, bucket={bucket}, item_id={item_id}, "
+                    f"current_assigned_to={item.assignedTo}, current_status={item.status.value}"
+                )
+                raise AssignmentConflictError(
+                    "Item is already assigned to another user",
+                    assigned_to=item.assignedTo,
+                    assigned_at=item.assigned_at,
+                )
+
+            # Force assignment - validate user has permission
+            roles = user_roles or []
+            if not self._has_takeover_permission(roles):
+                logger.warning(
+                    f"assignment_service.assign_single_item.force_denied - dataset={dataset}, bucket={bucket}, item_id={item_id}, "
+                    f"roles={roles}"
+                )
+                raise PermissionError("Force assignment requires admin or team-lead role")
+
+            # Store previous assignee for cleanup
+            previous_assignee = item.assignedTo
+
+            # For force takeover, we need to clear the assignment first, then reassign
+            # Update the item directly to clear assignment before calling assign_to
+            item.assignedTo = None
+            item.assigned_at = None
+            item.status = (
+                GroundTruthStatus.draft if item.status == GroundTruthStatus.draft else item.status
             )
-            raise AssignmentConflictError(
-                "Item is already assigned to another user",
-                assigned_to=item.assignedTo,
-                assigned_at=item.assigned_at,
+            await self.repo.upsert_gt(item)
+
+            logger.info(
+                f"assignment_service.assign_single_item.force_takeover - dataset={dataset}, bucket={bucket}, item_id={item_id}, "
+                f"from={previous_assignee}, to={user_id}"
             )
 
         # Assign to user (will set status to draft regardless of previous state)
@@ -226,6 +289,33 @@ class AssignmentService:
         )
 
         await self.repo.upsert_assignment_doc(user_id, item)
+
+        # Clean up previous assignment document if this was a force takeover
+        if previous_assignee:
+            try:
+                deleted = await self.repo.delete_assignment_doc(
+                    user_id=previous_assignee,
+                    dataset=dataset,
+                    bucket=bucket,
+                    ground_truth_id=item_id,
+                )
+                if deleted:
+                    logger.info(
+                        f"assignment_service.assign_single_item.previous_assignment_cleaned - "
+                        f"dataset={dataset}, bucket={bucket}, item_id={item_id}, previous_assignee={previous_assignee}"
+                    )
+                else:
+                    logger.warning(
+                        f"assignment_service.assign_single_item.previous_assignment_not_found - "
+                        f"dataset={dataset}, bucket={bucket}, item_id={item_id}, previous_assignee={previous_assignee}"
+                    )
+            except Exception as e:
+                # Log error but don't fail the request - the assignment itself succeeded
+                logger.error(
+                    f"assignment_service.assign_single_item.cleanup_failed - "
+                    f"dataset={dataset}, bucket={bucket}, item_id={item_id}, previous_assignee={previous_assignee}, "
+                    f"error_type={type(e).__name__}, error={str(e)}"
+                )
 
         # Fetch and return the updated item
         updated = await self.repo.get_gt(dataset, bucket, item_id)

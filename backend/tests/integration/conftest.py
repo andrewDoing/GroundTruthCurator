@@ -312,6 +312,40 @@ def user_headers() -> dict[str, str]:
     return {"X-MS-CLIENT-PRINCIPAL": b64}
 
 
+@pytest.fixture(scope="function")
+def admin_headers() -> dict[str, str]:
+    """Per-test headers for requests with an admin role.
+
+    Includes the 'admin' role in claims for testing force assignment.
+    """
+    payload = {
+        "claims": [
+            {"typ": "emails", "val": "admin@example.com"},
+            {"typ": "name", "val": "admin"},
+            {"typ": "roles", "val": "admin"},
+        ]
+    }
+    b64 = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8")
+    return {"X-MS-CLIENT-PRINCIPAL": b64}
+
+
+@pytest.fixture(scope="function")
+def team_lead_headers() -> dict[str, str]:
+    """Per-test headers for requests with a team-lead role.
+
+    Includes the 'team-lead' role in claims for testing force assignment.
+    """
+    payload = {
+        "claims": [
+            {"typ": "emails", "val": "lead@example.com"},
+            {"typ": "name", "val": "team-lead"},
+            {"typ": "roles", "val": "team-lead"},
+        ]
+    }
+    b64 = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8")
+    return {"X-MS-CLIENT-PRINCIPAL": b64}
+
+
 @pytest.fixture(scope="function", autouse=True)
 async def close_repo_client_after_test():
     """Ensure repo's underlying Cosmos client is closed after each test.

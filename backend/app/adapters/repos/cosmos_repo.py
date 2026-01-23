@@ -753,8 +753,14 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         # Tag count sorting also requires in-memory filtering (ARRAY_LENGTH in ORDER BY is not well-supported)
 
         sort_field, sort_direction = self._resolve_sort(sort_by, sort_order)
-        
-        if normalized_tags or normalized_exclude_tags or ref_url or keyword or sort_field == SortField.tag_count:
+
+        if (
+            normalized_tags
+            or normalized_exclude_tags
+            or ref_url
+            or keyword
+            or sort_field == SortField.tag_count
+        ):
             # Always use in-memory filtering path for these filters
             # (Cosmos emulator has limitations, and keyword search needs in-memory filtering regardless)
             return await self._list_gt_paginated_with_emulator(
@@ -770,7 +776,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 safe_page,
                 safe_limit,
             )
-        
+
         self._logger.debug("Using direct Cosmos DB query for pagination without Cosmos Emulator")
         where_clause, filter_params = self._build_query_filter(
             status,

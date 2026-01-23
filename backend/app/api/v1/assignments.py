@@ -256,11 +256,21 @@ async def update_item(
     return res_item
 
 
+class AssignItemRequest(BaseModel):
+    """Request body for assignment endpoint."""
+
+    force: bool = Field(
+        default=False,
+        description="Force assignment even if item is assigned to another user (requires admin or team-lead role)",
+    )
+
+
 @router.post("/{dataset}/{bucket}/{item_id}/assign", status_code=200, response_model=None)
 async def assign_item(
     dataset: str,
     bucket: UUID,
     item_id: str,
+    body: AssignItemRequest | None = None,
     user: UserContext = Depends(get_current_user),
 ) -> GroundTruthItem | JSONResponse:
     """Assign a specific ground truth item to the current user.
@@ -270,13 +280,27 @@ async def assign_item(
     - Sets the item status to draft (even if previously approved/deleted/skipped)
     - Creates an assignment document in the assignments container
     - Returns the updated ground truth item
+
+    With force=true:
+    - Requires admin or team-lead role
+    - Allows taking over items assigned to other users
+    - Cleans up the previous user's assignment document
     """
+    force = body.force if body else False
+
     try:
         assigned = await container.assignment_service.assign_single_item(
-            dataset, bucket, item_id, user.user_id
+            dataset, bucket, item_id, user.user_id, force=force, user_roles=user.roles
         )
 
         return assigned
+    except PermissionError as e:
+        # Force assignment attempted without proper role
+        logger.warning(
+            f"api.assign_item.permission_denied - dataset={dataset}, bucket={bucket}, item_id={item_id}, "
+            f"error='{str(e)}'"
+        )
+        raise HTTPException(status_code=403, detail=str(e))
     except AssignmentConflictError as e:
         # Return structured 409 response with assignment details
         payload = {
