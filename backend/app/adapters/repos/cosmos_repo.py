@@ -1986,6 +1986,131 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             )
             return False
 
+    async def clear_assignment(self, item_id: str) -> bool:
+        """Clear assignment fields using partial update.
+
+        This is more efficient than upsert_gt for force takeover scenarios
+        as it only updates the necessary fields instead of replacing the entire document.
+
+        Args:
+            item_id: The ground truth item ID
+
+        Returns:
+            True if cleared successfully, False if item not found or error occurred
+        """
+        await self._ensure_initialized()
+
+        # Use different approaches for emulator vs production Cosmos DB
+        if self.is_cosmos_emulator_in_use():
+            return await self._clear_assignment_with_read_modify_replace(item_id)
+        else:
+            return await self._clear_assignment_with_patch(item_id)
+
+    async def _clear_assignment_with_patch(self, item_id: str) -> bool:
+        """Use patch operations for production Cosmos DB (optimal performance)."""
+        # First query to get dataset and bucket for partition key
+        query = "SELECT TOP 1 c.datasetName, c.bucket FROM c WHERE c.id = @id"
+        gt = self._gt_container
+        assert gt is not None
+        it = gt.query_items(  # type: ignore
+            query=query,
+            parameters=[{"name": "@id", "value": item_id}],
+            enable_scan_in_query=True,
+        )
+        partition_info: dict[str, Any] | None = None
+        async for d in it:  # type: ignore
+            partition_info = d
+            break
+
+        if not partition_info:
+            self._logger.warning(f"repo.clear_assignment.item_not_found - item_id={item_id}")
+            return False
+
+        ds = partition_info.get("datasetName")
+        bucket = partition_info.get("bucket")
+        partition_key = [ds, str(bucket)]
+        now = datetime.now(timezone.utc).isoformat()
+
+        patch_operations = [
+            {"op": "remove", "path": "/assignedTo"},
+            {"op": "remove", "path": "/assignedAt"},
+            {"op": "set", "path": "/updatedAt", "value": now},
+        ]
+
+        try:
+            await gt.patch_item(
+                item=item_id,
+                partition_key=partition_key,
+                patch_operations=patch_operations,
+            )
+
+            self._logger.info(
+                f"repo.clear_assignment.success - item_id={item_id}, dataset={ds}, method=patch"
+            )
+            return True
+        except CosmosHttpResponseError as e:
+            self._logger.error(
+                f"repo.clear_assignment.patch_error - item_id={item_id}, dataset={ds}, "
+                f"error_type={type(e).__name__}, error='{str(e)}', status_code={getattr(e, 'status_code', None)}"
+            )
+            return False
+        except Exception as e:
+            self._logger.error(
+                f"repo.clear_assignment.unexpected_error - item_id={item_id}, dataset={ds}, "
+                f"error_type={type(e).__name__}, error='{str(e)}'"
+            )
+            return False
+
+    async def _clear_assignment_with_read_modify_replace(self, item_id: str) -> bool:
+        """Use read-modify-replace for emulator compatibility."""
+        # Select all fields to preserve complete document structure for replace_item
+        query = "SELECT TOP 1 * FROM c WHERE c.id = @id"
+        gt = self._gt_container
+        assert gt is not None
+        it = gt.query_items(  # type: ignore
+            query=query,
+            parameters=[{"name": "@id", "value": item_id}],
+            enable_scan_in_query=True,
+        )
+        doc: dict[str, Any] | None = None
+        async for d in it:  # type: ignore
+            doc = d
+            break
+
+        if not doc:
+            self._logger.warning(f"repo.clear_assignment.item_not_found - item_id={item_id}")
+            return False
+
+        ds = doc.get("datasetName")
+
+        try:
+            # Clear assignment fields
+            now = datetime.now(timezone.utc).isoformat()
+            updated_item = {
+                **doc,
+                "updatedAt": now,
+            }
+            # Remove assignment fields if they exist
+            updated_item.pop("assignedTo", None)
+            updated_item.pop("assignedAt", None)
+
+            # Use replace_item without etag
+            await gt.replace_item(
+                item=item_id,
+                body=updated_item,
+            )
+
+            self._logger.info(
+                f"repo.clear_assignment.success - item_id={item_id}, dataset={ds}, method=read_modify_replace"
+            )
+            return True
+        except Exception as e:
+            self._logger.error(
+                f"repo.clear_assignment.error - item_id={item_id}, dataset={ds}, "
+                f"error_type={type(e).__name__}, error='{str(e)}', status_code={getattr(e, 'status_code', None)}"
+            )
+            return False
+
     async def list_assigned(self, user_id: str) -> list[GroundTruthItem]:
         await self._ensure_initialized()
         query = "SELECT * FROM c WHERE c.assignedTo = @u AND c.status = 'draft'"

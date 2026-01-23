@@ -259,14 +259,14 @@ class AssignmentService:
             # Store previous assignee for cleanup
             previous_assignee = item.assignedTo
 
-            # For force takeover, we need to clear the assignment first, then reassign
-            # Update the item directly to clear assignment before calling assign_to
-            item.assignedTo = None
-            item.assigned_at = None
-            item.status = (
-                GroundTruthStatus.draft if item.status == GroundTruthStatus.draft else item.status
-            )
-            await self.repo.upsert_gt(item)
+            # For force takeover, clear the assignment using efficient patch operation
+            # instead of full document replace via upsert_gt
+            success = await self.repo.clear_assignment(item_id)
+            if not success:
+                logger.error(
+                    f"assignment_service.assign_single_item.clear_assignment_failed - dataset={dataset}, bucket={bucket}, item_id={item_id}"
+                )
+                raise ValueError("Failed to clear assignment for force takeover")
 
             logger.info(
                 f"assignment_service.assign_single_item.force_takeover - dataset={dataset}, bucket={bucket}, item_id={item_id}, "
