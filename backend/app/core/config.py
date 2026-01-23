@@ -140,6 +140,18 @@ class Settings(BaseSettings):
         description="Enable duplicate detection during bulk import (informational warnings only)",
     )
 
+    # Query performance monitoring
+    COSMOS_LOG_QUERY_METRICS: bool = Field(
+        default=False,
+        description="Enable detailed RU cost logging for Cosmos DB queries (may increase log volume)",
+    )
+    COSMOS_LOG_SLOW_QUERIES_ONLY: bool = Field(
+        default=True, description="Only log queries exceeding RU threshold (when metrics enabled)"
+    )
+    COSMOS_SLOW_QUERY_RU_THRESHOLD: float = Field(
+        default=10.0, description="RU threshold for slow query logging"
+    )
+
     # Observability / Telemetry
     # Toggle and connection string for Azure Monitor / App Insights via OpenTelemetry
     AZ_MONITOR_ENABLED: bool = True

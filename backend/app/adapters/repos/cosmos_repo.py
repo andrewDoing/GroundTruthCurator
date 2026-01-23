@@ -446,6 +446,71 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         ):
             await self._init()
 
+    async def _execute_query_with_metrics(
+        self,
+        container: ContainerProxy,
+        query: str,
+        parameters: list[dict[str, Any]],
+        operation_name: str,
+        enable_scan_in_query: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Execute query and log RU consumption if metrics enabled.
+
+        Args:
+            container: Cosmos container to query
+            query: SQL query string
+            parameters: Query parameters
+            operation_name: Human-readable operation name for logging
+            enable_scan_in_query: Allow cross-partition queries
+
+        Returns:
+            List of result documents
+        """
+        start_time = time.perf_counter()
+        items: list[dict[str, Any]] = []
+
+        iterator = container.query_items(
+            query=query,
+            parameters=parameters,
+            enable_scan_in_query=enable_scan_in_query,
+        )  # type: ignore
+
+        async for doc in iterator:  # type: ignore
+            items.append(doc)
+
+        # Extract RU charge from response headers
+        total_ru = 0.0
+        try:
+            # Access the internal response headers from the iterator
+            response_headers = getattr(iterator, "_last_response_headers", {})
+            if response_headers:
+                total_ru = float(response_headers.get("x-ms-request-charge", 0))
+        except (AttributeError, ValueError, TypeError):
+            # Fail gracefully if headers unavailable
+            pass
+
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+        # Log metrics if enabled
+        if settings.COSMOS_LOG_QUERY_METRICS:
+            should_log = True
+            if settings.COSMOS_LOG_SLOW_QUERIES_ONLY:
+                should_log = total_ru >= settings.COSMOS_SLOW_QUERY_RU_THRESHOLD
+
+            if should_log:
+                self._logger.info(
+                    "cosmos.query.metrics",
+                    extra={
+                        "operation": operation_name,
+                        "ru_charge": total_ru,
+                        "item_count": len(items),
+                        "elapsed_ms": round(elapsed_ms, 2),
+                        "query": query[:200],  # First 200 chars for debugging
+                    },
+                )
+
+        return items
+
     async def import_bulk_gt(
         self, items: list[GroundTruthItem], buckets: int | None = None
     ) -> BulkImportResult:
@@ -818,14 +883,15 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         gt = self._gt_container
         assert gt is not None
 
-        items: list[GroundTruthItem] = []
-        it = gt.query_items(  # type: ignore
+        docs = await self._execute_query_with_metrics(
+            container=gt,
             query=query,
             parameters=filter_params,
+            operation_name="list_gt_paginated.direct_query",
             enable_scan_in_query=True,
         )
-        async for doc in it:  # type: ignore
-            items.append(self._from_doc(doc))
+
+        items = [self._from_doc(doc) for doc in docs]
 
         # Get total count for pagination metadata
         total = await self._get_filtered_count(status, dataset, normalized_tags, item_id)
@@ -1445,12 +1511,16 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         draft = approved = deleted = 0
         gt = self._gt_container
         assert gt is not None
-        it = gt.query_items(
+
+        docs = await self._execute_query_with_metrics(
+            container=gt,
             query="SELECT c.status FROM c",
             parameters=[],
+            operation_name="stats.count_all_items",
             enable_scan_in_query=True,
-        )  # type: ignore
-        async for doc in it:  # type: ignore
+        )
+
+        for doc in docs:
             s = doc.get("status")
             if s == GroundTruthStatus.draft.value:
                 draft += 1
@@ -1470,12 +1540,16 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         )
         names: list[str] = []
         seen: set[str] = set()
-        it = gt.query_items(  # type: ignore
+
+        docs = await self._execute_query_with_metrics(
+            container=gt,
             query=query,
             parameters=[],
+            operation_name="list_datasets",
             enable_scan_in_query=True,
         )
-        async for raw in it:  # type: ignore
+
+        for raw in docs:
             if not isinstance(raw, str):
                 continue
             name = raw.strip()
