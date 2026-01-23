@@ -1,4 +1,4 @@
-import { FileDown } from "lucide-react";
+import { FileDown, Tag } from "lucide-react";
 import { APP_TITLE } from "../../config/branding";
 import LogoutButton from "../common/LogoutButton";
 
@@ -11,6 +11,7 @@ export default function AppHeader({
 	viewMode,
 	onToggleViewMode,
 	onOpenStats,
+	onOpenGlossary,
 	onExportJson,
 }: {
 	demoMode: boolean;
@@ -19,6 +20,7 @@ export default function AppHeader({
 	viewMode: ViewMode;
 	onToggleViewMode: () => void;
 	onOpenStats: () => void;
+	onOpenGlossary: () => void;
 	onExportJson: () => void;
 }) {
 	return (
@@ -56,6 +58,14 @@ export default function AppHeader({
 						title="Open stats page"
 					>
 						Stats
+					</button>
+					<button
+						type="button"
+						onClick={onOpenGlossary}
+						className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-sm hover:bg-violet-50"
+						title="View tag glossary"
+					>
+						<Tag className="h-4 w-4" /> Glossary
 					</button>
 					<button
 						type="button"

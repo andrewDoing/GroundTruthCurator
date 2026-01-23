@@ -9,6 +9,7 @@ import QuestionsExplorer from "./components/app/QuestionsExplorer";
 import QueueSidebar from "./components/app/QueueSidebar";
 import Toasts from "./components/common/Toasts";
 import InspectItemModal from "./components/modals/InspectItemModal";
+import TagGlossaryModal from "./components/modals/TagGlossaryModal";
 import DEMO_MODE from "./config/demo";
 import { runSelfTests } from "./dev/self-tests";
 import useGlobalHotkeys from "./hooks/useGlobalHotkeys";
@@ -34,6 +35,7 @@ export default function GTAppDemo() {
 	const [inspectItem, setInspectItem] = useState<QuestionsExplorerItem | null>(
 		null,
 	);
+	const [glossaryOpen, setGlossaryOpen] = useState(false);
 	const { toasts, showToast, dismiss } = useToasts();
 	const [viewMode, setViewMode] = useState<"curate" | "questions" | "stats">(
 		"curate",
@@ -167,6 +169,7 @@ export default function GTAppDemo() {
 					})
 				}
 				onOpenStats={() => setViewMode("stats")}
+				onOpenGlossary={() => setGlossaryOpen(true)}
 				onExportJson={onExportJson}
 			/>
 
@@ -435,6 +438,9 @@ export default function GTAppDemo() {
 				item={inspectItem}
 				onClose={() => setInspectItem(null)}
 			/>
+
+			{/* Tag Glossary Modal */}
+			{glossaryOpen && <TagGlossaryModal onClose={() => setGlossaryOpen(false)} />}
 
 			{/* Toasts */}
 			<Toasts

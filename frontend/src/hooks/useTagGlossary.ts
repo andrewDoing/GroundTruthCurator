@@ -13,6 +13,7 @@ const isTestEnvironment = typeof process !== 'undefined' && process.env.NODE_ENV
 // Singleton store for tag glossary
 class GlossaryStore {
 	private glossary: TagGlossary = {};
+	private rawGlossary: GlossaryResponse | null = null;
 	private loading = false;
 	private error: Error | null = null;
 	private fetchPromise: Promise<void> | null = null;
@@ -26,7 +27,12 @@ class GlossaryStore {
 	};
 
 	getSnapshot = () => {
-		return { glossary: this.glossary, loading: this.loading, error: this.error };
+		return { 
+			glossary: this.glossary, 
+			rawGlossary: this.rawGlossary,
+			loading: this.loading, 
+			error: this.error 
+		};
 	};
 
 	private notify() {
@@ -59,6 +65,9 @@ class GlossaryStore {
 				}
 				const data: GlossaryResponse = await response.json();
 
+				// Store raw glossary response
+				this.rawGlossary = data;
+
 				// Build lookup map: tag key -> description
 				const glossaryMap: TagGlossary = {};
 				for (const group of data.groups || []) {
@@ -84,6 +93,7 @@ class GlossaryStore {
 
 	clear() {
 		this.glossary = {};
+		this.rawGlossary = null;
 		this.loading = false;
 		this.error = null;
 		this.fetchPromise = null;

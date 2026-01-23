@@ -12,6 +12,7 @@ describe("AppHeader", () => {
 			onToggleSidebar: vi.fn(),
 			onToggleViewMode: vi.fn(),
 			onOpenStats: vi.fn(),
+			onOpenGlossary: vi.fn(),
 			onExportJson: vi.fn(),
 			...over,
 		};
@@ -50,6 +51,12 @@ describe("AppHeader", () => {
 		const props = setup();
 		fireEvent.click(screen.getByRole("button", { name: /Stats/i }));
 		expect(props.onOpenStats).toHaveBeenCalled();
+	});
+
+	it("calls onOpenGlossary when Glossary clicked", () => {
+		const props = setup();
+		fireEvent.click(screen.getByRole("button", { name: /Glossary/i }));
+		expect(props.onOpenGlossary).toHaveBeenCalled();
 	});
 
 	it("calls onExportJson when Export JSON clicked", () => {
