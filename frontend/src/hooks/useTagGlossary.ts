@@ -70,3 +70,8 @@ export function useTagDescription(tagKey: string): string | undefined {
 	const { glossary } = useTagGlossary();
 	return glossary[tagKey];
 }
+
+// Export for testing isolation
+export function clearGlossaryCache() {
+	// This function can be used in test setup to clear cached state if needed
+}

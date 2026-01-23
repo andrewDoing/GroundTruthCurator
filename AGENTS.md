@@ -70,6 +70,10 @@ This repository uses [Jujutsu (jj)](https://martinvonz.github.io/jj/) for versio
 - Keep commits atomic and focused on a single logical change
 - Write clear, descriptive commit messages
 
+## Operational Learnings
+
+- **Frontend Tag Glossary**: The `useTagGlossary` hook makes API calls on mount, causing test isolation issues when components using `TagChip` are tested. Added global `fetch` mock in `vitest.setup.ts` to prevent network calls. Some tests still fail when run together due to React state updates - tests pass individually but fail in full suite. Issue tracked in implementation plan.
+
 ## Testing and Build Commands
 
 ### Backend (Python with uv)
