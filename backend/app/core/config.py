@@ -134,6 +134,11 @@ class Settings(BaseSettings):
         description="Maximum items to fetch for tag filtering queries (memory safeguard)",
     )
 
+    # Duplicate detection settings
+    DUPLICATE_DETECTION_ENABLED: bool = Field(
+        default=True, description="Enable duplicate detection during bulk import (informational warnings only)"
+    )
+
     # Observability / Telemetry
     # Toggle and connection string for Azure Monitor / App Insights via OpenTelemetry
     AZ_MONITOR_ENABLED: bool = True

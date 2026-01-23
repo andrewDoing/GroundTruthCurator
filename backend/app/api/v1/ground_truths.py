@@ -21,6 +21,7 @@ from app.container import container
 from app.exports.models import SnapshotExportRequest
 from app.services.validation_service import validate_bulk_items
 from app.services.pii_service import PIIWarning, scan_bulk_items_for_pii
+from app.services.duplicate_detection_service import DuplicateWarning, detect_duplicates_for_bulk_items
 import logging
 from app.services.tagging_service import apply_computed_tags
 
@@ -51,6 +52,14 @@ class ImportBulkResponse(BaseModel):
         description=(
             "Warnings about potential personally identifiable information (PII) detected in imported items. "
             "These are informational only and do not block import. Review flagged content for remediation."
+        ),
+    )
+    duplicate_warnings: list[DuplicateWarning] = Field(
+        default_factory=list,
+        alias="duplicateWarnings",
+        description=(
+            "Warnings about draft items that appear to be duplicates of approved items. "
+            "These are informational only and do not block import. Review for potential duplicates."
         ),
     )
     validation_summary: ValidationSummary = Field(
@@ -165,6 +174,31 @@ async def import_bulk(
                 f"items={len(items)}, warnings={len(pii_warnings)}"
             )
 
+    # Detect duplicates (informational warnings only, does not block import)
+    duplicate_warnings: list[DuplicateWarning] = []
+    if settings.DUPLICATE_DETECTION_ENABLED:
+        # Fetch all approved items from the same dataset(s) to check against
+        datasets = {item.datasetName for item in items}
+        approved_items: list[GroundTruthItem] = []
+        for dataset in datasets:
+            # Fetch approved items from this dataset
+            result = await container.repo.list_gt_paginated(
+                dataset=dataset,
+                status=[GroundTruthStatus.approved],
+                page=1,
+                page_size=1000,  # Reasonable limit for duplicate detection
+                sort_field=SortField.updated_at,
+                sort_order=SortOrder.desc,
+            )
+            approved_items.extend(result.items)
+        
+        duplicate_warnings = detect_duplicates_for_bulk_items(items, approved_items)
+        if duplicate_warnings:
+            logger.info(
+                f"api.import_bulk.duplicates_detected - "
+                f"items={len(items)}, warnings={len(duplicate_warnings)}"
+            )
+
     # Build validation summary
     total_items = len(items)
     failed_count = len(errors)
@@ -180,6 +214,7 @@ async def import_bulk(
         errors=errors,
         uuids=uuids,
         pii_warnings=pii_warnings,
+        duplicate_warnings=duplicate_warnings,
         validation_summary=validation_summary,
     )
 
