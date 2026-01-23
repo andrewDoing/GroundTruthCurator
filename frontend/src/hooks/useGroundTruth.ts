@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiProvider } from "../adapters/apiProvider";
-import {
-	isDemoModeIgnored,
-	shouldUseDemoProvider,
-} from "../config/demo";
+import { isDemoModeIgnored, shouldUseDemoProvider } from "../config/demo";
 import type {
 	ConversationTurn,
 	GroundTruthItem,

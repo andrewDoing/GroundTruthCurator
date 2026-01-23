@@ -45,8 +45,9 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
 		}
 
 		// Fallback to environment variables (for local dev)
-		const trustedDomainsRaw = (import.meta.env
-			.VITE_TRUSTED_REFERENCE_DOMAINS as string | undefined) ?? "";
+		const trustedDomainsRaw =
+			(import.meta.env.VITE_TRUSTED_REFERENCE_DOMAINS as string | undefined) ??
+			"";
 		const trustedReferenceDomains = trustedDomainsRaw
 			.split(",")
 			.map((d) => d.trim().toLowerCase())

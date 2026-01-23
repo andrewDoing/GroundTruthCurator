@@ -394,11 +394,10 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             return len(item.refs or [])
         return history_refs
 
-    @staticmethod
-    def _to_doc(item: GroundTruthItem) -> dict[str, Any]:
+    def _to_doc(self, item: GroundTruthItem) -> dict[str, Any]:
         # Check if the doc has dataset and bucket fields, since they make the PK
         if not item.datasetName:
-            print(item.__repr__())
+            self._logger.error(f"Document missing datasetName: {item!r}")
             raise ValueError("Document must have datasetName")
 
         # Calculate totalReferences and update the item object

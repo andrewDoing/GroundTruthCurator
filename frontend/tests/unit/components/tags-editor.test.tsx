@@ -5,7 +5,13 @@ import TagsEditor from "../../../src/components/app/editor/TagsEditor";
 // Helper to mount with minimal props
 function setup(initial: string[] = [], computedTags?: string[]) {
 	const onChange = vi.fn();
-	render(<TagsEditor selected={initial} computedTags={computedTags} onChange={onChange} />);
+	render(
+		<TagsEditor
+			selected={initial}
+			computedTags={computedTags}
+			onChange={onChange}
+		/>,
+	);
 	const input = screen.getByRole("combobox") as HTMLInputElement;
 	return { input, onChange };
 }
@@ -57,14 +63,16 @@ describe("TagsEditor", () => {
 			// Computed tags should not have remove buttons
 			const buttons = screen.queryAllByRole("button");
 			// Should have no remove buttons for computed tags (only the input exists)
-			const removeButtons = buttons.filter(b => b.getAttribute("aria-label")?.includes("Remove"));
+			const removeButtons = buttons.filter((b) =>
+				b.getAttribute("aria-label")?.includes("Remove"),
+			);
 			expect(removeButtons.length).toBe(0);
 			expect(onChange).not.toHaveBeenCalled();
 		});
 
 		it("allows editing manual tags while computed tags are present", () => {
 			const { input, onChange } = setup(["manual:tag"], ["computed:tag"]);
-			
+
 			// Both should be visible
 			expect(screen.getByText("manual:tag")).toBeInTheDocument();
 			expect(screen.getByText("computed:tag")).toBeInTheDocument();

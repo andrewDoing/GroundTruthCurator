@@ -2,9 +2,9 @@
  * Unit tests for expected behavior validation in gtHelpers
  */
 
-import { describe, it, expect } from "vitest";
-import { canApproveMultiTurn } from "../../../src/models/gtHelpers";
+import { describe, expect, it } from "vitest";
 import type { GroundTruthItem } from "../../../src/models/groundTruth";
+import { canApproveMultiTurn } from "../../../src/models/gtHelpers";
 
 describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 	const baseItem: GroundTruthItem = {

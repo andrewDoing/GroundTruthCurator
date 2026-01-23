@@ -9,7 +9,7 @@ export default defineConfig({
 		exclude: [...configDefaults.exclude],
 		reporters: ["default", "junit"],
 		outputFile: {
-			junit: "./junit-results.xml"
-		}
+			junit: "./junit-results.xml",
+		},
 	},
 });

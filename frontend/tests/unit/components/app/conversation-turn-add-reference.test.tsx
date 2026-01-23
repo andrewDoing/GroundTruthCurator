@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import ConversationTurn from "../../../../src/components/app/editor/ConversationTurn";
 import type { ConversationTurn as ConversationTurnType } from "../../../../src/models/groundTruth";
 
@@ -17,7 +17,7 @@ describe("ConversationTurn - Add Reference Button", () => {
 
 	it("renders Add reference button for agent turn with no references", () => {
 		const mockOnViewReferences = vi.fn();
-		
+
 		render(
 			<ConversationTurn
 				turn={mockAgentTurn}
@@ -60,7 +60,7 @@ describe("ConversationTurn - Add Reference Button", () => {
 
 	it("does not render Add reference button when references exist", () => {
 		const mockOnViewReferences = vi.fn();
-		
+
 		render(
 			<ConversationTurn
 				turn={mockAgentTurn}
@@ -79,7 +79,7 @@ describe("ConversationTurn - Add Reference Button", () => {
 
 		const addButton = screen.queryByRole("button", { name: /add reference/i });
 		expect(addButton).not.toBeInTheDocument();
-		
+
 		// Should show the count button instead
 		const countButton = screen.getByRole("button", { name: /2 references/i });
 		expect(countButton).toBeInTheDocument();
@@ -87,7 +87,7 @@ describe("ConversationTurn - Add Reference Button", () => {
 
 	it("calls onViewReferences when Add reference clicked", () => {
 		const mockOnViewReferences = vi.fn();
-		
+
 		render(
 			<ConversationTurn
 				turn={mockAgentTurn}
@@ -106,13 +106,13 @@ describe("ConversationTurn - Add Reference Button", () => {
 
 		const addButton = screen.getByRole("button", { name: /add reference/i });
 		fireEvent.click(addButton);
-		
+
 		expect(mockOnViewReferences).toHaveBeenCalledTimes(1);
 	});
 
 	it("Add reference button uses same styling as count button", () => {
 		const mockOnViewReferences = vi.fn();
-		
+
 		const { rerender } = render(
 			<ConversationTurn
 				turn={mockAgentTurn}
@@ -131,7 +131,7 @@ describe("ConversationTurn - Add Reference Button", () => {
 
 		const addButton = screen.getByRole("button", { name: /add reference/i });
 		const addButtonClasses = addButton.className;
-		
+
 		// Rerender with references to get the count button
 		rerender(
 			<ConversationTurn
@@ -151,7 +151,7 @@ describe("ConversationTurn - Add Reference Button", () => {
 
 		const countButton = screen.getByRole("button", { name: /1 reference$/i });
 		const countButtonClasses = countButton.className;
-		
+
 		// Both buttons should have the same styling classes
 		expect(addButtonClasses).toBe(countButtonClasses);
 	});

@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+	type ConversationTurn,
 	formatConversationForAgent,
+	type GroundTruthItem,
 	getLastAgentTurn,
 	getLastUserTurn,
 	getTurnCount,
 	isMultiTurn,
-	type ConversationTurn,
-	type GroundTruthItem,
 } from "../../../src/models/groundTruth";
 
 describe("groundTruth multi-turn helpers", () => {
-	const makeItem = (overrides: Partial<GroundTruthItem> = {}): GroundTruthItem => ({
+	const makeItem = (
+		overrides: Partial<GroundTruthItem> = {},
+	): GroundTruthItem => ({
 		id: "item-1",
 		providerId: "demo",
 		question: "fallback question",

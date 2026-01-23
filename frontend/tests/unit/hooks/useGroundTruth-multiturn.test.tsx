@@ -72,7 +72,9 @@ describe("useGroundTruth multi-turn flows", () => {
 		await act(async () => {
 			result.current.addTurn("user", "Follow-up question");
 		});
-		expect(result.current.current?.history?.length).toBe(initialHistoryLength + 1);
+		expect(result.current.current?.history?.length).toBe(
+			initialHistoryLength + 1,
+		);
 		expect(result.current.current?.question).toBe("Follow-up question");
 		await act(async () => {
 			result.current.addTurn("agent", "Agent reply");

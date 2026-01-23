@@ -1,13 +1,13 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import useModalKeys from "../../hooks/useModalKeys";
-import { getRuntimeConfig } from "../../services/runtimeConfig";
 import type { GroundTruthItem } from "../../models/groundTruth";
 import { getGroundTruth } from "../../services/groundTruths";
+import { getRuntimeConfig } from "../../services/runtimeConfig";
+import { validateReferenceUrl } from "../../utils/urlValidation";
 import MultiTurnEditor from "../app/editor/MultiTurnEditor";
 import type { QuestionsExplorerItem } from "../app/QuestionsExplorer";
 import TagChip from "../common/TagChip";
-import { validateReferenceUrl } from "../../utils/urlValidation";
 
 type Props = {
 	isOpen: boolean;
@@ -21,9 +21,9 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 	);
 	const [isLoading, setIsLoading] = useState(false);
 	const [loadError, setLoadError] = useState<string | null>(null);
-	const [trustedReferenceDomains, setTrustedReferenceDomains] = useState<string[]>(
-		[],
-	);
+	const [trustedReferenceDomains, setTrustedReferenceDomains] = useState<
+		string[]
+	>([]);
 
 	useModalKeys({
 		enabled: isOpen,
@@ -214,13 +214,13 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 												return;
 											}
 
-												// For external or untrusted URLs, show user confirmation
-												const parsedUrl = new URL(ref.url);
-												const hostname = parsedUrl.hostname.toLowerCase();
-												const sameOrigin = hostname === window.location.hostname;
-												const isTrusted = trustedReferenceDomains.includes(hostname);
-												const isExternal = !sameOrigin && !isTrusted;
-
+											// For external or untrusted URLs, show user confirmation
+											const parsedUrl = new URL(ref.url);
+											const hostname = parsedUrl.hostname.toLowerCase();
+											const sameOrigin = hostname === window.location.hostname;
+											const isTrusted =
+												trustedReferenceDomains.includes(hostname);
+											const isExternal = !sameOrigin && !isTrusted;
 
 											if (isExternal) {
 												const confirmed = confirm(

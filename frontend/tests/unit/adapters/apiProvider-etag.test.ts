@@ -92,7 +92,9 @@ describe("ApiProvider ETag 412 retry behavior", () => {
 		);
 
 		// First call used original etag
-		expect(mockUpdateAssignedGroundTruth.mock.calls[0][4]).toBe("etag-original");
+		expect(mockUpdateAssignedGroundTruth.mock.calls[0][4]).toBe(
+			"etag-original",
+		);
 
 		// Second call used fresh etag
 		expect(mockUpdateAssignedGroundTruth.mock.calls[1][4]).toBe("etag-fresh");

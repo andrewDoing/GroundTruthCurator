@@ -6,7 +6,11 @@ import {
 	updateAssignedGroundTruth,
 } from "../services/assignments";
 import { deleteGroundTruth, getGroundTruthRaw } from "../services/groundTruths";
-import { groundTruthFromApi, groundTruthToPatch, type ApiGroundTruth } from "./apiMapper";
+import {
+	type ApiGroundTruth,
+	groundTruthFromApi,
+	groundTruthToPatch,
+} from "./apiMapper";
 
 export class ApiProvider implements Provider {
 	id = "api";

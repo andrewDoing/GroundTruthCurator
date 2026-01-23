@@ -6,20 +6,18 @@ import { fetchAvailableDatasets } from "../../services/datasets";
 import type { GroundTruthListPagination } from "../../services/groundTruths";
 import { listAllGroundTruths } from "../../services/groundTruths";
 import { fetchTagsWithComputed } from "../../services/tags";
-
-type FilterType = "all" | "draft" | "approved" | "skipped" | "deleted";
-type SortColumn = "refs" | "reviewedAt" | "hasAnswer" | null;
-type SortDirection = "asc" | "desc";
-
-interface FilterState {
-	status: FilterType;
-	dataset: string;
-	tags: string[];
-	itemId: string;
-	refUrl: string;
-	sortColumn: SortColumn;
-	sortDirection: SortDirection;
-}
+import type {
+	FilterState,
+	FilterType,
+	SortColumn,
+	SortDirection,
+} from "../../types/filters";
+import {
+	filterStateToUrlParams,
+	getCurrentSearch,
+	parseFilterStateFromUrl,
+	updateUrlWithoutReload,
+} from "../../utils/filterUrlParams";
 
 // Helper function for efficient array comparison (defined outside component for stability)
 function areArraysEqual<T>(a: T[], b: T[]): boolean {
@@ -55,18 +53,11 @@ export default function QuestionsExplorer({
 	// Use a ref to track the previous filter state to detect when filters change
 	const previousFilterRef = useRef<FilterState | null>(null);
 
-	// Filter state (unapplied)
-	const [activeFilter, setActiveFilter] = useState<FilterType>("all");
-	const [selectedDataset, setSelectedDataset] = useState<string>("all");
-	const [selectedTags, setSelectedTags] = useState<string[]>([]);
-	const [itemIdFilter, setItemIdFilter] = useState<string>("");
-	const [referenceUrlFilter, setReferenceUrlFilter] = useState<string>("");
-	const [sortColumn, setSortColumn] = useState<SortColumn>(null);
-	const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-	const [itemsPerPage, setItemsPerPage] = useState(25);
+	// Flag to track whether URL has been synchronized (prevent infinite loops)
+	const urlSyncedRef = useRef(false);
 
-	// Applied filter state (what was last sent to backend)
-	const [appliedFilter, setAppliedFilter] = useState<FilterState>({
+	// Default filter state
+	const defaultFilter: FilterState = {
 		status: "all",
 		dataset: "all",
 		tags: [],
@@ -74,7 +65,50 @@ export default function QuestionsExplorer({
 		refUrl: "",
 		sortColumn: null,
 		sortDirection: "desc",
-	});
+	};
+
+	// Initialize filter state from URL parameters
+	const initializeFilterStateFromUrl = (): FilterState => {
+		const urlFilters = parseFilterStateFromUrl(getCurrentSearch());
+		return {
+			status: urlFilters.status ?? defaultFilter.status,
+			dataset: urlFilters.dataset ?? defaultFilter.dataset,
+			tags: urlFilters.tags ?? defaultFilter.tags,
+			itemId: urlFilters.itemId ?? defaultFilter.itemId,
+			refUrl: urlFilters.refUrl ?? defaultFilter.refUrl,
+			sortColumn: urlFilters.sortColumn ?? defaultFilter.sortColumn,
+			sortDirection: urlFilters.sortDirection ?? defaultFilter.sortDirection,
+		};
+	};
+
+	// Filter state (unapplied)
+	const initialFilterState = initializeFilterStateFromUrl();
+	const [activeFilter, setActiveFilter] = useState<FilterType>(
+		initialFilterState.status,
+	);
+	const [selectedDataset, setSelectedDataset] = useState<string>(
+		initialFilterState.dataset,
+	);
+	const [selectedTags, setSelectedTags] = useState<string[]>(
+		initialFilterState.tags,
+	);
+	const [itemIdFilter, setItemIdFilter] = useState<string>(
+		initialFilterState.itemId,
+	);
+	const [referenceUrlFilter, setReferenceUrlFilter] = useState<string>(
+		initialFilterState.refUrl,
+	);
+	const [sortColumn, setSortColumn] = useState<SortColumn>(
+		initialFilterState.sortColumn,
+	);
+	const [sortDirection, setSortDirection] = useState<SortDirection>(
+		initialFilterState.sortDirection,
+	);
+	const [itemsPerPage, setItemsPerPage] = useState(25);
+
+	// Applied filter state (what was last sent to backend)
+	const [appliedFilter, setAppliedFilter] =
+		useState<FilterState>(initialFilterState);
 
 	const [currentPage, setCurrentPage] = useState(1);
 	const [fetchedItems, setFetchedItems] = useState<QuestionsExplorerItem[]>([]);
@@ -135,6 +169,20 @@ export default function QuestionsExplorer({
 			cancelled = true;
 		};
 	}, []);
+
+	// Sync applied filters to URL on every change
+	// This enables bookmarkable filtered views and filter persistence
+	useEffect(() => {
+		// Skip URL sync on initial mount to prevent unnecessary history entries
+		if (!urlSyncedRef.current) {
+			urlSyncedRef.current = true;
+			return;
+		}
+
+		const params = filterStateToUrlParams(appliedFilter, defaultFilter);
+		const search = params.toString();
+		updateUrlWithoutReload(search);
+	}, [appliedFilter]);
 
 	// Reset to page 1 when applied filters change (but not when page changes)
 	useEffect(() => {

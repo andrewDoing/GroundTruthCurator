@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("demo mode configuration", () => {
 	beforeEach(() => {
@@ -18,7 +18,9 @@ describe("demo mode configuration", () => {
 				isDemoModeIgnored: () => false,
 			}));
 
-			const { shouldUseDemoProvider } = await import("../../../src/config/demo");
+			const { shouldUseDemoProvider } = await import(
+				"../../../src/config/demo"
+			);
 			expect(shouldUseDemoProvider()).toBe(false);
 		});
 
@@ -32,7 +34,9 @@ describe("demo mode configuration", () => {
 				isDemoModeIgnored: () => false,
 			}));
 
-			const { shouldUseDemoProvider } = await import("../../../src/config/demo");
+			const { shouldUseDemoProvider } = await import(
+				"../../../src/config/demo"
+			);
 			expect(shouldUseDemoProvider()).toBe(true);
 		});
 
@@ -44,7 +48,9 @@ describe("demo mode configuration", () => {
 				isDemoModeIgnored: () => true,
 			}));
 
-			const { shouldUseDemoProvider } = await import("../../../src/config/demo");
+			const { shouldUseDemoProvider } = await import(
+				"../../../src/config/demo"
+			);
 			expect(shouldUseDemoProvider()).toBe(false);
 		});
 	});

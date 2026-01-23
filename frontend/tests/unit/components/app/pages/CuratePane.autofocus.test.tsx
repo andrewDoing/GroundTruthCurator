@@ -21,12 +21,12 @@ function Wrapper({ initial }: { initial: GroundTruthItem | null }) {
 			onUpdateComment={() => {}}
 			onUpdateTags={() => {}}
 			onUpdateHistory={() => {}}
-		onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
-			ok: true as const,
-			messageIndex: 0,
-		})}
-		onSaveDraft={() => {}}
-		onApprove={() => {}}
+			onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
+				ok: true as const,
+				messageIndex: 0,
+			})}
+			onSaveDraft={() => {}}
+			onApprove={() => {}}
 			onSkip={() => {}}
 			onDelete={() => {}}
 			onRestore={() => {}}
@@ -43,9 +43,7 @@ const baseItem: GroundTruthItem = {
 	id: "test-1",
 	question: "Existing question",
 	answer: "",
-	history: [
-		{ role: "user", content: "Existing question" },
-	],
+	history: [{ role: "user", content: "Existing question" }],
 	comment: "",
 	references: [],
 	status: "draft",

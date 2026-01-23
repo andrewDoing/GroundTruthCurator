@@ -20,7 +20,7 @@ beforeAll(async () => {
 describe("useGroundTruth selectItem with state cleanup", () => {
 	it("should reset state when switching items without unsaved changes", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -60,7 +60,7 @@ describe("useGroundTruth selectItem with state cleanup", () => {
 
 	it("should prompt for confirmation when switching with unsaved changes", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -99,7 +99,7 @@ describe("useGroundTruth selectItem with state cleanup", () => {
 
 	it("should allow switching with unsaved changes when confirmed", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -139,7 +139,7 @@ describe("useGroundTruth selectItem with state cleanup", () => {
 
 	it("should allow forced switch bypassing confirmation", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -165,7 +165,9 @@ describe("useGroundTruth selectItem with state cleanup", () => {
 		// Force switch without confirmation
 		let switchResult: boolean | undefined;
 		await act(async () => {
-			switchResult = await result.current.selectItem(nextItem.id, { force: true });
+			switchResult = await result.current.selectItem(nextItem.id, {
+				force: true,
+			});
 		});
 
 		expect(switchResult).toBe(true);
@@ -178,7 +180,7 @@ describe("useGroundTruth selectItem with state cleanup", () => {
 
 	it("should not switch when already on the same item", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -199,7 +201,7 @@ describe("useGroundTruth selectItem with state cleanup", () => {
 
 	it("should clear search results when switching items", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -235,7 +237,7 @@ describe("useGroundTruth selectItem with state cleanup", () => {
 
 	it("should handle null item selection", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -254,7 +256,7 @@ describe("useGroundTruth selectItem with state cleanup", () => {
 
 	it("should update baseline after successful selection", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});

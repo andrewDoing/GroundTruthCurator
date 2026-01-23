@@ -14,7 +14,8 @@ export const DEMO_JSON: GroundTruthItem[] = [
 				id: "r1",
 				title: "User Guide - Account Security",
 				url: "https://example.com/docs/account-security",
-				snippet: "Click the Reset Password button in the Security tab to initiate the recovery flow.",
+				snippet:
+					"Click the Reset Password button in the Security tab to initiate the recovery flow.",
 				visitedAt: null,
 				keyParagraph: "",
 			},
@@ -22,7 +23,8 @@ export const DEMO_JSON: GroundTruthItem[] = [
 				id: "r2",
 				title: "Troubleshooting Login Issues",
 				url: "https://example.com/docs/troubleshooting-login",
-				snippet: "If you forgot your password, use the reset feature in User Settings.",
+				snippet:
+					"If you forgot your password, use the reset feature in User Settings.",
 				visitedAt: null,
 				keyParagraph: "",
 			},
@@ -50,7 +52,8 @@ export const DEMO_JSON: GroundTruthItem[] = [
 				id: "r3",
 				title: "Data Export Capabilities",
 				url: "https://example.com/docs/data-export",
-				snippet: "Supported formats include CSV for spreadsheets, JSON for web apps, and XML for legacy systems.",
+				snippet:
+					"Supported formats include CSV for spreadsheets, JSON for web apps, and XML for legacy systems.",
 				visitedAt: null,
 				keyParagraph: "",
 			},

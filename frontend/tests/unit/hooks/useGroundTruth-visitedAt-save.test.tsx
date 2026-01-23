@@ -15,9 +15,10 @@ const runtimeConfigFixture = {
 };
 
 vi.mock("../../../src/services/runtimeConfig", async (importOriginal) => {
-	const actual = await importOriginal<
-		typeof import("../../../src/services/runtimeConfig")
-	>();
+	const actual =
+		await importOriginal<
+			typeof import("../../../src/services/runtimeConfig")
+		>();
 	return {
 		...actual,
 		getRuntimeConfig: vi.fn().mockResolvedValue(runtimeConfigFixture),
@@ -67,32 +68,32 @@ const updateAssignedGroundTruthMock = vi
 			};
 			const refsFromTopLevel: RefPatch[] = Array.isArray(patch.refs)
 				? (patch.refs as unknown[]).filter((r): r is RefPatch => {
-					if (typeof r !== "object" || r === null) return false;
-					const candidate = r as { url?: unknown };
-					return typeof candidate.url === "string";
-				})
-				: [];
-			const refsFromHistory: RefPatch[] = Array.isArray(patch.history)
-				? (patch.history as unknown[]).flatMap((turn) => {
-					if (typeof turn !== "object" || turn === null) return [];
-					const refs = (turn as { refs?: unknown }).refs;
-					if (!Array.isArray(refs)) return [];
-					return refs.filter((r): r is RefPatch => {
 						if (typeof r !== "object" || r === null) return false;
 						const candidate = r as { url?: unknown };
 						return typeof candidate.url === "string";
-					});
-				})
+					})
+				: [];
+			const refsFromHistory: RefPatch[] = Array.isArray(patch.history)
+				? (patch.history as unknown[]).flatMap((turn) => {
+						if (typeof turn !== "object" || turn === null) return [];
+						const refs = (turn as { refs?: unknown }).refs;
+						if (!Array.isArray(refs)) return [];
+						return refs.filter((r): r is RefPatch => {
+							if (typeof r !== "object" || r === null) return false;
+							const candidate = r as { url?: unknown };
+							return typeof candidate.url === "string";
+						});
+					})
 				: [];
 			const refsPatch = [...refsFromTopLevel, ...refsFromHistory];
-			const normalizedRefs = (refsPatch.length ? refsPatch : initialApiItem.refs).map(
-				(r) => ({
-					url: r.url,
-					content: r.content ?? null,
-					keyExcerpt: r.keyExcerpt ?? null,
-					bonus: r.bonus ?? false,
-				}),
-			);
+			const normalizedRefs = (
+				refsPatch.length ? refsPatch : initialApiItem.refs
+			).map((r) => ({
+				url: r.url,
+				content: r.content ?? null,
+				keyExcerpt: r.keyExcerpt ?? null,
+				bonus: r.bonus ?? false,
+			}));
 			return {
 				...initialApiItem,
 				id,

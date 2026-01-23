@@ -5,10 +5,10 @@
 
 /**
  * Validates that a reference URL uses a safe protocol and doesn't contain malicious patterns.
- * 
+ *
  * @param url - The URL to validate
  * @returns true if the URL is safe to open, false otherwise
- * 
+ *
  * @example
  * validateReferenceUrl("https://example.com") // true
  * validateReferenceUrl("javascript:alert('xss')") // false

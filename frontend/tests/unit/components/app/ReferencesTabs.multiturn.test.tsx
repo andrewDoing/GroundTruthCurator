@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import type { RefObject } from "react";
-import ReferencesTabs from "../../../../src/components/app/ReferencesPanel/ReferencesTabs";
 import type { RightTab } from "../../../../src/components/app/ReferencesPanel/ReferencesTabs";
+import ReferencesTabs from "../../../../src/components/app/ReferencesPanel/ReferencesTabs";
 import type { Reference } from "../../../../src/models/groundTruth";
 
 describe("ReferencesTabs multi-turn gating", () => {

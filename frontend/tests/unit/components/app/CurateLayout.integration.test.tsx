@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import CuratePane from "../../../../src/components/app/pages/CuratePane";
-import type { AgentGenerationResult } from "../../../../src/hooks/useGroundTruth";
 import QueueSidebar from "../../../../src/components/app/QueueSidebar";
+import type { AgentGenerationResult } from "../../../../src/hooks/useGroundTruth";
 import type { GroundTruthItem } from "../../../../src/models/groundTruth";
 
 // Minimal harness to exercise interactions between the sidebar and the editor
@@ -14,9 +14,7 @@ function MiniCurateApp() {
 			id: "1",
 			question: "Q-1",
 			answer: "",
-			history: [
-				{ role: "user", content: "Q-1" },
-			],
+			history: [{ role: "user", content: "Q-1" }],
 			references: [],
 			status: "draft",
 			providerId: "json",
@@ -26,9 +24,7 @@ function MiniCurateApp() {
 			id: "2",
 			question: "Q-2",
 			answer: "",
-			history: [
-				{ role: "user", content: "Q-2" },
-			],
+			history: [{ role: "user", content: "Q-2" }],
 			references: [],
 			status: "draft",
 			providerId: "json",
@@ -90,7 +86,9 @@ function MiniCurateApp() {
 						onUpdateHistory={(history) => {
 							setItems((arr) =>
 								arr.map((i) =>
-									i.id === selectedId ? { ...i, history, question: history[0]?.content || "" } : i,
+									i.id === selectedId
+										? { ...i, history, question: history[0]?.content || "" }
+										: i,
 								),
 							);
 							setUnsaved(true);
@@ -161,17 +159,17 @@ describe("Curate layout interactions (unit)", () => {
 		// Find the first turn's Edit button
 		const editButtons = screen.getAllByRole("button", { name: /Edit/i });
 		fireEvent.click(editButtons[0]);
-		
+
 		// Now find the textarea (it appears when in edit mode)
 		const textarea = screen.getByPlaceholderText(/Enter user message/i);
 		fireEvent.change(textarea, { target: { value: "Q-1 updated" } });
-		
+
 		// Save the edit by clicking the "Save" button within the turn (not "Save Draft")
 		// Use getAllByRole and find the save button by its title or position
 		const saveButtons = screen.getAllByRole("button", { name: /Save/i });
 		// The first Save button is the turn's save button, the second is "Save Draft"
 		fireEvent.click(saveButtons[0]);
-		
+
 		// Unsaved chip should appear in the sidebar for the selected item
 		expect(screen.getByText(/unsaved/i)).toBeInTheDocument();
 	});

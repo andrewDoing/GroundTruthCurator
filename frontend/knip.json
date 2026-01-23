@@ -1,26 +1,20 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": [
-    "src/main.tsx",
-    "src/App.tsx",
-    "src/demo.tsx"
-  ],
-  "project": [
-    "src/**/*.{ts,tsx}"
-  ],
-  "ignore": [
-    "src/api/generated.ts",
-    "src/vite-env.d.ts",
-    "**/*.test.{ts,tsx}",
-    "**/*.spec.{ts,tsx}",
-    "src/types/ambient-otel.d.ts",
-    "src/components/app/QuestionsExplorer.example.tsx"
-  ],
-  "vite": true,
-  "rules": {
-    "files": "warn",
-    "dependencies": "warn",
-    "exports": "warn",
-    "types": "warn"
-  }
+	"$schema": "https://unpkg.com/knip@5/schema.json",
+	"entry": ["src/main.tsx", "src/App.tsx", "src/demo.tsx"],
+	"project": ["src/**/*.{ts,tsx}"],
+	"ignore": [
+		"src/api/generated.ts",
+		"src/vite-env.d.ts",
+		"**/*.test.{ts,tsx}",
+		"**/*.spec.{ts,tsx}",
+		"src/types/ambient-otel.d.ts",
+		"src/components/app/QuestionsExplorer.example.tsx"
+	],
+	"vite": true,
+	"rules": {
+		"files": "warn",
+		"dependencies": "warn",
+		"exports": "warn",
+		"types": "warn"
+	}
 }

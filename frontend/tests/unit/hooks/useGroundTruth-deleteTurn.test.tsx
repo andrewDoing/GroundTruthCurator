@@ -21,7 +21,7 @@ beforeAll(async () => {
 describe("useGroundTruth deleteTurn", () => {
 	it("should delete a middle turn and re-index references correctly", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		// Wait for initial list load
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
@@ -76,11 +76,11 @@ describe("useGroundTruth deleteTurn", () => {
 		// None have messageIndex === 2, so all 3 should remain, just shifted down
 		const refs = result.current.current?.references || [];
 		expect(refs.length).toBe(3); // All refs remain, just re-indexed
-		
+
 		const ref1 = refs.find((r) => r.id === "ref1");
 		const ref2 = refs.find((r) => r.id === "ref2");
 		const ref3 = refs.find((r) => r.id === "ref3");
-		
+
 		expect(ref1?.messageIndex).toBe(1); // Unchanged (before deleted turn)
 		expect(ref2?.messageIndex).toBe(2); // Shifted down from 3 to 2
 		expect(ref3?.messageIndex).toBe(4); // Shifted down from 5 to 4
@@ -88,7 +88,7 @@ describe("useGroundTruth deleteTurn", () => {
 
 	it("should delete the first turn", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -133,7 +133,7 @@ describe("useGroundTruth deleteTurn", () => {
 
 	it("should delete the last turn", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -179,7 +179,7 @@ describe("useGroundTruth deleteTurn", () => {
 
 	it("should sync question/answer fields after deletion", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -214,7 +214,7 @@ describe("useGroundTruth deleteTurn", () => {
 
 	it("should handle deletion with no references", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -246,7 +246,7 @@ describe("useGroundTruth deleteTurn", () => {
 
 	it("should delete all turns leaving empty history", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -270,7 +270,7 @@ describe("useGroundTruth deleteTurn", () => {
 
 	it("should handle out-of-range index gracefully", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -297,7 +297,7 @@ describe("useGroundTruth deleteTurn", () => {
 
 	it("should remove references for deleted turn while preserving others", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});
@@ -341,7 +341,7 @@ describe("useGroundTruth deleteTurn", () => {
 		const refs = result.current.current?.references || [];
 		expect(refs.length).toBe(1);
 		expect(refs.find((r) => r.id.includes("turn1"))).toBeUndefined();
-		
+
 		// Reference for turn 3 should remain but re-indexed to turn 2
 		const ref = refs.find((r) => r.id === "ref1-turn3");
 		expect(ref).toBeDefined();
@@ -350,7 +350,7 @@ describe("useGroundTruth deleteTurn", () => {
 
 	it("should preserve references without messageIndex", async () => {
 		const { result } = renderHook(() => useGroundTruth());
-		
+
 		await waitFor(() => {
 			expect(result.current.current).toBeTruthy();
 		});

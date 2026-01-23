@@ -40,10 +40,10 @@ describe("CuratePane", () => {
 				onDuplicate={vi.fn()}
 				onUpdateQuestion={onUpdateQuestion}
 				onUpdateAnswer={onUpdateAnswer}
-			onUpdateComment={onUpdateComment}
-			onUpdateTags={onUpdateTags}
-			onUpdateHistory={vi.fn()}
-			onDeleteTurn={vi.fn()}
+				onUpdateComment={onUpdateComment}
+				onUpdateTags={onUpdateTags}
+				onUpdateHistory={vi.fn()}
+				onDeleteTurn={vi.fn()}
 				onGenerateAgentTurn={onGenerateAgentTurn}
 				onSaveDraft={onSaveDraft}
 				onApprove={onApprove}
@@ -77,22 +77,22 @@ describe("CuratePane", () => {
 
 	it("disables Approve when deleted", () => {
 		render(
-		<CuratePane
-			current={{ ...item, deleted: true }}
-			canApprove={true}
-			saving={false}
-			onDuplicate={vi.fn()}
-			onUpdateQuestion={vi.fn()}
-			onUpdateAnswer={vi.fn()}
-		onUpdateComment={vi.fn()}
-		onUpdateTags={vi.fn()}
-		onUpdateHistory={vi.fn()}
-		onDeleteTurn={vi.fn()}
-			onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
-				ok: true as const,
-				messageIndex: 0,
-			})}
-			onSaveDraft={vi.fn()}
+			<CuratePane
+				current={{ ...item, deleted: true }}
+				canApprove={true}
+				saving={false}
+				onDuplicate={vi.fn()}
+				onUpdateQuestion={vi.fn()}
+				onUpdateAnswer={vi.fn()}
+				onUpdateComment={vi.fn()}
+				onUpdateTags={vi.fn()}
+				onUpdateHistory={vi.fn()}
+				onDeleteTurn={vi.fn()}
+				onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
+					ok: true as const,
+					messageIndex: 0,
+				})}
+				onSaveDraft={vi.fn()}
 				onApprove={vi.fn()}
 				onSkip={vi.fn()}
 				onDelete={vi.fn()}
@@ -116,10 +116,10 @@ describe("CuratePane", () => {
 				onDuplicate={vi.fn()}
 				onUpdateQuestion={vi.fn()}
 				onUpdateAnswer={vi.fn()}
-			onUpdateComment={vi.fn()}
-			onUpdateTags={vi.fn()}
-			onUpdateHistory={vi.fn()}
-			onDeleteTurn={vi.fn()}
+				onUpdateComment={vi.fn()}
+				onUpdateTags={vi.fn()}
+				onUpdateHistory={vi.fn()}
+				onDeleteTurn={vi.fn()}
 				onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
 					ok: true as const,
 					messageIndex: 0,

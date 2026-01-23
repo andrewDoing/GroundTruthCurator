@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+	type ApiGroundTruth,
 	groundTruthFromApi,
 	groundTruthToPatch,
-	type ApiGroundTruth,
 } from "../../../src/adapters/apiMapper";
 import type { GroundTruthItem } from "../../../src/models/groundTruth";
 
@@ -99,7 +99,9 @@ describe("groundTruthFromApi", () => {
 					{
 						role: "assistant",
 						msg: "Follow-up answer",
-						refs: [{ url: "https://ref3.com", content: "Snippet 3", bonus: false }],
+						refs: [
+							{ url: "https://ref3.com", content: "Snippet 3", bonus: false },
+						],
 					},
 				],
 			});
@@ -187,7 +189,13 @@ describe("groundTruthFromApi", () => {
 			const api = makeApiItem({
 				editedQuestion: "Question",
 				answer: "Answer",
-				refs: [{ url: "https://legacy.ref", content: "Legacy content", bonus: false }],
+				refs: [
+					{
+						url: "https://legacy.ref",
+						content: "Legacy content",
+						bonus: false,
+					},
+				],
 				history: undefined,
 			});
 			const result = groundTruthFromApi(api);
@@ -216,7 +224,9 @@ describe("groundTruthFromApi", () => {
 					{ role: "user", msg: "Q" },
 					{ role: "assistant", msg: "A" },
 				],
-				refs: [{ url: "https://global.ref", content: "Global ref", bonus: false }],
+				refs: [
+					{ url: "https://global.ref", content: "Global ref", bonus: false },
+				],
 			});
 			const result = groundTruthFromApi(api);
 
@@ -252,7 +262,9 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			expect((result as Record<string, unknown>).datasetName).toBe("my-dataset");
+			expect((result as Record<string, unknown>).datasetName).toBe(
+				"my-dataset",
+			);
 			expect((result as Record<string, unknown>).bucket).toBe("my-bucket");
 			expect((result as Record<string, unknown>)._etag).toBe("my-etag");
 		});
@@ -294,7 +306,9 @@ describe("groundTruthFromApi", () => {
 });
 
 describe("groundTruthToPatch", () => {
-	function makeDomainItem(overrides: Partial<GroundTruthItem> = {}): GroundTruthItem {
+	function makeDomainItem(
+		overrides: Partial<GroundTruthItem> = {},
+	): GroundTruthItem {
 		return {
 			id: "gt-1",
 			providerId: "api",
@@ -444,7 +458,9 @@ describe("groundTruthToPatch", () => {
 		it("includes comment when defined", () => {
 			const item = makeDomainItem({ comment: "This is a comment" });
 			const patch = groundTruthToPatch({ item });
-			expect((patch as Record<string, unknown>).comment).toBe("This is a comment");
+			expect((patch as Record<string, unknown>).comment).toBe(
+				"This is a comment",
+			);
 		});
 
 		it("preserves empty string comment", () => {
@@ -470,7 +486,10 @@ describe("groundTruthToPatch", () => {
 					{
 						role: "agent",
 						content: "A",
-						expectedBehavior: ["generation:clarification", "generation:need-context"],
+						expectedBehavior: [
+							"generation:clarification",
+							"generation:need-context",
+						],
 					},
 				],
 			});
