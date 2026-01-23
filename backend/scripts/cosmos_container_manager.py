@@ -16,7 +16,7 @@ Usage Examples:
         --endpoint https://myaccount.documents.azure.com:443/ \\
         --use-aad \\
         --db my-database \\
-        --gt-container --assignments-container --tags-container
+        --gt-container --assignments-container --tags-container --tag-definitions-container
 
     # Key-based authentication (emulator):
     python scripts/cosmos_container_manager.py \\
@@ -24,7 +24,7 @@ Usage Examples:
         --key "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==" \\
         --no-verify \\
         --db my-database \\
-        --gt-container --assignments-container --tags-container
+        --gt-container --assignments-container --tags-container --tag-definitions-container
 
     # Single container with custom partition key:
     python scripts/cosmos_container_manager.py \\
@@ -275,6 +275,7 @@ def get_default_container_specs(
     gt_container: str | None = None,
     assignments_container: str | None = None,
     tags_container: str | None = None,
+    tag_definitions_container: str | None = None,
     indexing_policy_file: Path | None = None,
     max_throughput: int | None = None,
 ) -> list[ContainerSpec]:
@@ -285,6 +286,7 @@ def get_default_container_specs(
         gt_container: Name for ground truth container (if provided)
         assignments_container: Name for assignments container (if provided)
         tags_container: Name for tags container (if provided)
+        tag_definitions_container: Name for tag definitions container (if provided)
         indexing_policy_file: Path to indexing policy file for gt container
 
     Returns:
@@ -317,6 +319,15 @@ def get_default_container_specs(
             ContainerSpec(
                 name=tags_container,
                 partition_key_paths=["/pk"],
+                partition_key_kind="Hash",
+            )
+        )
+
+    if tag_definitions_container:
+        specs.append(
+            ContainerSpec(
+                name=tag_definitions_container,
+                partition_key_paths=["/tag_key"],
                 partition_key_kind="Hash",
             )
         )
@@ -390,7 +401,12 @@ def validate_args(args: argparse.Namespace) -> None:
         errors.append("Conflicting auth: provide either --key or --use-aad, not both")
 
     # Validate container configuration
-    has_default_containers = args.gt_container or args.assignments_container or args.tags_container
+    has_default_containers = (
+        args.gt_container
+        or args.assignments_container
+        or args.tags_container
+        or args.tag_definitions_container
+    )
     has_custom_container = args.container
     has_containers_file = args.containers
 
@@ -401,7 +417,7 @@ def validate_args(args: argparse.Namespace) -> None:
         errors.append("No containers specified: use --gt-container, --container, or --containers")
     if container_options > 1:
         errors.append(
-            "Conflicting container options: use only one of --gt-container/--assignments-container/--tags-container, --container, or --containers"
+            "Conflicting container options: use only one of --gt-container/--assignments-container/--tags-container/--tag-definitions-container, --container, or --containers"
         )
 
     # Validate custom container options
@@ -463,6 +479,9 @@ async def main_async(args: argparse.Namespace) -> None:
             if args.assignments_container
             else None,
             tags_container=args.tags_container if args.tags_container else None,
+            tag_definitions_container=args.tag_definitions_container
+            if args.tag_definitions_container
+            else None,
             indexing_policy_file=indexing_file,
             max_throughput=args.max_throughput,
         )
@@ -558,6 +577,14 @@ Examples:
         default=None,
         metavar="NAME",
         help="Create tags container (default name: tags)",
+    )
+    default_group.add_argument(
+        "--tag-definitions-container",
+        nargs="?",
+        const="tag_definitions",
+        default=None,
+        metavar="NAME",
+        help="Create tag definitions container (default name: tag_definitions)",
     )
 
     # Custom container options

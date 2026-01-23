@@ -244,3 +244,24 @@ class DatasetCurationInstructions(BaseModel):
     )
     updatedBy: Optional[str] = None
     etag: Optional[str] = Field(default=None, alias="_etag")
+
+
+class TagDefinition(BaseModel):
+    """Custom tag definition created by SMEs.
+
+    Stored in Cosmos DB tag_definitions container with partition key /tag_key.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str  # Same as tag_key for simplicity
+    tag_key: str  # Partition key (e.g., "source:custom_value")
+    description: str
+    created_by: str  # User ID/email who created the definition
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), alias="createdAt"
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), alias="updatedAt"
+    )
+    doc_type: str = Field(default="tag-definition", alias="docType")

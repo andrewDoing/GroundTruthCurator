@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from app.main import app
 
@@ -10,6 +11,21 @@ from app.main import app
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)
+
+
+@pytest.fixture
+def mock_tag_definitions_repo():
+    """Mock the tag_definitions_repo to avoid database dependency."""
+    repo = AsyncMock()
+    repo.list_all = AsyncMock(return_value=[])  # Return empty list by default
+    return repo
+
+
+@pytest.fixture(autouse=True)
+def patch_tag_definitions_repo(mock_tag_definitions_repo):
+    """Auto-patch tag_definitions_repo for all tests in this module."""
+    with patch("app.container.container.tag_definitions_repo", mock_tag_definitions_repo):
+        yield
 
 
 def test_glossary_endpoint_returns_manual_tags_with_descriptions(client: TestClient) -> None:
@@ -79,3 +95,55 @@ def test_glossary_schema_structure(client: TestClient) -> None:
         for tag in group["tags"]:
             assert "key" in tag
             # description is optional
+
+
+def test_glossary_includes_custom_definitions(
+    client: TestClient, mock_tag_definitions_repo
+) -> None:
+    """Test that the glossary endpoint includes custom tag definitions from the database."""
+    from app.domain.models import TagDefinition
+    from datetime import datetime, timezone
+
+    # Mock custom definitions
+    custom_defs = [
+        TagDefinition(
+            id="priority:urgent",
+            tag_key="priority:urgent",
+            description="Requires immediate attention",
+            created_by="test@example.com",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        ),
+        TagDefinition(
+            id="category:marketing",
+            tag_key="category:marketing",
+            description="Marketing-related content",
+            created_by="test@example.com",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        ),
+    ]
+    mock_tag_definitions_repo.list_all.return_value = custom_defs
+
+    response = client.get("/v1/tags/glossary")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Find custom group
+    custom_groups = [g for g in data["groups"] if g["type"] == "custom"]
+    assert len(custom_groups) == 1
+
+    custom_group = custom_groups[0]
+    assert custom_group["name"] == "custom"
+    assert custom_group["description"] == "Custom tags created by subject matter experts"
+    assert len(custom_group["tags"]) == 2
+
+    # Verify custom tags
+    priority_tag = next((t for t in custom_group["tags"] if t["key"] == "priority:urgent"), None)
+    assert priority_tag is not None
+    assert priority_tag["description"] == "Requires immediate attention"
+
+    category_tag = next((t for t in custom_group["tags"] if t["key"] == "category:marketing"), None)
+    assert category_tag is not None
+    assert category_tag["description"] == "Marketing-related content"

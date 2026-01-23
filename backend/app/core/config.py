@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     COSMOS_CONTAINER_GT: str = "ground_truth"
     COSMOS_CONTAINER_ASSIGNMENTS: str = "assignments"
     COSMOS_CONTAINER_TAGS: str = "tags"
+    COSMOS_CONTAINER_TAG_DEFINITIONS: str = "tag_definitions"
     USE_COSMOS_EMULATOR: bool = False
     # Emulator uses a self-signed cert; allow disabling TLS verification locally
     COSMOS_CONNECTION_VERIFY: bool | str | None = False

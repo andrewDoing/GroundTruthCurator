@@ -1092,7 +1092,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                     status,
                     dataset,
                     None,  # Don't include tags in SQL query for emulator
-                    exclude_tags=None,
+                    None,
                     item_id=item_id,
                     include_tags=False,
                 )
@@ -1125,7 +1125,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                     status,
                     dataset,
                     tags,
-                    exclude_tags=None,
+                    None,  # exclude_tags - not supported for stats count
                     item_id=item_id,
                     include_tags=True,
                 )
@@ -1160,9 +1160,9 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         where_clause, filter_params = self._build_query_filter(
             status,
             dataset,
-            tags,
-            item_id=item_id,
-            exclude_tags=None,
+            None,
+            None,  # exclude_tags
+            item_id,
             include_tags=False,
         )
         # Returns a single scalar value (e.g., [42])

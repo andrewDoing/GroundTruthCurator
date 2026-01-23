@@ -40,6 +40,7 @@ class Container:
     curation_service: CurationService
     tag_registry_service: TagRegistryService
     tags_repo: CosmosTagsRepo
+    tag_definitions_repo: Any  # CosmosTagDefinitionsRepo
     inference_service: GTCInferenceAdapter | None
     chat_service: ChatService
     agent_steps_store: AgentStepsStore | None
@@ -59,6 +60,7 @@ class Container:
         self.snapshot_service = cast(SnapshotService, None)
         self.curation_service = cast(CurationService, None)
         self.tags_repo = cast(CosmosTagsRepo, None)
+        self.tag_definitions_repo = cast(Any, None)
         self.tag_registry_service = cast(TagRegistryService, None)
         self.inference_service = None  # Lazily initialized by init_chat()
         self.agent_steps_store = cast(AgentStepsStore | None, None)
@@ -187,6 +189,18 @@ class Container:
         )
         self.tag_registry_service = TagRegistryService(self.tags_repo)
 
+        # Initialize tag definitions repo
+        from app.adapters.repos.tag_definitions_repo import CosmosTagDefinitionsRepo
+
+        self.tag_definitions_repo = CosmosTagDefinitionsRepo(
+            endpoint=settings.COSMOS_ENDPOINT,
+            key=settings.COSMOS_KEY.get_secret_value() if settings.COSMOS_KEY else None,
+            db_name=effective_db,
+            container_name=settings.COSMOS_CONTAINER_TAG_DEFINITIONS,
+            connection_verify=settings.COSMOS_CONNECTION_VERIFY,
+            credential=credential,
+        )
+
     async def startup_cosmos(self, db_name: str | None = None) -> None:
         """Initialize and validate Cosmos repos and services.
 
@@ -215,10 +229,14 @@ class Container:
         logger.info("Initializing tags repository...")
         await self.tags_repo._init()
 
+        logger.info("Initializing tag definitions repository...")
+        await self.tag_definitions_repo._init()
+
         # Step 3: Validate containers exist
         logger.info("Validating Cosmos DB containers...")
         await self.repo.validate_containers()
         await self.tags_repo.validate_container()
+        await self.tag_definitions_repo.validate_container()
         logger.info("Cosmos DB validation passed.")
 
     def init_search(self) -> None:

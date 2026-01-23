@@ -109,12 +109,12 @@ def detect_duplicates_for_item(
         is_dup, reason = _items_are_duplicates(draft_item, approved)
         if is_dup:
             warnings.append(
-                DuplicateWarning(
-                    itemId=draft_item.id,
-                    duplicateId=approved.id,
-                    duplicateQuestion=_get_question_text(approved),
-                    duplicateStatus=approved.status.value,
-                    matchReason=reason,
+                +DuplicateWarning(  # type: ignore[call-arg]
+                    item_id=draft_item.id,
+                    duplicate_id=approved.id,
+                    duplicate_question=_get_question_text(approved),
+                    duplicate_status=approved.status.value,
+                    match_reason=reason,
                 )
             )
 

@@ -181,4 +181,91 @@ async def get_tags_glossary() -> GlossaryResponse:
             )
         )
 
+    # Add custom tag definitions from database
+    custom_definitions = await container.tag_definitions_repo.list_all()
+    if custom_definitions:
+        custom_tags = [
+            TagDefinitionDTO(key=defn.tag_key, description=defn.description)
+            for defn in custom_definitions
+        ]
+        groups.append(
+            TagGroupGlossaryDTO(
+                name="custom",
+                description="Custom tags created by subject matter experts",
+                type="custom",
+                tags=custom_tags,
+            )
+        )
+
     return GlossaryResponse(version="v1", groups=groups)
+
+
+# --- Custom tag definitions management endpoints ---
+
+
+class TagDefinitionRequest(BaseModel):
+    """Request model for creating/updating a custom tag definition."""
+
+    tag_key: str = Field(description="Unique tag key (e.g., 'source:custom_value')")
+    description: str = Field(description="Human-readable description of the tag")
+
+
+class TagDefinitionResponse(BaseModel):
+    """Response model for a custom tag definition."""
+
+    tag_key: str
+    description: str
+    created_by: str
+    created_at: str
+    updated_at: str
+
+
+@router.post("/tags/definitions", response_model=TagDefinitionResponse, status_code=201)
+async def create_tag_definition(
+    req: TagDefinitionRequest, user_id: str = "system"
+) -> TagDefinitionResponse:
+    """Create or update a custom tag definition.
+
+    Note: In production, user_id should be obtained from authentication (e.g., via Depends(get_current_user)).
+    For now, we use a default value to keep the implementation simple.
+    """
+    from datetime import datetime, timezone
+    from app.domain.models import TagDefinition
+
+    # Check if definition already exists
+    existing = await container.tag_definitions_repo.get_definition(req.tag_key)
+
+    if existing:
+        # Update existing definition
+        existing.description = req.description
+        existing.updated_at = datetime.now(timezone.utc)
+        result = await container.tag_definitions_repo.upsert(existing)
+    else:
+        # Create new definition
+        definition = TagDefinition(
+            id=req.tag_key,
+            tag_key=req.tag_key,
+            description=req.description,
+            created_by=user_id,
+        )
+        result = await container.tag_definitions_repo.upsert(definition)
+
+    return TagDefinitionResponse(
+        tag_key=result.tag_key,
+        description=result.description,
+        created_by=result.created_by,
+        created_at=result.created_at.isoformat(),
+        updated_at=result.updated_at.isoformat(),
+    )
+
+
+@router.delete("/tags/definitions/{tag_key}", status_code=204)
+async def delete_tag_definition(tag_key: str) -> None:
+    """Delete a custom tag definition by tag_key."""
+    try:
+        await container.tag_definitions_repo.delete(tag_key)
+    except Exception as e:
+        # If tag doesn't exist, return 404
+        if "404" in str(e) or "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=f"Tag definition '{tag_key}' not found")
+        raise HTTPException(status_code=500, detail=str(e))
