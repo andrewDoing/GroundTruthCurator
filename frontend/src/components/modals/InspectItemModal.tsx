@@ -7,6 +7,7 @@ import { getGroundTruth } from "../../services/groundTruths";
 import MultiTurnEditor from "../app/editor/MultiTurnEditor";
 import type { QuestionsExplorerItem } from "../app/QuestionsExplorer";
 import TagChip from "../common/TagChip";
+import { validateReferenceUrl } from "../../utils/urlValidation";
 
 type Props = {
 	isOpen: boolean;
@@ -23,38 +24,6 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 	const [trustedReferenceDomains, setTrustedReferenceDomains] = useState<string[]>(
 		[],
 	);
-	// Add URL validation utility
-	const validateReferenceUrl = (url: string): boolean => {
-		try {
-			const parsedUrl = new URL(url);
-
-			// Only allow safe protocols
-			const allowedProtocols = ["http:", "https:"];
-			if (!allowedProtocols.includes(parsedUrl.protocol)) {
-				console.warn("Blocked unsafe URL protocol:", parsedUrl.protocol);
-				return false;
-			}
-
-			// Block known malicious patterns
-			const maliciousPatterns = [
-				/javascript:/i,
-				/data:/i,
-				/vbscript:/i,
-				/about:/i,
-				/blob:/i,
-			];
-
-			if (maliciousPatterns.some((pattern) => pattern.test(url))) {
-				console.warn("Blocked potentially malicious URL pattern:", url);
-				return false;
-			}
-
-			return true;
-		} catch (_error) {
-			console.warn("Invalid URL format:", url);
-			return false;
-		}
-	};
 
 	useModalKeys({
 		enabled: isOpen,

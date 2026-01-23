@@ -59,7 +59,7 @@ export default function SelectedTab({
 										}}
 										href={normalizeUrl(r.url)}
 										target="_blank"
-										rel="noreferrer"
+										rel="noopener noreferrer"
 									>
 										<ExternalLink className="h-3.5 w-3.5" />{" "}
 										{normalizeUrl(r.url)}

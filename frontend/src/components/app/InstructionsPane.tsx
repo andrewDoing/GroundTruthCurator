@@ -98,7 +98,7 @@ const mdComponents: Components = {
 		<a
 			className="text-violet-700 underline"
 			target="_blank"
-			rel="noreferrer"
+			rel="noopener noreferrer"
 			{...props}
 		/>
 	),

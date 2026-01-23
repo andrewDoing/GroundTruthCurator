@@ -27,6 +27,7 @@ import {
 } from "./services/groundTruths";
 import { getCachedConfig, getRuntimeConfig } from "./services/runtimeConfig";
 import { fetchTagSchema } from "./services/tags";
+import { validateReferenceUrl } from "./utils/urlValidation";
 
 export default function GTAppDemo() {
 	const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
@@ -70,6 +71,12 @@ export default function GTAppDemo() {
 	) => showToast(kind, msg, opts);
 
 	function onOpenRef(r: Reference) {
+		// Validate URL before opening
+		if (!validateReferenceUrl(r.url)) {
+			toast("error", "Cannot open reference: Invalid or unsafe URL");
+			return;
+		}
+
 		// Mark visited and open in external tab
 		gt.openReference(r);
 		const u = normalizeUrl(r.url);

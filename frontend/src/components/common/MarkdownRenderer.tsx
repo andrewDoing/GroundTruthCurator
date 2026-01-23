@@ -71,7 +71,7 @@ const mdComponents: Components = {
 		<a
 			className="text-violet-700 underline"
 			target="_blank"
-			rel="noreferrer"
+			rel="noopener noreferrer"
 			{...props}
 		/>
 	),
@@ -119,7 +119,7 @@ const compactComponents: Components = {
 		<a
 			className="text-violet-700 underline"
 			target="_blank"
-			rel="noreferrer"
+			rel="noopener noreferrer"
 			{...props}
 		/>
 	),

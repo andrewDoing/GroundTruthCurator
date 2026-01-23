@@ -139,13 +139,13 @@ while true; do
     rm -f "$copilot_output_file"
 
     # Push changes after each iteration (build mode only)
-    if [ "$MODE" = "build" ]; then
-        CURRENT_BRANCH=$(git branch --show-current)
-        git push origin "$CURRENT_BRANCH" 2>/dev/null || {
-            echo "Failed to push. Creating remote branch..."
-            git push -u origin "$CURRENT_BRANCH"
-        }
-    fi
+    # if [ "$MODE" = "build" ]; then
+    #     CURRENT_BRANCH=$(git branch --show-current)
+    #     git push origin "$CURRENT_BRANCH" 2>/dev/null || {
+    #         echo "Failed to push. Creating remote branch..."
+    #         git push -u origin "$CURRENT_BRANCH"
+    #     }
+    # fi
 
     echo -e "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "Iteration $ITERATION complete"
