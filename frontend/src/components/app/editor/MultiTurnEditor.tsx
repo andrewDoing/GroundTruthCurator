@@ -15,6 +15,7 @@ import type {
 	Reference,
 } from "../../../models/groundTruth";
 import { validateConversationPattern } from "../../../models/validators";
+import TagChip from "../../common/TagChip";
 import ConversationTurnComponent from "./ConversationTurn";
 import TagsModal from "./TagsModal";
 import TurnReferencesModal from "./TurnReferencesModal";
@@ -351,15 +352,15 @@ export default function MultiTurnEditor({
 							</button>
 						)}
 					</div>
-					{(current?.tags || []).length > 0 ? (
+					{(current?.computedTags?.length || 0) +
+					(current?.manualTags?.length || 0) >
+					0 ? (
 						<div className="flex flex-wrap gap-2">
-							{(current?.tags || []).map((tag) => (
-								<span
-									key={tag}
-									className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800"
-								>
-									{tag}
-								</span>
+							{current?.computedTags?.map((tag) => (
+								<TagChip key={`computed-${tag}`} tag={tag} isComputed />
+							))}
+							{current?.manualTags?.map((tag) => (
+								<TagChip key={`manual-${tag}`} tag={tag} />
 							))}
 						</div>
 					) : (

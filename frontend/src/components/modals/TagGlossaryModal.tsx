@@ -1,6 +1,7 @@
 import { Edit2, Plus, Search, Tag as TagIcon, Trash2, X } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { useTagGlossary } from "../../hooks/useTagGlossary";
+import useModalKeys from "../../hooks/useModalKeys";
 import { createTagDefinition, deleteTagDefinition } from "../../services/tags";
 
 interface TagGlossaryModalProps {
@@ -18,6 +19,13 @@ export default function TagGlossaryModal({ onClose }: TagGlossaryModalProps) {
 	const [newTagKey, setNewTagKey] = useState("");
 	const [newTagDescription, setNewTagDescription] = useState("");
 	const [submitting, setSubmitting] = useState(false);
+
+	// Handle ESC key to close modal
+	useModalKeys({
+		enabled: true,
+		onClose,
+		busy: submitting,
+	});
 
 	const filteredGroups = useMemo(() => {
 		if (!glossary?.groups) return [];
