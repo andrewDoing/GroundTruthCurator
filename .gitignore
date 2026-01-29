@@ -64,3 +64,4 @@ build/
 site/
 
 .playwright-cli/
+.copilot-tracking/

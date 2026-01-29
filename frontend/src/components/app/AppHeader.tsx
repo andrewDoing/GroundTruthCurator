@@ -25,8 +25,8 @@ export default function AppHeader({
 }) {
 	return (
 		<header className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
-			<div className="mx-auto flex w-full max-w-none items-center gap-3 px-4 py-3">
-				<div className="text-xl font-semibold">
+			<div className="mx-auto flex w-full max-w-none flex-wrap items-center gap-3 px-4 py-3 min-w-0">
+				<div className="w-full text-xl font-semibold sm:w-auto">
 					{APP_TITLE}{" "}
 					{demoMode && (
 						<span className="ml-2 align-middle rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
@@ -34,7 +34,7 @@ export default function AppHeader({
 						</span>
 					)}
 				</div>
-				<div className="ml-auto flex items-center gap-2">
+				<div className="ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
 					<button
 						type="button"
 						onClick={onToggleSidebar}

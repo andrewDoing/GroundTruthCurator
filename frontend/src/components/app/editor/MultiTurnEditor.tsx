@@ -353,7 +353,7 @@ export default function MultiTurnEditor({
 						)}
 					</div>
 					{(current?.computedTags?.length || 0) +
-					(current?.manualTags?.length || 0) >
+						(current?.manualTags?.length || 0) >
 					0 ? (
 						<div className="flex flex-wrap gap-2">
 							{current?.computedTags?.map((tag) => (

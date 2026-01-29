@@ -409,9 +409,14 @@ export default function QuestionsExplorer({
 	};
 
 	return (
-		<div className={cn("flex h-full flex-col gap-4", className)}>
-			{/* Header Section */}
-			<div className="space-y-3 flex-none">
+		<div
+			className={cn(
+				"flex w-full flex-1 flex-col gap-4 min-h-0 min-w-0",
+				className,
+			)}
+		>
+			{/* Header Section - constrained to prevent it from consuming all space */}
+			<div className="space-y-3 flex-none overflow-y-auto max-h-[30vh] md:max-h-[35vh] lg:max-h-[40vh]">
 				<h2 className="text-2xl font-bold text-slate-800">
 					Ground Truths Explorer
 				</h2>
@@ -420,7 +425,7 @@ export default function QuestionsExplorer({
 				</p>
 				{/* Dataset Selector - Now first and prominent */}
 				{availableDatasets.length > 0 && (
-					<div className="flex items-center gap-3">
+					<div className="flex flex-wrap items-center gap-3">
 						<label
 							htmlFor={datasetFilterId}
 							className="text-base font-semibold text-slate-800"
@@ -431,7 +436,7 @@ export default function QuestionsExplorer({
 							id={datasetFilterId}
 							value={selectedDataset}
 							onChange={handleDatasetChange}
-							className="rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-base font-medium text-slate-800 shadow-sm hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-colors"
+							className="w-full max-w-full rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-base font-medium text-slate-800 shadow-sm hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-colors sm:w-auto"
 						>
 							<option value="all">All Datasets</option>
 							{availableDatasets.map((dataset) => (
@@ -442,10 +447,10 @@ export default function QuestionsExplorer({
 						</select>
 					</div>
 				)}
-				{/* Item ID and Reference URL Filters - Horizontal Layout */}
-				<div className="flex items-start gap-4 flex-wrap">
+				{/* Item ID and Reference URL Filters - Responsive Layout */}
+				<div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
 					{/* Item ID Filter */}
-					<div className="flex-1 min-w-[300px]">
+					<div className="min-w-0">
 						<div className="flex items-center gap-2 mb-2">
 							<label
 								htmlFor="itemIdFilter"
@@ -519,20 +524,20 @@ export default function QuestionsExplorer({
 								)}
 							</div>
 						</div>
-						<div className="flex items-center gap-2">
+						<div className="flex flex-wrap items-center gap-2">
 							<input
 								id={useId()}
 								type="text"
 								value={itemIdFilter}
 								onChange={(e) => setItemIdFilter(e.target.value)}
 								placeholder="Enter item ID to search..."
-								className="flex-1 rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-base text-slate-800 shadow-sm hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-colors"
+								className="min-w-0 flex-1 rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-base text-slate-800 shadow-sm hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-colors"
 							/>
 							{itemIdFilter && (
 								<button
 									type="button"
 									onClick={() => setItemIdFilter("")}
-									className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 transition-colors"
+									className="shrink-0 rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 transition-colors"
 									title="Clear Item ID filter"
 								>
 									Clear
@@ -542,7 +547,7 @@ export default function QuestionsExplorer({
 					</div>
 
 					{/* Reference URL Filter */}
-					<div className="flex-1 min-w-[300px]">
+					<div className="min-w-0">
 						<div className="flex items-center gap-2 mb-2">
 							<label
 								htmlFor="referenceUrlFilter"
@@ -600,21 +605,21 @@ export default function QuestionsExplorer({
 								)}
 							</div>
 						</div>
-						<div className="flex items-center gap-2">
+						<div className="flex flex-wrap items-center gap-2">
 							<input
 								id={useId()}
 								type="text"
 								value={referenceUrlFilter}
 								onChange={(e) => setReferenceUrlFilter(e.target.value)}
 								placeholder="Enter the reference URL to search..."
-								className="flex-1 rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-base text-slate-800 shadow-sm hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-colors"
+								className="min-w-0 flex-1 rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-base text-slate-800 shadow-sm hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-colors"
 								title="Filter items that contain references (item-level or turn-level) matching this URL substring"
 							/>
 							{referenceUrlFilter && (
 								<button
 									type="button"
 									onClick={() => setReferenceUrlFilter("")}
-									className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 transition-colors"
+									className="shrink-0 rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 transition-colors"
 									title="Clear Reference URL filter"
 								>
 									Clear
@@ -624,7 +629,7 @@ export default function QuestionsExplorer({
 					</div>
 
 					{/* Keyword Search Filter */}
-					<div className="flex-1 min-w-[300px]">
+					<div className="min-w-0">
 						<div className="flex items-center gap-2 mb-2">
 							<label
 								htmlFor="keywordFilter"
@@ -633,21 +638,21 @@ export default function QuestionsExplorer({
 								Keyword Search:
 							</label>
 						</div>
-						<div className="flex items-center gap-2">
+						<div className="flex flex-wrap items-center gap-2">
 							<input
 								id={useId()}
 								type="text"
 								value={keywordFilter}
 								onChange={(e) => setKeywordFilter(e.target.value)}
 								placeholder="Search questions, answers, and history..."
-								className="flex-1 rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-base text-slate-800 shadow-sm hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-colors"
+								className="min-w-0 flex-1 rounded-lg border-2 border-slate-300 bg-white px-4 py-2 text-base text-slate-800 shadow-sm hover:border-violet-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition-colors"
 								title="Search for items containing this keyword (case-insensitive)"
 							/>
 							{keywordFilter && (
 								<button
 									type="button"
 									onClick={() => setKeywordFilter("")}
-									className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 transition-colors"
+									className="shrink-0 rounded-lg bg-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300 transition-colors"
 									title="Clear keyword search"
 								>
 									Clear
@@ -889,19 +894,23 @@ export default function QuestionsExplorer({
 			</div>
 
 			{/* Table View */}
-			<div className="flex-1 min-h-0">
-				<div className="flex h-full flex-col rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-					<div className="h-full overflow-x-auto overflow-y-auto">
-						<table className="w-full">
+			<div className="flex flex-1 flex-col min-h-0">
+				<div className="flex flex-1 flex-col rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden min-h-0">
+					<div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
+						<table className="w-full table-fixed">
 							<thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
 								<tr className="text-xs font-semibold text-slate-700">
-									<th className="px-3 py-3 text-left min-w-[100px]">ID</th>
+									<th className="px-3 py-3 text-left min-w-[80px] sm:min-w-[100px]">
+										ID
+									</th>
 									<th className="px-3 py-3 text-left min-w-[60px]">Status</th>
-									<th className="px-3 py-3 text-left min-w-[200px]">
+									<th className="px-3 py-3 text-left min-w-[160px] sm:min-w-[200px]">
 										Question
 									</th>
-									<th className="px-3 py-3 text-left min-w-[120px]">Tags</th>
-									<th className="px-3 py-3 text-center min-w-[70px]">
+									<th className="px-3 py-3 text-left min-w-[120px] hidden lg:table-cell">
+										Tags
+									</th>
+									<th className="px-3 py-3 text-center min-w-[70px] hidden xl:table-cell">
 										<button
 											type="button"
 											onClick={() => handleSort("hasAnswer")}
@@ -922,7 +931,7 @@ export default function QuestionsExplorer({
 												)}
 										</button>
 									</th>
-									<th className="px-3 py-3 text-center min-w-[50px]">
+									<th className="px-3 py-3 text-center min-w-[50px] hidden lg:table-cell">
 										<button
 											type="button"
 											onClick={() => handleSort("refs")}
@@ -944,7 +953,7 @@ export default function QuestionsExplorer({
 												)}
 										</button>
 									</th>
-									<th className="px-3 py-3 text-center min-w-[50px]">
+									<th className="px-3 py-3 text-center min-w-[50px] hidden xl:table-cell">
 										<button
 											type="button"
 											onClick={() => handleSort("tagCount")}
@@ -966,7 +975,7 @@ export default function QuestionsExplorer({
 												)}
 										</button>
 									</th>
-									<th className="px-3 py-3 text-center min-w-[70px]">
+									<th className="px-3 py-3 text-center min-w-[70px] hidden lg:table-cell">
 										<button
 											type="button"
 											onClick={() => handleSort("reviewedAt")}
@@ -987,7 +996,7 @@ export default function QuestionsExplorer({
 												)}
 										</button>
 									</th>
-									<th className="px-3 py-3 text-right min-w-[240px]">
+									<th className="px-3 py-3 text-right min-w-[140px] sm:min-w-[180px] lg:min-w-[240px]">
 										Actions
 									</th>
 								</tr>
@@ -1063,14 +1072,14 @@ export default function QuestionsExplorer({
 											{/* Question */}
 											<td className="px-3 py-3 text-sm">
 												<div
-													className="truncate font-medium text-slate-800 max-w-[300px]"
+													className="truncate font-medium text-slate-800 max-w-[180px] sm:max-w-[240px] lg:max-w-[300px]"
 													title={item.question}
 												>
 													{item.question || "(no question)"}
 												</div>
 											</td>
 											{/* Tags */}
-											<td className="px-3 py-3">
+											<td className="px-3 py-3 hidden lg:table-cell">
 												{(item.manualTags && item.manualTags.length > 0) ||
 												(item.computedTags && item.computedTags.length > 0) ? (
 													<div className="flex items-center gap-1">
@@ -1130,7 +1139,7 @@ export default function QuestionsExplorer({
 												)}
 											</td>
 											{/* Has Answer */}
-											<td className="px-3 py-3 text-center text-sm font-medium">
+											<td className="px-3 py-3 text-center text-sm font-medium hidden xl:table-cell">
 												{item.answer && item.answer.trim().length > 0 ? (
 													<span className="text-emerald-700">Yes</span>
 												) : (
@@ -1138,15 +1147,15 @@ export default function QuestionsExplorer({
 												)}
 											</td>
 											{/* Refs */}
-											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700">
+											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden lg:table-cell">
 												{item.totalReferences ?? 0}
 											</td>
 											{/* Tag Count */}
-											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700">
+											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden xl:table-cell">
 												{item.tags?.length ?? 0}
 											</td>
 											{/* Reviewed */}
-											<td className="px-3 py-3 text-center text-xs text-slate-600">
+											<td className="px-3 py-3 text-center text-xs text-slate-600 hidden lg:table-cell">
 												{item.reviewedAt
 													? new Date(item.reviewedAt).toLocaleDateString(
 															undefined,
@@ -1159,7 +1168,7 @@ export default function QuestionsExplorer({
 											</td>
 											{/* Actions */}
 											<td className="px-3 py-3">
-												<div className="flex items-center justify-end gap-2">
+												<div className="flex flex-wrap items-center justify-end gap-2">
 													<button
 														type="button"
 														onClick={() => onAssign(item)}
@@ -1240,8 +1249,8 @@ export default function QuestionsExplorer({
 
 			{/* Pagination Controls */}
 			{totalPages > 1 && (
-				<div className="mt-4 flex flex-none items-center justify-between">
-					<div className="flex items-center gap-2">
+				<div className="mt-4 flex flex-none flex-col gap-3 md:flex-row md:items-center md:justify-between">
+					<div className="flex flex-wrap items-center gap-2">
 						<button
 							type="button"
 							onClick={handlePreviousPage}
@@ -1256,7 +1265,7 @@ export default function QuestionsExplorer({
 							Previous
 						</button>
 
-						<div className="flex items-center gap-1">
+						<div className="flex flex-wrap items-center gap-1">
 							{Array.from({ length: totalPages }, (_, i) => i + 1).map(
 								(pageNum) => (
 									<button
@@ -1291,8 +1300,8 @@ export default function QuestionsExplorer({
 						</button>
 					</div>
 
-					<div className="flex items-center gap-4">
-						<div className="flex items-center gap-2">
+					<div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
+						<div className="flex flex-wrap items-center gap-2">
 							<label htmlFor={itemsPerPageId} className="text-sm text-gray-600">
 								Items per page:
 							</label>

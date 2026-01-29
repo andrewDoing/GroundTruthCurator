@@ -150,9 +150,9 @@ export default function GTAppDemo() {
 	}
 
 	return (
-		<div className="flex min-h-screen w-screen flex-col bg-gradient-to-b from-violet-50 via-white to-white text-slate-900">
+		<div className="flex h-screen w-screen flex-col overflow-hidden bg-gradient-to-b from-violet-50 via-white to-white text-slate-900">
 			{/* Top accent bar */}
-			<div className="h-1 w-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500" />
+			<div className="h-1 w-full flex-none bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500" />
 
 			<AppHeader
 				demoMode={DEMO_MODE}
@@ -183,13 +183,13 @@ export default function GTAppDemo() {
 				)}
 
 				{viewMode === "questions" && (
-					<section className="flex flex-1 flex-col rounded-2xl border bg-white p-4 shadow-sm min-h-0">
+					<section className="flex flex-1 flex-col rounded-2xl border bg-white p-4 shadow-sm min-h-0 min-w-0">
 						<InstructionsPane
 							className="mb-4 flex-none"
 							title="Questions Review Instructions"
 							markdown={`\n### Reviewing Questions\n\n- Scan for duplicates, out-of-scope, or low-quality questions.\n- Use Delete to soft-delete; you can restore later.\n- Open an item to curate details.\n`}
 						/>
-						<div className="flex flex-1 min-h-0">
+						<div className="flex flex-1 min-h-0 min-w-0">
 							<QuestionsExplorer
 								onAssign={async (item) => {
 									try {
@@ -277,11 +277,11 @@ export default function GTAppDemo() {
 				)}
 
 				{viewMode === "curate" && (
-					<div className="grid grid-cols-12 gap-4">
+					<div className="grid grid-cols-1 md:grid-cols-12 gap-4">
 						{/* Left: Queue */}
 						{sidebarOpen && (
 							<QueueSidebar
-								className="col-span-3"
+								className="hidden md:block col-span-1 md:col-span-4 lg:col-span-3"
 								items={gt.items}
 								selectedId={gt.selectedId}
 								onSelect={(id) => {
@@ -327,14 +327,15 @@ export default function GTAppDemo() {
 						{/* Center: Editor */}
 						<CuratePane
 							className={cn(
+								"col-span-1", // Mobile: full width
 								// In multi-turn mode (no references sidebar), take full remaining width
 								editorMode === "multi"
 									? sidebarOpen
-										? "col-span-9"
-										: "col-span-12"
+										? "md:col-span-8 lg:col-span-9"
+										: "md:col-span-12"
 									: sidebarOpen
-										? "col-span-5"
-										: "col-span-7",
+										? "md:col-span-8 lg:col-span-5"
+										: "md:col-span-12 lg:col-span-7",
 							)}
 							current={gt.current}
 							canApprove={gt.canApprove}
@@ -397,7 +398,12 @@ export default function GTAppDemo() {
 
 						{/* Right: References (Tabbed) - Only show in single-turn mode */}
 						{editorMode === "single" && (
-							<div className={cn(sidebarOpen ? "col-span-4" : "col-span-5")}>
+							<div
+								className={cn(
+									"hidden lg:block col-span-1",
+									sidebarOpen ? "lg:col-span-4" : "lg:col-span-5",
+								)}
+							>
 								<ReferencesSection
 									query={gt.query}
 									setQuery={gt.setQuery}

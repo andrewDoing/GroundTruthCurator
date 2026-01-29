@@ -1,7 +1,7 @@
 import { Edit2, Plus, Search, Tag as TagIcon, Trash2, X } from "lucide-react";
 import { useId, useMemo, useState } from "react";
-import { useTagGlossary } from "../../hooks/useTagGlossary";
 import useModalKeys from "../../hooks/useModalKeys";
+import { useTagGlossary } from "../../hooks/useTagGlossary";
 import { createTagDefinition, deleteTagDefinition } from "../../services/tags";
 
 interface TagGlossaryModalProps {
