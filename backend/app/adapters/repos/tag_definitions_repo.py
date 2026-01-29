@@ -162,7 +162,8 @@ class CosmosTagDefinitionsRepo:
         # Update timestamp
         definition.updated_at = datetime.now(timezone.utc)
 
-        body = definition.model_dump(by_alias=True)
+        # Use mode='json' to serialize datetime objects as ISO strings for Cosmos DB
+        body = definition.model_dump(mode="json", by_alias=True)
         # Add partition key field for Cosmos
         body["tag_key"] = definition.tag_key
 
