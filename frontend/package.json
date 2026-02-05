@@ -23,7 +23,7 @@
 		"@opentelemetry/exporter-trace-otlp-http": "^0.203.0",
 		"@opentelemetry/instrumentation-document-load": "^0.48.0",
 		"@opentelemetry/instrumentation-fetch": "^0.203.0",
-		"@opentelemetry/resources": "^2.0.1",
+		"@opentelemetry/resources": "^2.5.0",
 		"@opentelemetry/sdk-trace-web": "^2.0.1",
 		"@tailwindcss/vite": "^4.1.11",
 		"lucide-react": "^0.439.0",
