@@ -1,0 +1,323 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.40.2.10011",
+      "templateHash": "13848679433945537694"
+    },
+    "name": "Ground Truth Curator Infrastructure",
+    "description": "Deploys shared infrastructure for Ground Truth Curator (Cosmos DB + Container Apps environment)."
+  },
+  "definitions": {
+    "ResourceTags": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "type": "string"
+      },
+      "metadata": {
+        "description": "Resource tags applied to resources."
+      }
+    },
+    "CosmosConsistencyLevel": {
+      "type": "string",
+      "allowedValues": [
+        "BoundedStaleness",
+        "ConsistentPrefix",
+        "Eventual",
+        "Session",
+        "Strong"
+      ],
+      "metadata": {
+        "description": "Cosmos DB consistency level."
+      }
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure region for resources."
+      }
+    },
+    "resourcePrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource name prefix."
+      }
+    },
+    "environment": {
+      "type": "string",
+      "metadata": {
+        "description": "Deployment environment name (dev, test, prod)."
+      }
+    },
+    "tags": {
+      "$ref": "#/definitions/ResourceTags",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Resource tags applied to all resources."
+      }
+    },
+    "cosmosAccountName": {
+      "type": "string",
+      "nullable": true,
+      "metadata": {
+        "description": "Cosmos DB account name. (If null, a unique name is generated.)"
+      }
+    },
+    "cosmosDatabaseName": {
+      "type": "string",
+      "metadata": {
+        "description": "Cosmos DB SQL database name."
+      }
+    },
+    "cosmosShouldEnableServerless": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable serverless capacity mode for Cosmos DB."
+      }
+    },
+    "cosmosConsistencyLevel": {
+      "$ref": "#/definitions/CosmosConsistencyLevel",
+      "defaultValue": "Session",
+      "metadata": {
+        "description": "Cosmos DB consistency level."
+      }
+    },
+    "managedIdentityName": {
+      "type": "string",
+      "nullable": true,
+      "metadata": {
+        "description": "User-assigned managed identity name. (If null, a default name is generated.)"
+      }
+    },
+    "cosmosShouldAssignDataRole": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Should assign a Cosmos DB data role to the managed identity."
+      }
+    },
+    "cosmosDataRoleDefinitionName": {
+      "type": "string",
+      "defaultValue": "00000000-0000-0000-0000-000000000002",
+      "metadata": {
+        "description": "Cosmos DB data role definition name (GUID)."
+      }
+    },
+    "cosmosDataRoleScope": {
+      "type": "string",
+      "defaultValue": "/",
+      "metadata": {
+        "description": "Cosmos DB data role scope for the assignment."
+      }
+    },
+    "logAnalyticsWorkspaceName": {
+      "type": "string",
+      "nullable": true,
+      "metadata": {
+        "description": "Log Analytics workspace name. (If null, a default name is generated.)"
+      }
+    },
+    "logAnalyticsRetentionInDays": {
+      "type": "int",
+      "defaultValue": 30,
+      "metadata": {
+        "description": "Log Analytics retention in days."
+      }
+    },
+    "containerAppsEnvironmentName": {
+      "type": "string",
+      "nullable": true,
+      "metadata": {
+        "description": "Container Apps managed environment name. (If null, a default name is generated.)"
+      }
+    }
+  },
+  "variables": {
+    "normalizedPrefix": "[toLower(replace(parameters('resourcePrefix'), '-', ''))]",
+    "resolvedCosmosAccountName": "[coalesce(parameters('cosmosAccountName'), take(format('{0}{1}{2}', variables('normalizedPrefix'), parameters('environment'), uniqueString(resourceGroup().id)), 44))]",
+    "resolvedLogAnalyticsName": "[coalesce(parameters('logAnalyticsWorkspaceName'), format('{0}-{1}-law', parameters('resourcePrefix'), parameters('environment')))]",
+    "resolvedContainerAppsEnvName": "[coalesce(parameters('containerAppsEnvironmentName'), format('{0}-{1}-cae', parameters('resourcePrefix'), parameters('environment')))]",
+    "resolvedManagedIdentityName": "[coalesce(parameters('managedIdentityName'), format('{0}-{1}-mi', parameters('resourcePrefix'), parameters('environment')))]",
+    "cosmosDataRoleDefinitionId": "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions', variables('resolvedCosmosAccountName'), parameters('cosmosDataRoleDefinitionName'))]"
+  },
+  "resources": {
+    "logAnalyticsWorkspace": {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('resolvedLogAnalyticsName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "retentionInDays": "[parameters('logAnalyticsRetentionInDays')]",
+        "sku": {
+          "name": "PerGB2018"
+        }
+      }
+    },
+    "managedIdentity": {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[variables('resolvedManagedIdentityName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]"
+    },
+    "containerAppsEnvironment": {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('resolvedContainerAppsEnvName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference('logAnalyticsWorkspace').customerId]",
+            "sharedKey": "[listKeys('logAnalyticsWorkspace', '2023-09-01').primarySharedKey]"
+          }
+        }
+      },
+      "dependsOn": [
+        "logAnalyticsWorkspace"
+      ]
+    },
+    "cosmosAccount": {
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "apiVersion": "2023-11-15",
+      "name": "[variables('resolvedCosmosAccountName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "kind": "GlobalDocumentDB",
+      "properties": {
+        "databaseAccountOfferType": "Standard",
+        "consistencyPolicy": {
+          "defaultConsistencyLevel": "[parameters('cosmosConsistencyLevel')]"
+        },
+        "locations": [
+          {
+            "locationName": "[parameters('location')]",
+            "failoverPriority": 0,
+            "isZoneRedundant": false
+          }
+        ],
+        "enableAutomaticFailover": false,
+        "capabilities": "[if(parameters('cosmosShouldEnableServerless'), createArray(createObject('name', 'EnableServerless')), createArray())]"
+      }
+    },
+    "cosmosSqlDatabase": {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+      "apiVersion": "2023-11-15",
+      "name": "[format('{0}/{1}', variables('resolvedCosmosAccountName'), parameters('cosmosDatabaseName'))]",
+      "properties": {
+        "resource": {
+          "id": "[parameters('cosmosDatabaseName')]"
+        },
+        "options": {}
+      },
+      "dependsOn": [
+        "cosmosAccount"
+      ]
+    },
+    "cosmosDataRoleAssignment": {
+      "condition": "[parameters('cosmosShouldAssignDataRole')]",
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+      "apiVersion": "2023-11-15",
+      "name": "[format('{0}/{1}', variables('resolvedCosmosAccountName'), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('resolvedCosmosAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('resolvedManagedIdentityName')), parameters('cosmosDataRoleScope')))]",
+      "properties": {
+        "roleDefinitionId": "[variables('cosmosDataRoleDefinitionId')]",
+        "principalId": "[reference('managedIdentity').principalId]",
+        "scope": "[parameters('cosmosDataRoleScope')]"
+      },
+      "dependsOn": [
+        "cosmosAccount",
+        "managedIdentity"
+      ]
+    }
+  },
+  "outputs": {
+    "cosmosAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Cosmos DB account name."
+      },
+      "value": "[variables('resolvedCosmosAccountName')]"
+    },
+    "cosmosAccountEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Cosmos DB account endpoint."
+      },
+      "value": "[reference('cosmosAccount').documentEndpoint]"
+    },
+    "cosmosDatabaseName": {
+      "type": "string",
+      "metadata": {
+        "description": "Cosmos DB SQL database name."
+      },
+      "value": "[parameters('cosmosDatabaseName')]"
+    },
+    "logAnalyticsWorkspaceResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics workspace resource ID."
+      },
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('resolvedLogAnalyticsName'))]"
+    },
+    "logAnalyticsWorkspaceCustomerId": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics workspace customer ID."
+      },
+      "value": "[reference('logAnalyticsWorkspace').customerId]"
+    },
+    "containerAppsEnvironmentName": {
+      "type": "string",
+      "metadata": {
+        "description": "Container Apps managed environment name."
+      },
+      "value": "[variables('resolvedContainerAppsEnvName')]"
+    },
+    "containerAppsEnvironmentId": {
+      "type": "string",
+      "metadata": {
+        "description": "Container Apps managed environment resource ID."
+      },
+      "value": "[resourceId('Microsoft.App/managedEnvironments', variables('resolvedContainerAppsEnvName'))]"
+    },
+    "managedIdentityId": {
+      "type": "string",
+      "metadata": {
+        "description": "User-assigned managed identity resource ID."
+      },
+      "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('resolvedManagedIdentityName'))]"
+    },
+    "managedIdentityClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "User-assigned managed identity client ID."
+      },
+      "value": "[reference('managedIdentity').clientId]"
+    },
+    "managedIdentityPrincipalId": {
+      "type": "string",
+      "metadata": {
+        "description": "User-assigned managed identity principal ID."
+      },
+      "value": "[reference('managedIdentity').principalId]"
+    },
+    "cosmosDataRoleAssignmentId": {
+      "type": "string",
+      "nullable": true,
+      "metadata": {
+        "description": "Cosmos data role assignment resource ID, if created."
+      },
+      "value": "[if(parameters('cosmosShouldAssignDataRole'), resourceId('Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments', variables('resolvedCosmosAccountName'), guid(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('resolvedCosmosAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('resolvedManagedIdentityName')), parameters('cosmosDataRoleScope'))), null())]"
+    }
+  }
+}

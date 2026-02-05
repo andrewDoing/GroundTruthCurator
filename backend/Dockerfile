@@ -1,7 +1,7 @@
 # Multi-stage image that builds the frontend and packages the FastAPI backend.
 
 # --- Stage 1: build frontend (Vite/React assumed) ---
-FROM node:20-alpine AS fe-build
+FROM --platform=linux/amd64 node:20-alpine AS fe-build
 WORKDIR /work
 
 # Use repo root as build context; copy only manifests first for caching
@@ -14,7 +14,7 @@ RUN cd frontend && npm run build
 
 
 # --- Stage 2: backend runtime ---
-FROM python:3.11-slim AS runtime
+FROM --platform=linux/amd64 python:3.11-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
