@@ -3,7 +3,7 @@ site_description: >-
   A platform for subject-matter experts to create and maintain high-quality 
   ground truth datasets for agent evaluation and model accuracy measurement.
 site_author: Ground Truth Curator Team
-repo_url: https://github.com/andrewvineyard/GroundTruthCurator
+repo_url: https://github.com/andrewDoing/GroundTruthCurator
 edit_uri: edit/main/docs/
 
 theme:
@@ -103,6 +103,6 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/andrewvineyard/GroundTruthCurator
+      link: https://github.com/andrewDoing/GroundTruthCurator
   version:
     provider: mike
