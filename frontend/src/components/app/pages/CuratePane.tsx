@@ -181,7 +181,7 @@ export default function CuratePane({
 	}, [current?.id]);
 
 	return (
-		<section className={cn("space-y-3", className)}>
+		<section className={cn("space-y-3 overflow-y-auto min-h-0", className)}>
 			{current?.deleted && (
 				<div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
 					This ground truth is marked as deleted. You can restore it or leave it

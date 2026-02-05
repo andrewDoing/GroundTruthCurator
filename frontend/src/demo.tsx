@@ -277,7 +277,7 @@ export default function GTAppDemo() {
 				)}
 
 				{viewMode === "curate" && (
-					<div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+					<div className="grid grid-cols-1 md:grid-cols-12 gap-4 flex-1 min-h-0">
 						{/* Left: Queue */}
 						{sidebarOpen && (
 							<QueueSidebar
