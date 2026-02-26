@@ -41,7 +41,7 @@ This plan outlines how to refactor the current 1-file demo (`src/demo.tsx`) into
     - `ChangeCategorySelector`
     - `SaveControls`
   - References panel stays under `components/app/ReferencesPanel/*` and receives update/remove/open callbacks from the hook.
-  - Questions view list extracted to `QuestionsList`.
+  - Explorer view list extracted to `QuestionsList`.
 - Data/Provider boundary
   - Keep `JsonProvider` as the backing implementation.
   - `useGroundTruth` wraps provider calls, tracks selection, saving, and versioning fingerprints.
@@ -105,7 +105,7 @@ From `src/demo.tsx` → new modules:
 - UI components
   - Header bar: buttons wired to `useGroundTruth` actions `exportJson`, view toggles stay in parent state.
   - Center editors: `QuestionEditor`, `AnswerEditor`, `ChangeCategorySelector`, `SaveControls` consuming hook state/actions.
-  - Questions view list: `QuestionsList` consumes items + delete/restore actions from the hook and an `onOpen` callback to select/open.
+  - Explorer view list: `QuestionsList` consumes items + delete/restore actions from the hook and an `onOpen` callback to select/open.
 
 ## Proposed Files and Responsibilities
 - `src/hooks/useGroundTruth.ts`

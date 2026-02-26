@@ -11,7 +11,7 @@ We will add a lightweight Playwright setup that launches the Vite app and valida
 - References search, add, de-duplication, and selection
 - Selected references: visit, key paragraph, remove/undo
 - Draft answer generation modal and apply
-- Soft delete/restore (both in curate and questions views)
+- Soft delete/restore (both in curate and explorer views)
 - Export JSON modal
 - Assignments self-serve and my assignments
 
@@ -113,7 +113,7 @@ App bootstrap — `app.smoke.spec.ts`
 Sidebar & view switching — `queue-and-editor.spec.ts`
 - `should toggle sidebar visibility`
   - Hide sidebar removes queue; show restores it.
-- `should switch between curate and questions views`
+- `should switch between curate and explorer views`
   - Toggle button changes content accordingly.
 - `should select queue item and show its details`
   - Selecting `GT-0001` updates question/answer editors.
@@ -164,8 +164,8 @@ Soft delete & restore — `delete-restore.spec.ts`
 - `should restore current item and remove banner`
   - Restore → success toast; banner removed.
 
-Questions view triage — `questions-view.spec.ts`
-- `should soft delete and restore from questions view`
+Explorer view triage — `questions-view.spec.ts`
+- `should soft delete and restore from explorer view`
   - Row Delete/Restore; toasts; item opacity toggles.
 
 Export JSON — `export-json.spec.ts`

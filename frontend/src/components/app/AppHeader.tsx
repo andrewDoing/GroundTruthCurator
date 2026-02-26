@@ -47,9 +47,9 @@ export default function AppHeader({
 						type="button"
 						onClick={onToggleViewMode}
 						className="inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-sm hover:bg-violet-50"
-						title="Switch between Curation and Questions views"
+						title="Switch between Curation and Explorer views"
 					>
-						{viewMode === "curate" ? "Questions View" : "Back to Curation"}
+						{viewMode === "curate" ? "Explorer" : "Back to Curation"}
 					</button>
 					<button
 						type="button"

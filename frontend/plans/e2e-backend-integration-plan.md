@@ -203,7 +203,7 @@ CI/CD: UI tests on every commit, integration tests nightly
 ### **questions-explorer-integration.spec.ts**
 
 - **`test("should load questions from backend")`**
-  - Navigates to Questions View
+  - Navigates to Explorer View
   - Verifies items from seeded data appear in table
 
 - **`test("should filter by status")`**

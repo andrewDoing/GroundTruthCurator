@@ -48,7 +48,7 @@ function MiniCurateApp() {
 						setView((v) => (v === "curate" ? "questions" : "curate"))
 					}
 				>
-					{view === "curate" ? "Questions View" : "Back to Curation"}
+					{view === "curate" ? "Explorer" : "Back to Curation"}
 				</button>
 			</div>
 			{view === "curate" ? (
@@ -131,13 +131,13 @@ describe("Curate layout interactions (unit)", () => {
 
 	it("should switch between curate and questions views", () => {
 		render(<MiniCurateApp />);
-		fireEvent.click(screen.getByRole("button", { name: /Questions View/i }));
+		fireEvent.click(screen.getByRole("button", { name: /Explorer/i }));
 		expect(
 			screen.getByRole("button", { name: /Back to Curation/i }),
 		).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: /Back to Curation/i }));
 		expect(
-			screen.getByRole("button", { name: /Questions View/i }),
+			screen.getByRole("button", { name: /Explorer/i }),
 		).toBeInTheDocument();
 	});
 

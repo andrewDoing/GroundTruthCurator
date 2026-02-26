@@ -144,7 +144,7 @@ Key flows:
 4) Generate Answer – opens modal listing selected references; on confirm, calls backend `callAgentChat`. UI currently applies the full answer at once.
 5) Save – computes state fingerprint; if unchanged: returns "No changes". If approving, validates `canApproveCandidate`. On success, updates `items`, `current`, and lastSavedStateFp. Status-only saves do not bump version. Content changes (Q/A/refs/tags) bump version (self-tests run in dev).
 6) Export – triggers backend snapshot download via `groundTruths.downloadSnapshot()`; no in-app JSON modal.
-7) Soft delete – toggled via editor or Questions view; deleted items show a banner and cannot be approved; restore supported.
+7) Soft delete – toggled via editor or Explorer view; deleted items show a banner and cannot be approved; restore supported.
 8) Self-serve assignments – Queue offers a button to request more assignments (limit via `VITE_SELF_SERVE_LIMIT`).
 
 Self-tests: `runSelfTests()` asserts validator rules and provider bump rules in development only (console assertions).
@@ -251,7 +251,7 @@ Manual smoke test
 - Generate Answer populates answer text
 - Save Draft vs Approve follows version bump rules
 - Export triggers a JSON file download (snapshot)
-- Use Questions view to delete/restore; Stats view loads metrics
+- Use Explorer view to delete/restore; Stats view loads metrics
 
 ## Future Ideas
 

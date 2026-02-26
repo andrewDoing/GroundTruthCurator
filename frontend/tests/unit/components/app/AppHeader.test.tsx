@@ -42,7 +42,7 @@ describe("AppHeader", () => {
 	it("calls onToggleViewMode when view toggle clicked", () => {
 		const props = setup({ viewMode: "curate" });
 		fireEvent.click(
-			screen.getByRole("button", { name: /Questions View|Back to Curation/i }),
+			screen.getByRole("button", { name: /Explorer|Back to Curation/i }),
 		);
 		expect(props.onToggleViewMode).toHaveBeenCalled();
 	});
