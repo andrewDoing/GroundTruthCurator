@@ -45,7 +45,7 @@
 		"knip": "^5.75.2",
 		"openapi-typescript": "^7.5.2",
 		"tailwindcss": "^4.1.11",
-		"typescript": "~5.8.3",
+		"typescript": "~5.9.3",
 		"vite": "^7.1.2",
 		"vitest": "^3.2.4"
 	}
