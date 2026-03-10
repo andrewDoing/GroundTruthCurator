@@ -164,6 +164,7 @@ class Settings(BaseSettings):
         ),
     )
     SERVICE_NAME: str = "gtc-backend"
+    HARNESS_JSONL_ENABLED: bool = False
 
     # Azure Container Apps Easy Auth (ACA) settings
     # When enabled, we expect ACA to inject identity headers (X-MS-CLIENT-PRINCIPAL, etc.).

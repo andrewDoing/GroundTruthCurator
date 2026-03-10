@@ -1,0 +1,41 @@
+.PHONY: setup format smoke test lint typecheck check ci verify observe
+
+setup:
+	@./scripts/harness/setup.sh
+
+format:
+	@./scripts/harness/format.sh
+
+smoke:
+	@./scripts/harness/smoke.sh
+
+test:
+	@./scripts/harness/test.sh
+
+lint:
+	@./scripts/harness/lint.sh
+
+typecheck:
+	@./scripts/harness/typecheck.sh
+
+check: lint typecheck
+
+ci: smoke check test
+
+# Agent verify loop: run checks + inspect runtime telemetry
+verify: ci
+	@echo "--- Runtime Errors ---"
+	@jq 'select(.level == "ERROR")' .harness/logs.jsonl 2>/dev/null | tail -5 || true
+	@echo "--- Slow Requests (>1s) ---"
+	@jq 'select(.duration_ms > 1000)' .harness/traces.jsonl 2>/dev/null | tail -5 || true
+
+# Quick observability check (no test run)
+observe:
+	@echo "=== Errors ==="
+	@jq -s 'map(select(.level == "ERROR")) | length' .harness/logs.jsonl 2>/dev/null || echo "0"
+	@echo "=== Slow (>500ms) ==="
+	@jq -s 'map(select(.duration_ms > 500)) | length' .harness/traces.jsonl 2>/dev/null || echo "0"
+	@echo "=== Log Lines ==="
+	@wc -l .harness/logs.jsonl 2>/dev/null | awk '{print $$1}' || echo "0"
+	@echo "=== Trace Lines ==="
+	@wc -l .harness/traces.jsonl 2>/dev/null | awk '{print $$1}' || echo "0"

@@ -13,6 +13,7 @@ import app.core.config as config
 from app.core.config import log_settings
 from app.core.telemetry import init_telemetry
 from app.core.auth import install_ezauth_middleware, require_user
+from app.core.harness_observability import install_harness_jsonl_middleware
 from app.core.logging import setup_logging, user_logging_middleware, attach_trace_log_filter
 from app.api.v1.router import api_router
 from app.container import container
@@ -155,6 +156,10 @@ def create_app() -> FastAPI:
     except Exception:
         # Never block app creation due to auth middleware
         pass
+
+    # Emit local harness JSONL telemetry during harness-enabled runs.
+    if config.settings.HARNESS_JSONL_ENABLED:
+        install_harness_jsonl_middleware(app)
 
     # Inject user identity into logging for every request (after auth middleware)
     try:
