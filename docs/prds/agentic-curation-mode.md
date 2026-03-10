@@ -1,7 +1,7 @@
 <!-- markdownlint-disable-file -->
 <!-- markdown-table-prettify-ignore-start -->
 # Agentic Curation Mode — Product Requirements Document (PRD)
-Version 1.3 | Status DRAFT | Owner TBD | Team Ground Truth Curator | Target TBD | Lifecycle Discovery
+Version 1.4 | Status DRAFT | Owner TBD | Team Ground Truth Curator | Target TBD | Lifecycle Discovery
 
 ## Progress Tracker
 | Phase | Done | Gaps | Updated |
@@ -336,7 +336,7 @@ Agentic Curation Mode
 ## 10. Risks & Mitigations
 | Risk ID | Description | Severity | Likelihood | Mitigation | Owner | Status |
 |---------|-------------|---------|-----------|-----------|-------|--------|
-| R-001 | Shared codebase changes to common modules (auth, assignment lifecycle, DI container) could introduce regressions in either mode | High | Medium | 10-layer defense-in-depth strategy: directory-enforced module boundaries, DI container as sole branch point, protocol abstractions for shared services, CI boundary lint rules, CI mode matrix testing both modes, RAG regression gate job, RAG-default configuration, startup schema validation, separate Cosmos containers, and frontend bundle size gate. **Current-state note:** The existing computed-tag registry (`TagPluginRegistry`) is reusable as an abstraction, but current auto-discovery loads all plugins globally — mode-selective plugin registration is not yet implemented and is required as part of this initiative (see FR-020). See [R-001 Mitigation Research](../../.copilot-tracking/research/20260310-r001-regression-mitigation-research.md) for full analysis and phased implementation plan. | TBD | Open |
+| R-001 | Shared codebase changes to common modules (auth, assignment lifecycle, DI container) could introduce regressions in either mode | High | Medium | 10-layer defense-in-depth strategy: directory-enforced module boundaries, DI container as sole branch point, protocol abstractions for shared services, CI boundary lint rules, CI mode matrix testing both modes, RAG regression gate job, RAG-default configuration, startup schema validation, separate Cosmos containers, and frontend bundle size gate. **Current-state note:** The existing computed-tag registry (`TagPluginRegistry`) is reusable as an abstraction, but current auto-discovery loads all plugins globally — mode-selective plugin registration is not yet implemented and is required as part of this initiative (see FR-020). See [R-001 Mitigation Research](../../.copilot-tracking/research/20260310-r001-regression-mitigation-research.md) for the mitigation strategy and phased implementation plan, and [Agentic Curation PRD File Structure Research](../../.copilot-tracking/research/2026-03-10/agentic-curation-prd-file-structure-research.md) for the synthesized repository layout recommendation that applies those guardrails to the current codebase. | TBD | Open |
 | R-002 | Agentic item payloads significantly larger than RAG (due to trace_payload) could impact Cosmos RU costs and latency | Medium | Medium | Monitor RU costs per operation; consider trace_payload compression or separate storage if costs exceed threshold | TBD | Open |
 | R-003 | Tool call grid performance degrades with high tool call counts (>50 per item) | Medium | Low | Virtual scrolling for large lists; lazy-load tool call details on expand; performance test with 50+ tool calls | TBD | Open |
 | R-004 | ~~AI-assisted editor suggestions may not meet quality expectations~~ | — | — | Deferred to post-MVP; V1 uses manual inline editing only | — | Closed (deferred) |
@@ -426,6 +426,7 @@ TBD — coordinate with curation team leads for curator onboarding and training 
 | 1.1 | 2026-03-10 | Copilot | Closed Q-003: Explorer columns defined (ID, Status, Scenario ID, User Message, Tool Calls, Tags, Reviewed, Actions); no decision-progress column. Closed Q-004: MVP plugins are DecisionCompletenessPlugin, HasTracePlugin, FeedbackPlugin; ToolCallCountPlugin/AgentRolePlugin deferred. Added `scenario_id` field to `gt_schema_v5_generic.py` and updated FR-001, FR-020, FR-022. | Stakeholder Decision |
 | 1.2 | 2026-03-10 | Copilot | Closed Q-009: Subdirectory convention for mode-specific plugin registration. Plugins organized into `shared/`, `rag/`, `agentic/` subdirectories under `computed_tags/`. Discovery scans `shared/` + mode directory. | Stakeholder Decision |
 | 1.3 | 2026-03-10 | Copilot | Closed Q-006: Multiple agent responses are in scope — curators must view and edit all agent turns, not just the final response. Existing FR-006/FR-007 design already supports this. | Stakeholder Decision |
+| 1.4 | 2026-03-10 | Copilot | Added explicit provenance for the synthesized file-structure recommendation. R-001 now cites both the mitigation research (REF-005) and the dedicated file-structure research (REF-007) so readers can distinguish risk controls from implementation-oriented layout guidance. | Provenance Update |
 
 ## 16. References & Provenance
 | Ref ID | Type | Source | Summary | Conflict Resolution |
@@ -436,6 +437,7 @@ TBD — coordinate with curation team leads for curator onboarding and training 
 | REF-004 | Requirements | `AGENTIC_REQUIREMENTS.md` | Peter's stakeholder feedback: tool calls first-class, subagent concept, remove grounding_data_summary, remove evaluation_criteria, feedback as KV pairs, rules engine as separate tool (deferred) | Authoritative for product decisions on field removal |
 | REF-005 | Research | `.copilot-tracking/research/20260310-r001-regression-mitigation-research.md` | Defense-in-depth analysis for R-001 shared codebase regression risk. Defines 10-layer mitigation strategy: directory-enforced module boundaries, DI container as sole branch point, protocol abstractions, CI boundary lint rules, CI mode matrix testing, RAG regression gate job, RAG-default configuration, startup schema validation, separate Cosmos containers, and frontend bundle size gate. Includes phased implementation plan. | Authoritative for R-001 mitigation approach |
 | REF-006 | Review | `.copilot-tracking/reviews/2026-03-10/agentic-curation-mode-r001-review.md` | Code-validated review of PRD v0.4 and R-001. Found 6 major and 5 minor findings. Key gaps: approval validation overstated, computed-tag isolation not implemented, CI validates one mode only, infra parameterization underspecified, bucket typing unresolved, frontend has no pluggable renderer infrastructure yet. Raised 7 additional open questions. | Drove v0.5 updates |
+| REF-007 | Research | `.copilot-tracking/research/2026-03-10/agentic-curation-prd-file-structure-research.md` | Implementation-oriented synthesis of the PRD, REF-005, and the current backend/frontend architecture. Recommends the approximate repository layout for shared, RAG, and agentic ownership boundaries and clarifies that the broader tree is synthesized guidance rather than literal PRD text, except where the PRD explicitly closes structural decisions such as computed-tag plugin subdirectories. | Authoritative for file-structure recommendation provenance; complements REF-005 rather than replacing it |
 
 ### Citation Usage
 - UI behavior and component structure: REF-001
@@ -445,6 +447,7 @@ TBD — coordinate with curation team leads for curator onboarding and training 
 - Validation rules (conversation structure, tool decisions): REF-001 validation functions + REF-003 Scenario 3
 - Code-validated review findings driving v0.5 updates: REF-006
 - R-001 regression mitigation strategy: REF-005
+- Synthesized repository file-structure recommendation and ownership boundaries: REF-007, grounded by REF-005
 
 ## 17. Appendices (Optional)
 ### Glossary
