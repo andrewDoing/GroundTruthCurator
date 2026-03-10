@@ -116,6 +116,7 @@ class AgenticGroundTruthEntry(BaseModel):
     computed_tags: list[str] = Field(default_factory=list, alias="computedTags")
 
     # --- Scenario content ---
+    scenario_id: str = Field("", alias="scenarioId")
     history: list[HistoryEntry] = Field(default_factory=list)
     context_entries: list[ContextEntry] = Field(default_factory=list, alias="contextEntries")
 
