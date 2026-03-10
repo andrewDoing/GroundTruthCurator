@@ -19,6 +19,7 @@ Run from repository root:
 | Fast sanity check | `make -f Makefile.harness smoke` |
 | Static checks | `make -f Makefile.harness check` |
 | Full test suite | `make -f Makefile.harness test` |
+| Backend integration tests | `make -f Makefile.harness backend-integration-test` |
 | CI-equivalent local run | `make -f Makefile.harness ci` |
 | CI + telemetry review | `make -f Makefile.harness verify` |
 
@@ -31,6 +32,7 @@ Run from `backend/`:
 | Install deps | `uv sync` |
 | Dev server | `uv run uvicorn app.main:app --reload` |
 | Test (all) | `uv run pytest tests/unit/ -v` |
+| Test (integration) | `uv run pytest tests/integration/ -v` |
 | Test (single) | `uv run pytest tests/unit/test_dos_prevention.py -v` |
 | Test (keyword) | `uv run pytest tests/unit/ -k "bulk" -v` |
 | Type check | `uv run ty check app/` |

@@ -1,4 +1,4 @@
-.PHONY: setup format smoke test lint typecheck check ci verify observe
+.PHONY: setup format smoke test backend-integration-test lint typecheck check ci verify observe
 
 setup:
 	@./scripts/harness/setup.sh
@@ -11,6 +11,9 @@ smoke:
 
 test:
 	@./scripts/harness/test.sh
+
+backend-integration-test:
+	@cd backend && GTC_LLM_ENABLED=False uv run pytest -q tests/integration -v
 
 lint:
 	@./scripts/harness/lint.sh

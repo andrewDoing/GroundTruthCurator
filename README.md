@@ -36,6 +36,7 @@ npm run dev
 # Backend tests
 cd backend
 uv run pytest tests/unit/ -v
+uv run pytest tests/integration/ -v
 
 # Frontend tests
 cd frontend
