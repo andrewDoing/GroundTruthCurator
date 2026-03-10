@@ -1,109 +1,114 @@
-# Agent Instructions
+# AGENTS.md
 
-## Testing and Build Commands
+Ground Truth Curator is a monorepo for curating high-quality ground truth datasets for agent evaluation and model accuracy measurement. The backend is FastAPI/Python, the frontend is React/TypeScript, and the production data plane is centered on Azure services such as Cosmos DB, Blob Storage, Search, and Azure AI.
 
-### Backend (Python with uv)
+## Project Overview
 
-```bash
-cd backend
+- Project: `Ground Truth Curator`
+- Primary runtimes: Python 3.11 (`backend/`) and Node.js 20 (`frontend/`)
+- Main entrypoints: backend FastAPI app at `backend/app/main.py`, frontend Vite app at `frontend/src/main.tsx`
 
-# Run all unit tests
-uv run pytest tests/unit/ -v
+## Harness Commands
 
-# Run specific test file
-uv run pytest tests/unit/test_dos_prevention.py -v
+Run from repository root:
 
-# Run tests matching keyword
-uv run pytest tests/unit/ -k "bulk" -v
+| Goal | Command |
+|---|---|
+| Install dependencies | `make -f Makefile.harness setup` |
+| Auto-format code | `make -f Makefile.harness format` |
+| Fast sanity check | `make -f Makefile.harness smoke` |
+| Static checks | `make -f Makefile.harness check` |
+| Full test suite | `make -f Makefile.harness test` |
+| CI-equivalent local run | `make -f Makefile.harness ci` |
+| CI + telemetry review | `make -f Makefile.harness verify` |
 
-# Type checking (uses 'ty' not mypy)
-uv run ty check app/  # Check entire app directory
-uv run ty check app/api/v1/ground_truths.py  # Check specific file
-```
+## Backend Commands
 
-### Frontend (Node.js)
+Run from `backend/`:
 
-```bash
-cd frontend
+| Goal | Command |
+|---|---|
+| Install deps | `uv sync` |
+| Dev server | `uv run uvicorn app.main:app --reload` |
+| Test (all) | `uv run pytest tests/unit/ -v` |
+| Test (single) | `uv run pytest tests/unit/test_dos_prevention.py -v` |
+| Test (keyword) | `uv run pytest tests/unit/ -k "bulk" -v` |
+| Type check | `uv run ty check app/` |
+| Lint | `uv run ruff check app/` |
+| Docs build | `uv run mkdocs build -f ../mkdocs.yml` |
 
-# Run unit tests once (preferred for automation/agents)
-# Note: Vitest 3.2.4 doesn't support `--no-threads` at runtime; use the threads pool in single-thread mode to avoid spawning many Node processes.
-npm run test:run -- --pool=threads --poolOptions.threads.singleThread
+## Frontend Commands
 
-# Pre-commit validation (lint + typecheck, no auto-fix)
-npm run pre-commit
+Run from `frontend/`:
 
-# Build
-npm run build
+| Goal | Command |
+|---|---|
+| Install deps | `npm install` |
+| Dev server | `npm run dev` |
+| Test (all) | `npm run test:run -- --pool=threads --poolOptions.threads.singleThread` |
+| Build | `npm run build` |
+| Type check | `npm run typecheck` |
+| Lint (check) | `npm run lint:check` |
+| Lint (fix) | `npm run lint` |
+| Pre-commit | `npm run pre-commit` |
 
-# Type checking (note: 'typecheck' not 'type-check')
-npm run typecheck
+## Debugging Loop
 
-# Linting (auto-fix)
-npm run lint
+When `make -f Makefile.harness ci` fails, identify the stage before changing code blindly.
 
-# Linting check only (no auto-fix)
-npm run lint:check
-```
+1. `smoke` failed: the backend did not start cleanly, the health probes failed, or the harness telemetry files were not produced.
+2. `check` failed: run the backend/frontend lint or typecheck command directly to isolate the failing side.
+3. `test` failed: run the backend and frontend test commands directly and inspect the failing suite.
+4. `verify` shows warnings/errors: inspect `.harness/logs.jsonl` and `.harness/traces.jsonl` with `jq` before rerunning.
 
-## Documentation
+## Constraints And Guardrails
 
-```bash
-# Build documentation site
-cd backend
-uv run mkdocs build -f ../mkdocs.yml
+- Preserve the backend layering: `api/v1 -> services -> adapters`.
+- Do not import adapters directly from FastAPI route modules.
+- Domain models belong in `backend/app/domain/`, not in route handlers or React components.
+- Frontend network calls belong in `frontend/src/api/` or `frontend/src/services/`, not in presentational components.
+- Regenerate frontend API types when backend API schemas change: `cd frontend && npm run api:types`.
+- Do not modify `infra/` without explicit user direction.
+- Treat `scripts/harness/` and `Makefile.harness` as operational code: change them only when the repo workflow actually changes.
 
-# Serve documentation locally
-cd backend
-uv run mkdocs serve -f ../mkdocs.yml
-# Then open http://localhost:8000
-```
+## Architecture Boundaries
 
-## Cosmos DB Operations
+- `backend/app/api/v1/` owns HTTP parsing, status codes, and response shapes.
+- `backend/app/services/` owns orchestration and business workflows.
+- `backend/app/adapters/` owns external I/O: Cosmos DB, Search, Blob Storage, inference, and similar integrations.
+- `backend/app/domain/` owns typed request/response/data models shared across backend layers.
+- `backend/app/plugins/` owns computed-tag extensions and registry-driven enrichment.
+- `frontend/src/api/` owns typed backend communication, while `frontend/src/components/` owns rendering and interaction.
 
-### Indexing Policy Updates
+See `docs/ARCHITECTURE.md` before changing cross-layer behavior.
 
-To update the Cosmos DB indexing policy:
+## Observability Convention
 
-```bash
-cd backend/scripts
+- Local harness runs emit JSONL request logs to `.harness/logs.jsonl` and request traces to `.harness/traces.jsonl`.
+- The backend keeps Azure Monitor / OpenTelemetry support for deployed environments; harness JSONL is the local agent-facing mirror.
+- Request level policy is `INFO` for 2xx, `WARN` for 4xx, and `ERROR` for 5xx or unhandled exceptions.
+- `make -f Makefile.harness verify` reads the last runtime errors and slow traces with `jq`.
 
-# For local emulator
-python cosmos_container_manager.py update-gt \
-  --endpoint https://localhost:8081 \
-  --indexing-policy indexing-policy-optimized.json
+See `docs/OBSERVABILITY.md` for field names, examples, and query patterns.
 
-# For production (requires connection string)
-python cosmos_container_manager.py update-gt \
-  --connection-string "$COSMOS_CONNECTION_STRING" \
-  --indexing-policy indexing-policy-optimized.json
-```
+## Execution Plans
 
-**Note**: Reindexing takes 1-6 hours depending on data size. Monitor progress in Azure Portal or via SDK.
+- Use `PLANS.md` for multi-step work that spans investigation, implementation, and verification.
+- Capture the objective, non-goals, relevant files, risks, and the exact commands that prove the work is done.
+- Refresh the plan when scope changes so a restarted agent can pick up quickly.
 
-See `docs/operations/COSMOS-OPTIMIZATION-README.md` for detailed deployment guide.
+## Static Analysis And Quality Gates
 
-### Query Performance Monitoring
+- Run `make -f Makefile.harness check` before `make -f Makefile.harness test`.
+- Backend quality gate: `uv run ruff check app/` and `uv run ty check app/`.
+- Frontend quality gate: `npm run lint:check` and `npm run typecheck`.
+- Test gate: backend unit tests plus frontend Vitest suite must pass.
+- Smoke gate: backend must boot locally, respond on `/healthz`, answer `/v1/openapi.json`, and emit `.harness` telemetry.
 
-To enable RU cost tracking and query performance monitoring:
+## Known Gotchas
 
-```bash
-# Enable all query metrics logging
-export GTC_COSMOS_LOG_QUERY_METRICS=true
-export GTC_COSMOS_LOG_SLOW_QUERIES_ONLY=false
-
-# Enable only slow query logging (RU >= 10.0)
-export GTC_COSMOS_LOG_QUERY_METRICS=true
-export GTC_COSMOS_LOG_SLOW_QUERIES_ONLY=true
-export GTC_COSMOS_SLOW_QUERY_RU_THRESHOLD=10.0
-```
-
-Metrics are logged with structured fields:
-
-- `operation`: Operation name (e.g., "stats.count_all_items", "list_gt_paginated.direct_query")
-- `ru_charge`: Request Units consumed
-- `item_count`: Number of items returned
-- `elapsed_ms`: Query execution time in milliseconds
-- `query`: First 200 characters of SQL query
-
-**Note**: Disabled by default to minimize log volume. Enable in staging/production for profiling.
+- Backend type checking uses `ty`, not mypy.
+- Frontend linting uses Biome, not ESLint.
+- Frontend unit tests should use `--pool=threads --poolOptions.threads.singleThread` in agent automation.
+- The backend defaults to `REPO_BACKEND=memory`, which keeps local smoke checks self-contained.
+- `.harness/` is intentionally ephemeral and should never be committed.
