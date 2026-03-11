@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest  # type: ignore[import-not-found]
 
-from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo
+from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo, SELECT_CLAUSE_C
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.domain.models import GroundTruthItem
 
@@ -115,6 +115,22 @@ def test_sort_key_has_answer(repo: CosmosGroundTruthRepo) -> None:
     )
     key = CosmosGroundTruthRepo._sort_key(example, SortField.has_answer)
     assert key[0] == 1
+
+
+def test_select_clause_includes_generic_phase_one_fields() -> None:
+    for field in (
+        "c.scenarioId",
+        "c.contextEntries",
+        "c.traceIds",
+        "c.toolCalls",
+        "c.expectedTools",
+        "c.feedback",
+        "c.metadata",
+        "c.createdBy",
+        "c.createdAt",
+        "c.tracePayload",
+    ):
+        assert field in SELECT_CLAUSE_C
 
 
 # =============================================================================

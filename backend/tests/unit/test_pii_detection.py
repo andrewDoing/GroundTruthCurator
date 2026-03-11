@@ -20,7 +20,7 @@ from app.services.pii_service import (
     _mask_match,
     _create_snippet,
 )
-from app.domain.models import GroundTruthItem, HistoryItem
+from app.domain.models import AgenticGroundTruthEntry, GroundTruthItem, HistoryItem
 from app.domain.enums import HistoryItemRole
 
 
@@ -239,6 +239,42 @@ class TestGroundTruthItemScanning:
         )
         warnings = scan_item_for_pii(item)
         assert len(warnings) == 0
+
+    def test_scans_generic_context_entries_and_trace_payload(self):
+        item = AgenticGroundTruthEntry(
+            id="test-1",
+            datasetName="test-dataset",
+            contextEntries=[{"key": "customerEmail", "value": "alice@example.com"}],
+            tracePayload={"notes": "Call me at 555-123-4567"},
+        )
+
+        warnings = scan_item_for_pii(item)
+        fields = {warning.field for warning in warnings}
+        assert "contextEntries[0].value" in fields
+        assert "tracePayload.notes" in fields
+
+    def test_scans_generic_tool_calls_and_plugins(self):
+        item = AgenticGroundTruthEntry(
+            id="test-1",
+            datasetName="test-dataset",
+            toolCalls=[
+                {
+                    "name": "lookup_customer",
+                    "response": {"email": "agent@example.com"},
+                }
+            ],
+            plugins={
+                "rag-compat": {
+                    "kind": "rag-compat",
+                    "data": {"phone": "(555) 123-4567"},
+                }
+            },
+        )
+
+        warnings = scan_item_for_pii(item)
+        fields = {warning.field for warning in warnings}
+        assert "toolCalls[0].response.email" in fields
+        assert "plugins.rag-compat.data.phone" in fields
 
 
 class TestBulkScanning:

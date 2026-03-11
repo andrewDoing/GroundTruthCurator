@@ -8,7 +8,7 @@ from app.services.duplicate_detection_service import (
     detect_duplicates_for_item,
     detect_duplicates_for_bulk_items,
 )
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry, GroundTruthItem
 from app.domain.enums import GroundTruthStatus
 
 
@@ -348,3 +348,51 @@ def test_detect_duplicates_uses_edited_question():
     warnings = detect_duplicates_for_item(draft, [approved])
     assert len(warnings) == 1
     assert warnings[0].duplicate_id == "approved-1"
+
+
+def test_detect_duplicates_for_generic_history_match():
+    draft = AgenticGroundTruthEntry(
+        id="draft-1",
+        datasetName="test",
+        status=GroundTruthStatus.draft,
+        history=[
+            {"role": "user", "msg": "Summarize the incident"},
+            {"role": "assistant", "msg": "The service restarted automatically."},
+        ],
+    )
+    approved = AgenticGroundTruthEntry(
+        id="approved-1",
+        datasetName="test",
+        status=GroundTruthStatus.approved,
+        history=[
+            {"role": "user", "msg": "Summarize the incident"},
+            {"role": "assistant", "msg": "The service restarted automatically."},
+        ],
+    )
+
+    warnings = detect_duplicates_for_item(draft, [approved])
+    assert len(warnings) == 1
+    assert warnings[0].match_reason == "exact question and answer match"
+
+
+def test_detect_duplicates_for_generic_structured_fields_match():
+    draft = AgenticGroundTruthEntry(
+        id="draft-1",
+        datasetName="test",
+        status=GroundTruthStatus.draft,
+        contextEntries=[{"key": "customerEmail", "value": "alice@example.com"}],
+        toolCalls=[{"name": "lookup_customer", "response": {"ticket": "INC-42"}}],
+        tracePayload={"ticketSummary": "Needs escalation"},
+    )
+    approved = AgenticGroundTruthEntry(
+        id="approved-1",
+        datasetName="test",
+        status=GroundTruthStatus.approved,
+        contextEntries=[{"key": "customerEmail", "value": "alice@example.com"}],
+        toolCalls=[{"name": "lookup_customer", "response": {"ticket": "INC-42"}}],
+        tracePayload={"ticketSummary": "Needs escalation"},
+    )
+
+    warnings = detect_duplicates_for_item(draft, [approved])
+    assert len(warnings) == 1
+    assert warnings[0].match_reason == "exact generic fields match"

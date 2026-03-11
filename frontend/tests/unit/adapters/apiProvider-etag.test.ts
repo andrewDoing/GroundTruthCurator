@@ -3,7 +3,15 @@ import { ApiProvider } from "../../../src/adapters/apiProvider";
 import type { components } from "../../../src/api/generated";
 import type { GroundTruthItem } from "../../../src/models/groundTruth";
 
-type ApiItem = components["schemas"]["GroundTruthItem-Output"];
+type ApiItem = components["schemas"]["AgenticGroundTruthEntry-Output"] & {
+	synthQuestion?: string | null;
+	editedQuestion?: string | null;
+	answer?: string | null;
+	refs?: components["schemas"]["Reference"][];
+	totalReferences?: number;
+	tags?: string[];
+	comment?: string | null;
+};
 
 const {
 	mockGetMyAssignments,

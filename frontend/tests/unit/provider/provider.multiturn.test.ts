@@ -29,7 +29,23 @@ vi.mock("../../../src/services/groundTruths", () => ({
 	getGroundTruth: mockGetGroundTruth,
 }));
 
-type ApiItem = components["schemas"]["GroundTruthItem-Output"];
+type ApiHistoryEntry = components["schemas"]["HistoryEntry"] & {
+	refs?: components["schemas"]["Reference"][];
+	expectedBehavior?: string[];
+};
+type ApiItem = Omit<
+	components["schemas"]["AgenticGroundTruthEntry-Output"],
+	"history"
+> & {
+	synthQuestion?: string | null;
+	editedQuestion?: string | null;
+	answer?: string | null;
+	refs?: components["schemas"]["Reference"][];
+	totalReferences?: number;
+	tags?: string[];
+	comment?: string | null;
+	history?: ApiHistoryEntry[];
+};
 
 type Patch = Partial<ApiItem>;
 

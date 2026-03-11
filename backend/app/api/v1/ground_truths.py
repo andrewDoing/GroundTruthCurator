@@ -15,18 +15,29 @@ from fastapi.responses import JSONResponse
 from app.core.auth import get_current_user, UserContext
 from app.core.config import settings
 from app.domain.models import (
+    AgenticGroundTruthEntry,
+    ContextEntry,
+    ExpectedTools,
+    FeedbackEntry,
     GroundTruthItem,
-    Reference,
     GroundTruthListResponse,
     HistoryItem,
+    PluginPayload,
+    ToolCallRecord,
     BulkImportError,
     ValidationSummary,
 )
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.plugins import get_default_registry
 from app.container import container
+from app.api.v1._legacy_compat import apply_legacy_compat_fields, coerce_history_item
 from app.exports.models import SnapshotExportRequest
-from app.services.validation_service import validate_bulk_items
+from app.services.validation_service import (
+    ApprovalValidationError,
+    ValidationError,
+    validate_bulk_items,
+    validate_item_for_approval,
+)
 from app.services.pii_service import PIIWarning, scan_bulk_items_for_pii
 from app.services.duplicate_detection_service import (
     DuplicateWarning,
@@ -90,9 +101,46 @@ class RecomputeTagsResponse(BaseModel):
     duration_ms: int = Field(description="Operation duration in milliseconds.")
 
 
+class HistoryEntryPatch(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    role: str
+    msg: str | None = None
+
+
+class GroundTruthUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    status: GroundTruthStatus | str | None = None
+    comment: str | None = None
+    history: list[HistoryEntryPatch] | None = None
+    context_entries: list[ContextEntry] | None = Field(default=None, alias="contextEntries")
+    tool_calls: list[ToolCallRecord] | None = Field(default=None, alias="toolCalls")
+    expected_tools: ExpectedTools | None = Field(default=None, alias="expectedTools")
+    feedback: list[FeedbackEntry] | None = None
+    metadata: dict[str, Any] | None = None
+    plugins: dict[str, PluginPayload] | None = None
+    manual_tags: list[str] | None = Field(default=None, alias="manualTags")
+    trace_ids: dict[str, str] | None = Field(default=None, alias="traceIds")
+    trace_payload: dict[str, Any] | None = Field(default=None, alias="tracePayload")
+    scenario_id: str | None = Field(default=None, alias="scenarioId")
+    etag: str | None = Field(default=None, alias="etag")
+
+
+def _coerce_history_for_internal_use(item: AgenticGroundTruthEntry) -> None:
+    if not item.history:
+        return
+    item.history = [
+        entry
+        if isinstance(entry, HistoryItem)
+        else HistoryItem.model_validate(entry.model_dump(by_alias=True))
+        for entry in item.history
+    ]
+
+
 @router.post("", response_model=ImportBulkResponse)
 async def import_bulk(
-    items: list[GroundTruthItem],
+    items: list[AgenticGroundTruthEntry],
     user: UserContext = Depends(get_current_user),
     buckets: int | None = Query(default=None, ge=1, le=50),
     approve: bool = Query(
@@ -111,7 +159,7 @@ async def import_bulk(
     """
     errors: list[BulkImportError] = []
     uuids: list[str] = []
-    gt_items: list[GroundTruthItem] = []
+    gt_items: list[AgenticGroundTruthEntry] = []
 
     # Ensure IDs in input order, preserving provided IDs when present
     for it in items:
@@ -146,6 +194,40 @@ async def import_bulk(
             it.status = GroundTruthStatus.approved
             it.reviewed_at = now
             it.updatedBy = updater
+        
+        # Enforce generic approval validation for approved items
+        approval_validation_errors = await validate_bulk_items(gt_items)
+        
+        # Also check generic approval invariants for each item
+        from app.services.validation_service import collect_approval_validation_errors
+        approval_ready_items: list[AgenticGroundTruthEntry] = []
+        for idx, item in enumerate(gt_items):
+            item_errors = []
+            
+            # Add tag validation errors if present
+            if item.id in approval_validation_errors:
+                item_errors.extend(approval_validation_errors[item.id])
+            
+            # Check generic approval invariants
+            approval_errors = collect_approval_validation_errors(item)
+            if approval_errors:
+                for err_msg in approval_errors:
+                    item_errors.append(
+                        BulkImportError(
+                            index=idx,
+                            item_id=item.id,
+                            field="approval",
+                            code="APPROVAL_VALIDATION_FAILED",
+                            message=err_msg,
+                        )
+                    )
+            
+            if item_errors:
+                errors.extend(item_errors)
+            else:
+                approval_ready_items.append(item)
+        
+        gt_items = approval_ready_items
 
     # Persist only validated items
     if gt_items:
@@ -153,7 +235,8 @@ async def import_bulk(
         # Fetch registry once for performance (avoids O(n) singleton lookups)
         registry = get_default_registry()
         for it in gt_items:
-            apply_computed_tags(it, registry)
+            _coerce_history_for_internal_use(it)
+            apply_computed_tags(cast(GroundTruthItem, it), registry)
 
         result = await container.repo.import_bulk_gt(gt_items, buckets=buckets)
 
@@ -191,7 +274,7 @@ async def import_bulk(
         try:
             # Fetch all approved items from the same dataset(s) to check against
             datasets = {item.datasetName for item in items}
-            approved_items: list[GroundTruthItem] = []
+            existing_approved_items: list[AgenticGroundTruthEntry] = []
             for dataset in datasets:
                 # Fetch approved items from this dataset
                 items_list, _ = await container.repo.list_gt_paginated(
@@ -202,9 +285,9 @@ async def import_bulk(
                     sort_by=SortField.updated_at,
                     sort_order=SortOrder.desc,
                 )
-                approved_items.extend(items_list)
+                existing_approved_items.extend(items_list)
 
-            duplicate_warnings = detect_duplicates_for_bulk_items(items, approved_items)
+            duplicate_warnings = detect_duplicates_for_bulk_items(items, existing_approved_items)
             if duplicate_warnings:
                 logger.info(
                     f"api.import_bulk.duplicates_detected - "
@@ -412,7 +495,7 @@ async def list_ground_truths(
     datasetName: str,
     status: GroundTruthStatus | None = None,
     user: UserContext = Depends(get_current_user),
-) -> list[GroundTruthItem]:
+) -> list[AgenticGroundTruthEntry]:
     try:
         items = await container.repo.list_gt_by_dataset(datasetName, status)
     except ValueError as e:
@@ -428,7 +511,7 @@ async def get_ground_truth(
     bucket: UUID,
     item_id: str,
     user: UserContext = Depends(get_current_user),
-) -> GroundTruthItem:
+) -> AgenticGroundTruthEntry:
     item = await container.repo.get_gt(datasetName, bucket, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -440,97 +523,86 @@ async def update_ground_truth(
     datasetName: str,
     bucket: UUID,
     item_id: str,
-    payload: dict[str, Any],
+    payload: GroundTruthUpdateRequest,
     user: UserContext = Depends(get_current_user),
     if_match: str | None = Header(default=None, alias="If-Match"),
-) -> GroundTruthItem:
-    it = await container.repo.get_gt(datasetName, bucket, item_id)
+) -> AgenticGroundTruthEntry:
+    it = cast(GroundTruthItem | None, await container.repo.get_gt(datasetName, bucket, item_id))
     if not it:
         raise HTTPException(status_code=404, detail="Item not found")
-    # Apply updates including references
-    for k in ["edited_question", "answer", "status"]:
-        if k in payload:
-            if k == "status":
-                # Coerce string status to GroundTruthStatus enum to keep the
-                # model consistent and avoid Pydantic serializer warnings.
-                try:
-                    val = payload[k]
-                    if isinstance(val, GroundTruthStatus):
-                        status_val = val
-                    else:
-                        status_val = GroundTruthStatus(val)
-                    setattr(it, "status", status_val)
-                except Exception:
-                    # Let Pydantic / API validation handle invalid values
-                    setattr(it, "status", payload[k])
-            else:
-                setattr(it, k, payload[k])
-    if "comment" in payload:
-        it.comment = payload["comment"]
-    if "refs" in payload and isinstance(payload["refs"], list):
-        # Validate minimal Reference structure; rely on Pydantic validation when saving
-        refs_payload = cast(list[Reference | dict[str, Any]], payload["refs"])
-        it.refs = [r if isinstance(r, Reference) else Reference(**r) for r in refs_payload]
-        # Reset totalReferences to force recalculation by model_validator
-        it.totalReferences = 0
+    provided_fields = set(payload.model_fields_set)
+    payload_extras = payload.model_extra or {}
 
-    # Tags handling: Only accept 'manualTags' in payload
-    # computedTags are system-generated and cannot be set by clients
-    # Explicitly reject 'computedTags' and legacy 'tags' fields
-    if "computedTags" in payload:
+    if "status" in provided_fields:
+        try:
+            val = payload.status
+            if isinstance(val, GroundTruthStatus):
+                it.status = val
+            elif val is not None:
+                it.status = GroundTruthStatus(val)
+        except (ValueError, KeyError):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status value: {payload.status}. Must be one of: draft, approved, skipped, deleted"
+            )
+
+    if "comment" in provided_fields:
+        it.comment = payload.comment or ""
+
+    if "history" in provided_fields:
+        if payload.history is None:
+            it.history = None
+            it.totalReferences = 0
+        else:
+            try:
+                it.history = [coerce_history_item(entry) for entry in payload.history]
+                it.totalReferences = 0
+            except (KeyError, TypeError, ValueError, ValidationError) as e:
+                raise HTTPException(status_code=400, detail=f"Invalid history format: {str(e)}")
+
+    if "context_entries" in provided_fields:
+        it.context_entries = payload.context_entries or []
+    if "tool_calls" in provided_fields:
+        it.tool_calls = payload.tool_calls or []
+    if "expected_tools" in provided_fields and payload.expected_tools is not None:
+        it.expected_tools = payload.expected_tools
+    if "feedback" in provided_fields:
+        it.feedback = payload.feedback or []
+    if "metadata" in provided_fields:
+        it.metadata = payload.metadata or {}
+    if "plugins" in provided_fields:
+        it.plugins = payload.plugins or {}
+    if "trace_ids" in provided_fields:
+        it.trace_ids = payload.trace_ids
+    if "trace_payload" in provided_fields:
+        it.trace_payload = payload.trace_payload or {}
+    if "scenario_id" in provided_fields:
+        it.scenario_id = payload.scenario_id or ""
+
+    # Tags handling: Only accept 'manualTags' in the generic contract
+    if "computedTags" in payload_extras:
         raise HTTPException(
             status_code=400,
             detail="computedTags cannot be set directly; they are system-generated",
         )
-    if "tags" in payload:
+    if "tags" in payload_extras:
         raise HTTPException(
             status_code=400,
             detail="'tags' field is deprecated; use 'manualTags' instead",
         )
-    if "manualTags" in payload:
+    if "manual_tags" in provided_fields:
         try:
-            it.manual_tags = payload["manualTags"]
+            it.manual_tags = payload.manual_tags or []
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-    # History (with refs in agent messages)
-    if "history" in payload:
-        if payload["history"] is None:
-            it.history = None
-            # Reset totalReferences to force recalculation by model_validator
-            it.totalReferences = 0
-        elif isinstance(payload["history"], list):
-            try:
-                # Convert dict representations to HistoryItem models
-                history_items = []
-                for h in payload["history"]:
-                    # Parse refs if present in the history item
-                    refs_data = h.get("refs")
-                    refs_list = None
-                    if refs_data is not None:
-                        refs_list = [
-                            r if isinstance(r, Reference) else Reference(**r) for r in refs_data
-                        ]
-                    # Parse expected_behavior if present in the history item
-                    expected_behavior_data = h.get("expected_behavior") or h.get("expectedBehavior")
-                    history_items.append(
-                        HistoryItem(
-                            role=h["role"],
-                            msg=h.get("msg")
-                            or h.get("content", ""),  # Support both 'msg' and 'content'
-                            refs=refs_list,
-                            expected_behavior=expected_behavior_data
-                            if isinstance(expected_behavior_data, list)
-                            else None,
-                        )
-                    )
-                it.history = history_items
-                # Reset totalReferences to force recalculation by model_validator
-                it.totalReferences = 0
-            except (KeyError, ValueError) as e:
-                raise HTTPException(status_code=400, detail=f"Invalid history format: {str(e)}")
+    try:
+        apply_legacy_compat_fields(it, payload_extras)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+
     # Concurrency: use If-Match header or etag field in body
-    provided_etag: str | None = cast(str | None, payload.get("etag"))
+    provided_etag = payload.etag
     if not if_match and not provided_etag:
         # Require ETag to perform update
         raise HTTPException(status_code=412, detail="ETag required")
@@ -540,8 +612,12 @@ async def update_ground_truth(
         it.etag = provided_etag
     try:
         # Apply computed tags before saving
+        if it.status == GroundTruthStatus.approved:
+            validate_item_for_approval(it)
         apply_computed_tags(it)
         await container.repo.upsert_gt(it)
+    except ApprovalValidationError as e:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_APPROVAL", "errors": e.errors})
     except ValueError as e:
         if str(e) == "etag_mismatch":
             raise HTTPException(status_code=412, detail="ETag mismatch")
@@ -625,7 +701,7 @@ async def recompute_computed_tags(
             original_computed_tags = set(item.computed_tags or [])
 
             # Apply computed tags (mutates item in place)
-            apply_computed_tags(item, registry)
+            apply_computed_tags(cast(GroundTruthItem, item), registry)
 
             # Check if computed tags changed
             new_computed_tags = set(item.computed_tags or [])

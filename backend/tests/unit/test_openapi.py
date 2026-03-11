@@ -45,3 +45,21 @@ async def test_get_specific_schema(async_client: AsyncClient):
     # Unknown should 404
     r2 = await async_client.get("/v1/schemas/DOES_NOT_EXIST")
     assert r2.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_ground_truth_openapi_uses_agentic_schema(async_client: AsyncClient):
+    r = await async_client.get("/v1/openapi.json")
+    assert r.status_code == 200
+
+    data = r.json()
+    import_request = data["paths"]["/v1/ground-truths"]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["schema"]["items"]["$ref"]
+    update_response = data["paths"]["/v1/ground-truths/{datasetName}/{bucket}/{item_id}"]["put"][
+        "responses"
+    ]["200"]["content"]["application/json"]["schema"]["$ref"]
+
+    assert "AgenticGroundTruthEntry" in import_request
+    assert "AgenticGroundTruthEntry" in update_response
+    assert "GroundTruthItem" not in import_request

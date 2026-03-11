@@ -10,11 +10,26 @@ import logging
 
 from app.core.auth import get_current_user, UserContext
 from app.core.errors import AssignmentConflictError
-from app.domain.models import GroundTruthItem, Reference, AssignmentDocument, HistoryItem
+from app.domain.models import (
+    AgenticGroundTruthEntry,
+    AssignmentDocument,
+    ContextEntry,
+    ExpectedTools,
+    FeedbackEntry,
+    GroundTruthItem,
+    PluginPayload,
+    ToolCallRecord,
+)
 from app.domain.enums import GroundTruthStatus
 from app.container import container
+from app.api.v1._legacy_compat import apply_legacy_compat_fields, coerce_history_item
 from datetime import datetime, timezone
 from app.services.tagging_service import apply_computed_tags
+from app.services.validation_service import (
+    ApprovalValidationError,
+    ValidationError,
+    validate_item_for_approval,
+)
 
 
 router = APIRouter()
@@ -22,29 +37,36 @@ logger = logging.getLogger(__name__)
 
 
 class SelfServeResponse(BaseModel):
-    assigned: list[GroundTruthItem]
+    assigned: list[AgenticGroundTruthEntry]
     requested: int
     assignedCount: int
 
 
-class AssignmentUpdateRequest(BaseModel):
-    """Payload for SME update (save draft / approve / skip / delete).
-
-    Using a Pydantic model allows camelCase -> snake_case alias handling. All fields optional; we
-    only mutate those explicitly provided (tracked via model_fields_set).
-    """
-
+class HistoryEntryPatch(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    edited_question: Optional[str] = Field(default=None, alias="editedQuestion")
-    answer: Optional[str] = None
+    role: str
+    msg: str | None = None
+
+
+class AssignmentUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
     comment: Optional[str] = None
     status: Optional[GroundTruthStatus | str] = None
-    refs: Optional[list[Reference]] = None
     manual_tags: Optional[list[str]] = Field(default=None, alias="manualTags")
     approve: Optional[bool] = None
     etag: Optional[str] = Field(default=None, alias="etag")
-    history: Optional[list[dict[str, Any]]] = None
+    history: Optional[list[HistoryEntryPatch]] = None
+    context_entries: Optional[list[ContextEntry]] = Field(default=None, alias="contextEntries")
+    tool_calls: Optional[list[ToolCallRecord]] = Field(default=None, alias="toolCalls")
+    expected_tools: Optional[ExpectedTools] = Field(default=None, alias="expectedTools")
+    feedback: Optional[list[FeedbackEntry]] = None
+    metadata: Optional[dict[str, Any]] = None
+    plugins: Optional[dict[str, PluginPayload]] = None
+    trace_ids: Optional[dict[str, str]] = Field(default=None, alias="traceIds")
+    trace_payload: Optional[dict[str, Any]] = Field(default=None, alias="tracePayload")
+    scenario_id: Optional[str] = Field(default=None, alias="scenarioId")
 
 
 @router.post("/self-serve")
@@ -74,12 +96,12 @@ async def self_serve_assignments(
 @router.get("/my")
 async def list_my_assignments(
     user: UserContext = Depends(get_current_user),
-) -> list[GroundTruthItem]:
+) -> list[AgenticGroundTruthEntry]:
     # Fetch assignment documents (materialized view), then fetch underlying GroundTruth items.
     assignments: list[AssignmentDocument] = await container.repo.list_assignments_by_user(
         user.user_id
     )
-    results: list[GroundTruthItem] = []
+    results: list[AgenticGroundTruthEntry] = []
     for ad in assignments:
         gt = await container.repo.get_gt(ad.datasetName, ad.bucket, ad.ground_truth_id)
         if not gt:
@@ -101,9 +123,9 @@ async def update_item(
     payload: AssignmentUpdateRequest,
     user: UserContext = Depends(get_current_user),
     if_match: str | None = Header(default=None, alias="If-Match"),
-) -> GroundTruthItem:
+) -> AgenticGroundTruthEntry:
     # Fold soft delete into PUT via status=deleted
-    it = await container.repo.get_gt(dataset, bucket, item_id)
+    it = cast(GroundTruthItem | None, await container.repo.get_gt(dataset, bucket, item_id))
     if not it:
         raise HTTPException(status_code=404, detail="Item not found")
     # Only allow updates to fields permitted for SME
@@ -116,14 +138,43 @@ async def update_item(
     original_assigned_to = it.assignedTo
 
     provided_fields: Set[str] = set(payload.model_fields_set)
+    payload_extras = payload.model_extra or {}
 
-    # Apply updates conditionally
-    if "edited_question" in provided_fields:
-        it.edited_question = payload.edited_question  # type: ignore[assignment]
-    if "answer" in provided_fields:
-        it.answer = payload.answer  # type: ignore[assignment]
     if "comment" in provided_fields:
-        it.comment = payload.comment  # type: ignore[assignment]
+        it.comment = payload.comment or ""
+    if "history" in provided_fields:
+        if payload.history is None:
+            it.history = None
+            it.totalReferences = 0
+        else:
+            try:
+                it.history = [coerce_history_item(entry) for entry in payload.history]
+                it.totalReferences = 0
+            except (TypeError, ValueError, ValidationError) as e:
+                raise HTTPException(status_code=400, detail=f"Invalid history format: {str(e)}")
+    if "context_entries" in provided_fields:
+        it.context_entries = payload.context_entries or []
+    if "tool_calls" in provided_fields:
+        it.tool_calls = payload.tool_calls or []
+    if "expected_tools" in provided_fields and payload.expected_tools is not None:
+        it.expected_tools = payload.expected_tools
+    if "feedback" in provided_fields:
+        it.feedback = payload.feedback or []
+    if "metadata" in provided_fields:
+        it.metadata = payload.metadata or {}
+    if "plugins" in provided_fields:
+        it.plugins = payload.plugins or {}
+    if "trace_ids" in provided_fields:
+        it.trace_ids = payload.trace_ids
+    if "trace_payload" in provided_fields:
+        it.trace_payload = payload.trace_payload or {}
+    if "scenario_id" in provided_fields:
+        it.scenario_id = payload.scenario_id or ""
+
+    try:
+        apply_legacy_compat_fields(it, payload_extras)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=e.message)
 
     now = datetime.now(timezone.utc)
 
@@ -148,8 +199,11 @@ async def update_item(
                 it.status = val  # type: ignore[assignment]
             else:
                 it.status = GroundTruthStatus(str(val))
-        except Exception:
-            it.status = cast(Any, payload.status)  # type: ignore[assignment]
+        except (ValueError, KeyError):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status value: {payload.status}. Must be one of: draft, approved, skipped, deleted"
+            )
         if it.status in {GroundTruthStatus.approved, GroundTruthStatus.deleted}:
             # Clear assignment when moving out of draft (keep for skipped so another SME can pick it up)
             it.assignedTo = None
@@ -158,43 +212,12 @@ async def update_item(
         if it.status == GroundTruthStatus.approved:
             it.reviewed_at = now
             it.updatedBy = user.user_id
-    if "refs" in provided_fields and payload.refs is not None:
-        it.refs = payload.refs  # already validated
     # Tags (validated by model validators)
     if "manual_tags" in provided_fields:
         try:
             it.manual_tags = payload.manual_tags or []
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
-    # History (with refs in agent messages)
-    if "history" in provided_fields and payload.history is not None:
-        try:
-            # Convert dict representations to HistoryItem models
-            history_items = []
-            for h in payload.history:
-                # Parse refs if present in the history item
-                refs_data = h.get("refs")
-                refs_list = None
-                if refs_data is not None:
-                    refs_list = [
-                        r if isinstance(r, Reference) else Reference(**r) for r in refs_data
-                    ]
-                # Parse expected_behavior if present in the history item
-                expected_behavior_data = h.get("expected_behavior") or h.get("expectedBehavior")
-                history_items.append(
-                    HistoryItem(
-                        role=h["role"],
-                        msg=h.get("msg")
-                        or h.get("content", ""),  # Support both 'msg' and 'content'
-                        refs=refs_list,
-                        expected_behavior=expected_behavior_data
-                        if isinstance(expected_behavior_data, list)
-                        else None,
-                    )
-                )
-            it.history = history_items
-        except (KeyError, ValueError) as e:
-            raise HTTPException(status_code=400, detail=f"Invalid history format: {str(e)}")
     # ETag handling: require an ETag for all SME updates (approve/skip/delete)
     provided_etag = payload.etag
     if not if_match and not provided_etag:
@@ -206,7 +229,11 @@ async def update_item(
 
     # Apply computed tags before saving
     try:
+        if it.status == GroundTruthStatus.approved:
+            validate_item_for_approval(it)
         apply_computed_tags(it)
+    except ApprovalValidationError as e:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_APPROVAL", "errors": e.errors})
     except ValueError as e:
         # Convert ValueError from validation to HTTP 400
         raise HTTPException(status_code=400, detail=str(e))
@@ -272,7 +299,7 @@ async def assign_item(
     item_id: str,
     body: AssignItemRequest | None = None,
     user: UserContext = Depends(get_current_user),
-) -> GroundTruthItem | JSONResponse:
+) -> AgenticGroundTruthEntry | JSONResponse:
     """Assign a specific ground truth item to the current user.
 
     This endpoint:
@@ -346,7 +373,7 @@ async def duplicate_assignment_item(
     bucket: UUID,
     item_id: str,
     user: UserContext = Depends(get_current_user),
-) -> GroundTruthItem:
+) -> AgenticGroundTruthEntry:
     """Duplicate an existing item as a draft rephrase, assign to caller, and return the new item."""
     original = await container.repo.get_gt(dataset, bucket, item_id)
     if not original:

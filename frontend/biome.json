@@ -23,10 +23,10 @@
 			"!**/dist",
 			"!**/*.generated.js",
 			"!src/api/generated.ts",
-      		"!**/node_modules",
-      		"!**/coverage",
-      		"!**/build"
-    	]
+			"!**/node_modules",
+			"!**/coverage",
+			"!**/build"
+		]
 	},
 	"vcs": {
 		"enabled": true,

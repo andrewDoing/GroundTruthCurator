@@ -110,7 +110,7 @@
 							"schema": {
 								"type": "array",
 								"items": {
-									"$ref": "#/components/schemas/GroundTruthItem-Input"
+									"$ref": "#/components/schemas/AgenticGroundTruthEntry-Input"
 								},
 								"title": "Items"
 							}
@@ -422,7 +422,7 @@
 								"schema": {
 									"type": "array",
 									"items": {
-										"$ref": "#/components/schemas/GroundTruthItem-Output"
+										"$ref": "#/components/schemas/AgenticGroundTruthEntry-Output"
 									},
 									"title": "Response List Ground Truths V1 Ground Truths  Datasetname  Get"
 								}
@@ -483,7 +483,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/GroundTruthItem-Output"
+									"$ref": "#/components/schemas/AgenticGroundTruthEntry-Output"
 								}
 							}
 						}
@@ -555,9 +555,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"type": "object",
-								"additionalProperties": true,
-								"title": "Payload"
+								"$ref": "#/components/schemas/GroundTruthUpdateRequest"
 							}
 						}
 					}
@@ -568,7 +566,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/GroundTruthItem-Output"
+									"$ref": "#/components/schemas/AgenticGroundTruthEntry-Output"
 								}
 							}
 						}
@@ -781,7 +779,7 @@
 							"application/json": {
 								"schema": {
 									"items": {
-										"$ref": "#/components/schemas/GroundTruthItem-Output"
+										"$ref": "#/components/schemas/AgenticGroundTruthEntry-Output"
 									},
 									"type": "array",
 									"title": "Response List My Assignments V1 Assignments My Get"
@@ -859,7 +857,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/GroundTruthItem-Output"
+									"$ref": "#/components/schemas/AgenticGroundTruthEntry-Output"
 								}
 							}
 						}
@@ -994,7 +992,7 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/GroundTruthItem-Output"
+									"$ref": "#/components/schemas/AgenticGroundTruthEntry-Output"
 								}
 							}
 						}
@@ -1596,6 +1594,500 @@
 				"required": ["tags"],
 				"title": "AddTagsRequest"
 			},
+			"AgenticGroundTruthEntry-Input": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"datasetName": {
+						"type": "string",
+						"title": "Datasetname"
+					},
+					"bucket": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "uuid"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bucket"
+					},
+					"status": {
+						"$ref": "#/components/schemas/GroundTruthStatus",
+						"default": "draft"
+					},
+					"docType": {
+						"type": "string",
+						"title": "Doctype",
+						"default": "ground-truth-item"
+					},
+					"schemaVersion": {
+						"type": "string",
+						"title": "Schemaversion",
+						"default": "v2"
+					},
+					"manualTags": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Manualtags"
+					},
+					"computedTags": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Computedtags"
+					},
+					"comment": {
+						"type": "string",
+						"title": "Comment",
+						"default": ""
+					},
+					"assignedTo": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assignedto"
+					},
+					"assignedAt": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assignedat"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updatedat"
+					},
+					"updatedBy": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Updatedby"
+					},
+					"reviewedAt": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reviewedat"
+					},
+					"_etag": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Etag"
+					},
+					"scenarioId": {
+						"type": "string",
+						"title": "Scenarioid",
+						"default": ""
+					},
+					"history": {
+						"items": {
+							"$ref": "#/components/schemas/HistoryEntry"
+						},
+						"type": "array",
+						"title": "History"
+					},
+					"contextEntries": {
+						"items": {
+							"$ref": "#/components/schemas/ContextEntry"
+						},
+						"type": "array",
+						"title": "Contextentries"
+					},
+					"traceIds": {
+						"anyOf": [
+							{
+								"additionalProperties": {
+									"type": "string"
+								},
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Traceids"
+					},
+					"toolCalls": {
+						"items": {
+							"$ref": "#/components/schemas/ToolCallRecord"
+						},
+						"type": "array",
+						"title": "Toolcalls"
+					},
+					"expectedTools": {
+						"$ref": "#/components/schemas/ExpectedTools"
+					},
+					"feedback": {
+						"items": {
+							"$ref": "#/components/schemas/FeedbackEntry"
+						},
+						"type": "array",
+						"title": "Feedback"
+					},
+					"metadata": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Metadata"
+					},
+					"plugins": {
+						"additionalProperties": {
+							"$ref": "#/components/schemas/PluginPayload"
+						},
+						"type": "object",
+						"title": "Plugins"
+					},
+					"createdBy": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Createdby"
+					},
+					"createdAt": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Createdat"
+					},
+					"tracePayload": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Tracepayload"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["id", "datasetName"],
+				"title": "AgenticGroundTruthEntry",
+				"description": "Generic agentic-first host model.\n\nThe core contract intentionally exposes only the generic schema in OpenAPI. Legacy\nRAG-shaped payloads are translated into this shape when validating this base class so\nexisting data can be carried forward without remaining top-level contract fields."
+			},
+			"AgenticGroundTruthEntry-Output": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id"
+					},
+					"datasetName": {
+						"type": "string",
+						"title": "Datasetname"
+					},
+					"bucket": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "uuid"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Bucket"
+					},
+					"status": {
+						"$ref": "#/components/schemas/GroundTruthStatus",
+						"default": "draft"
+					},
+					"docType": {
+						"type": "string",
+						"title": "Doctype",
+						"default": "ground-truth-item"
+					},
+					"schemaVersion": {
+						"type": "string",
+						"title": "Schemaversion",
+						"default": "v2"
+					},
+					"manualTags": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Manualtags"
+					},
+					"computedTags": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Computedtags"
+					},
+					"comment": {
+						"type": "string",
+						"title": "Comment",
+						"default": ""
+					},
+					"assignedTo": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assignedto"
+					},
+					"assignedAt": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Assignedat"
+					},
+					"updatedAt": {
+						"type": "string",
+						"format": "date-time",
+						"title": "Updatedat"
+					},
+					"updatedBy": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Updatedby"
+					},
+					"reviewedAt": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Reviewedat"
+					},
+					"_etag": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Etag"
+					},
+					"scenarioId": {
+						"type": "string",
+						"title": "Scenarioid",
+						"default": ""
+					},
+					"history": {
+						"items": {
+							"$ref": "#/components/schemas/HistoryEntry"
+						},
+						"type": "array",
+						"title": "History"
+					},
+					"contextEntries": {
+						"items": {
+							"$ref": "#/components/schemas/ContextEntry"
+						},
+						"type": "array",
+						"title": "Contextentries"
+					},
+					"traceIds": {
+						"anyOf": [
+							{
+								"additionalProperties": {
+									"type": "string"
+								},
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Traceids"
+					},
+					"toolCalls": {
+						"items": {
+							"$ref": "#/components/schemas/ToolCallRecord"
+						},
+						"type": "array",
+						"title": "Toolcalls"
+					},
+					"expectedTools": {
+						"$ref": "#/components/schemas/ExpectedTools"
+					},
+					"feedback": {
+						"items": {
+							"$ref": "#/components/schemas/FeedbackEntry"
+						},
+						"type": "array",
+						"title": "Feedback"
+					},
+					"metadata": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Metadata"
+					},
+					"plugins": {
+						"additionalProperties": {
+							"$ref": "#/components/schemas/PluginPayload"
+						},
+						"type": "object",
+						"title": "Plugins"
+					},
+					"createdBy": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Createdby"
+					},
+					"createdAt": {
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Createdat"
+					},
+					"tracePayload": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Tracepayload"
+					},
+					"tags": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"title": "Tags",
+						"readOnly": true
+					},
+					"synthQuestion": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Synthquestion",
+						"readOnly": true
+					},
+					"editedQuestion": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Editedquestion",
+						"readOnly": true
+					},
+					"answer": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Answer",
+						"readOnly": true
+					},
+					"refs": {
+						"items": {
+							"$ref": "#/components/schemas/Reference"
+						},
+						"type": "array",
+						"title": "Refs",
+						"readOnly": true
+					},
+					"totalReferences": {
+						"type": "integer",
+						"title": "Totalreferences",
+						"readOnly": true
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": [
+					"id",
+					"datasetName",
+					"tags",
+					"synthQuestion",
+					"editedQuestion",
+					"answer",
+					"refs",
+					"totalReferences"
+				],
+				"title": "AgenticGroundTruthEntry",
+				"description": "Generic agentic-first host model.\n\nThe core contract intentionally exposes only the generic schema in OpenAPI. Legacy\nRAG-shaped payloads are translated into this shape when validating this base class so\nexisting data can be carried forward without remaining top-level contract fields."
+			},
 			"AssignItemRequest": {
 				"properties": {
 					"force": {
@@ -1611,28 +2103,6 @@
 			},
 			"AssignmentUpdateRequest": {
 				"properties": {
-					"editedQuestion": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Editedquestion"
-					},
-					"answer": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Answer"
-					},
 					"comment": {
 						"anyOf": [
 							{
@@ -1657,20 +2127,6 @@
 							}
 						],
 						"title": "Status"
-					},
-					"refs": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/Reference"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Refs"
 					},
 					"manualTags": {
 						"anyOf": [
@@ -1712,8 +2168,7 @@
 						"anyOf": [
 							{
 								"items": {
-									"additionalProperties": true,
-									"type": "object"
+									"$ref": "#/components/schemas/app__api__v1__assignments__HistoryEntryPatch"
 								},
 								"type": "array"
 							},
@@ -1722,12 +2177,126 @@
 							}
 						],
 						"title": "History"
+					},
+					"contextEntries": {
+						"anyOf": [
+							{
+								"items": {
+									"$ref": "#/components/schemas/ContextEntry"
+								},
+								"type": "array"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Contextentries"
+					},
+					"toolCalls": {
+						"anyOf": [
+							{
+								"items": {
+									"$ref": "#/components/schemas/ToolCallRecord"
+								},
+								"type": "array"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Toolcalls"
+					},
+					"expectedTools": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/ExpectedTools"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"feedback": {
+						"anyOf": [
+							{
+								"items": {
+									"$ref": "#/components/schemas/FeedbackEntry"
+								},
+								"type": "array"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Feedback"
+					},
+					"metadata": {
+						"anyOf": [
+							{
+								"additionalProperties": true,
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Metadata"
+					},
+					"plugins": {
+						"anyOf": [
+							{
+								"additionalProperties": {
+									"$ref": "#/components/schemas/PluginPayload"
+								},
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Plugins"
+					},
+					"traceIds": {
+						"anyOf": [
+							{
+								"additionalProperties": {
+									"type": "string"
+								},
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Traceids"
+					},
+					"tracePayload": {
+						"anyOf": [
+							{
+								"additionalProperties": true,
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Tracepayload"
+					},
+					"scenarioId": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Scenarioid"
 					}
 				},
 				"additionalProperties": true,
 				"type": "object",
-				"title": "AssignmentUpdateRequest",
-				"description": "Payload for SME update (save draft / approve / skip / delete).\n\nUsing a Pydantic model allows camelCase -> snake_case alias handling. All fields optional; we\nonly mutate those explicitly provided (tracked via model_fields_set)."
+				"title": "AssignmentUpdateRequest"
 			},
 			"BulkImportError": {
 				"properties": {
@@ -1773,8 +2342,7 @@
 				},
 				"type": "object",
 				"required": ["index", "code", "message"],
-				"title": "BulkImportError",
-				"description": "Structured error for bulk import failures."
+				"title": "BulkImportError"
 			},
 			"ChatReference": {
 				"properties": {
@@ -1879,6 +2447,21 @@
 				"required": ["content"],
 				"title": "ChatResponse"
 			},
+			"ContextEntry": {
+				"properties": {
+					"key": {
+						"type": "string",
+						"title": "Key"
+					},
+					"value": {
+						"title": "Value"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["key", "value"],
+				"title": "ContextEntry"
+			},
 			"CurationInstructionsUpdate": {
 				"properties": {
 					"instructions": {
@@ -1960,8 +2543,7 @@
 				},
 				"type": "object",
 				"required": ["id", "datasetName", "instructions"],
-				"title": "DatasetCurationInstructions",
-				"description": "Dataset-level curation instructions document (schemaVersion v1).\n\nStored in the same Cosmos container as ground-truth items using MultiHash PK\n[/datasetName, /bucket] with bucket fixed to 0 and a stable id pattern\n\"curation-instructions|{datasetName}\"."
+				"title": "DatasetCurationInstructions"
 			},
 			"DependencyDTO": {
 				"properties": {
@@ -2017,17 +2599,34 @@
 				"title": "DuplicateWarning",
 				"description": "Warning about a likely duplicate of an approved item."
 			},
-			"ExpectedBehavior": {
-				"type": "string",
-				"enum": [
-					"tool:search",
-					"generation:answer",
-					"generation:need-context",
-					"generation:clarification",
-					"generation:out-of-domain"
-				],
-				"title": "ExpectedBehavior",
-				"description": "Expected behavior tags for history items in ground truth evaluation.\n\nThese tags describe what the agent should do at each turn of a conversation:\n- tool:search: Agent should perform a search/retrieval operation\n- generation:answer: Agent should generate a direct answer\n- generation:need-context: Agent should ask for more context\n- generation:clarification: Agent should ask for clarification\n- generation:out-of-domain: Agent should indicate the query is out of domain"
+			"ExpectedTools": {
+				"properties": {
+					"required": {
+						"items": {
+							"$ref": "#/components/schemas/ToolExpectation"
+						},
+						"type": "array",
+						"title": "Required"
+					},
+					"optional": {
+						"items": {
+							"$ref": "#/components/schemas/ToolExpectation"
+						},
+						"type": "array",
+						"title": "Optional"
+					},
+					"notNeeded": {
+						"items": {
+							"$ref": "#/components/schemas/ToolExpectation"
+						},
+						"type": "array",
+						"title": "Notneeded"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "ExpectedTools",
+				"description": "Tool expectations. Tools are implicitly allowed unless listed here."
 			},
 			"ExportDeliveryOptions": {
 				"properties": {
@@ -2067,6 +2666,23 @@
 				"additionalProperties": false,
 				"type": "object",
 				"title": "ExportFilters"
+			},
+			"FeedbackEntry": {
+				"properties": {
+					"source": {
+						"type": "string",
+						"title": "Source",
+						"default": ""
+					},
+					"values": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Values"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"title": "FeedbackEntry"
 			},
 			"FrontendConfig": {
 				"properties": {
@@ -2119,536 +2735,11 @@
 				"required": ["groups"],
 				"title": "GlossaryResponse"
 			},
-			"GroundTruthItem-Input": {
-				"properties": {
-					"id": {
-						"type": "string",
-						"title": "Id"
-					},
-					"datasetName": {
-						"type": "string",
-						"title": "Datasetname"
-					},
-					"bucket": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "uuid"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Bucket"
-					},
-					"status": {
-						"$ref": "#/components/schemas/GroundTruthStatus",
-						"default": "draft"
-					},
-					"docType": {
-						"type": "string",
-						"title": "Doctype",
-						"default": "ground-truth-item"
-					},
-					"schemaVersion": {
-						"type": "string",
-						"title": "Schemaversion",
-						"default": "v2"
-					},
-					"synthQuestion": {
-						"type": "string",
-						"title": "Synthquestion"
-					},
-					"editedQuestion": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Editedquestion"
-					},
-					"answer": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Answer"
-					},
-					"refs": {
-						"items": {
-							"$ref": "#/components/schemas/Reference"
-						},
-						"type": "array",
-						"title": "Refs"
-					},
-					"manualTags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Manualtags"
-					},
-					"computedTags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Computedtags"
-					},
-					"comment": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Comment"
-					},
-					"history": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/HistoryItem"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "History"
-					},
-					"contextUsedForGeneration": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Contextusedforgeneration"
-					},
-					"contextSource": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Contextsource"
-					},
-					"modelUsedForGeneration": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Modelusedforgeneration"
-					},
-					"semanticClusterNumber": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Semanticclusternumber"
-					},
-					"weight": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Weight"
-					},
-					"samplingBucket": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Samplingbucket"
-					},
-					"questionLength": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Questionlength"
-					},
-					"assignedTo": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Assignedto"
-					},
-					"assignedAt": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Assignedat"
-					},
-					"updatedAt": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Updatedat"
-					},
-					"updatedBy": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Updatedby"
-					},
-					"reviewedAt": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Reviewedat"
-					},
-					"_etag": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Etag"
-					},
-					"totalReferences": {
-						"type": "integer",
-						"title": "Totalreferences",
-						"default": 0
-					}
-				},
-				"type": "object",
-				"required": ["id", "datasetName", "synthQuestion"],
-				"title": "GroundTruthItem",
-				"description": "Canonical Ground Truth item aligned to wire schema (schemaVersion v1).\n\nAll fields with camelCase wire names use aliases; we accept both field names and aliases\non input (populate_by_name=True) and always serialize using by_alias."
-			},
-			"GroundTruthItem-Output": {
-				"properties": {
-					"id": {
-						"type": "string",
-						"title": "Id"
-					},
-					"datasetName": {
-						"type": "string",
-						"title": "Datasetname"
-					},
-					"bucket": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "uuid"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Bucket"
-					},
-					"status": {
-						"$ref": "#/components/schemas/GroundTruthStatus",
-						"default": "draft"
-					},
-					"docType": {
-						"type": "string",
-						"title": "Doctype",
-						"default": "ground-truth-item"
-					},
-					"schemaVersion": {
-						"type": "string",
-						"title": "Schemaversion",
-						"default": "v2"
-					},
-					"synthQuestion": {
-						"type": "string",
-						"title": "Synthquestion"
-					},
-					"editedQuestion": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Editedquestion"
-					},
-					"answer": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Answer"
-					},
-					"refs": {
-						"items": {
-							"$ref": "#/components/schemas/Reference"
-						},
-						"type": "array",
-						"title": "Refs"
-					},
-					"manualTags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Manualtags"
-					},
-					"computedTags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Computedtags"
-					},
-					"comment": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Comment"
-					},
-					"history": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/HistoryItem"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "History"
-					},
-					"contextUsedForGeneration": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Contextusedforgeneration"
-					},
-					"contextSource": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Contextsource"
-					},
-					"modelUsedForGeneration": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Modelusedforgeneration"
-					},
-					"semanticClusterNumber": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Semanticclusternumber"
-					},
-					"weight": {
-						"anyOf": [
-							{
-								"type": "number"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Weight"
-					},
-					"samplingBucket": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Samplingbucket"
-					},
-					"questionLength": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Questionlength"
-					},
-					"assignedTo": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Assignedto"
-					},
-					"assignedAt": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Assignedat"
-					},
-					"updatedAt": {
-						"type": "string",
-						"format": "date-time",
-						"title": "Updatedat"
-					},
-					"updatedBy": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Updatedby"
-					},
-					"reviewedAt": {
-						"anyOf": [
-							{
-								"type": "string",
-								"format": "date-time"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Reviewedat"
-					},
-					"_etag": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Etag"
-					},
-					"totalReferences": {
-						"type": "integer",
-						"title": "Totalreferences",
-						"default": 0
-					},
-					"tags": {
-						"items": {
-							"type": "string"
-						},
-						"type": "array",
-						"title": "Tags",
-						"description": "Return a merged, sorted view of manual and computed tags.",
-						"readOnly": true
-					}
-				},
-				"type": "object",
-				"required": ["id", "datasetName", "synthQuestion", "tags"],
-				"title": "GroundTruthItem",
-				"description": "Canonical Ground Truth item aligned to wire schema (schemaVersion v1).\n\nAll fields with camelCase wire names use aliases; we accept both field names and aliases\non input (populate_by_name=True) and always serialize using by_alias."
-			},
 			"GroundTruthListResponse": {
 				"properties": {
 					"items": {
 						"items": {
-							"$ref": "#/components/schemas/GroundTruthItem-Output"
+							"$ref": "#/components/schemas/AgenticGroundTruthEntry-Output"
 						},
 						"type": "array",
 						"title": "Items"
@@ -2666,6 +2757,192 @@
 				"enum": ["draft", "approved", "deleted", "skipped"],
 				"title": "GroundTruthStatus"
 			},
+			"GroundTruthUpdateRequest": {
+				"properties": {
+					"status": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/GroundTruthStatus"
+							},
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Status"
+					},
+					"comment": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Comment"
+					},
+					"history": {
+						"anyOf": [
+							{
+								"items": {
+									"$ref": "#/components/schemas/app__api__v1__assignments__HistoryEntryPatch"
+								},
+								"type": "array"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "History"
+					},
+					"contextEntries": {
+						"anyOf": [
+							{
+								"items": {
+									"$ref": "#/components/schemas/ContextEntry"
+								},
+								"type": "array"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Contextentries"
+					},
+					"toolCalls": {
+						"anyOf": [
+							{
+								"items": {
+									"$ref": "#/components/schemas/ToolCallRecord"
+								},
+								"type": "array"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Toolcalls"
+					},
+					"expectedTools": {
+						"anyOf": [
+							{
+								"$ref": "#/components/schemas/ExpectedTools"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"feedback": {
+						"anyOf": [
+							{
+								"items": {
+									"$ref": "#/components/schemas/FeedbackEntry"
+								},
+								"type": "array"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Feedback"
+					},
+					"metadata": {
+						"anyOf": [
+							{
+								"additionalProperties": true,
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Metadata"
+					},
+					"plugins": {
+						"anyOf": [
+							{
+								"additionalProperties": {
+									"$ref": "#/components/schemas/PluginPayload"
+								},
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Plugins"
+					},
+					"manualTags": {
+						"anyOf": [
+							{
+								"items": {
+									"type": "string"
+								},
+								"type": "array"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Manualtags"
+					},
+					"traceIds": {
+						"anyOf": [
+							{
+								"additionalProperties": {
+									"type": "string"
+								},
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Traceids"
+					},
+					"tracePayload": {
+						"anyOf": [
+							{
+								"additionalProperties": true,
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Tracepayload"
+					},
+					"scenarioId": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Scenarioid"
+					},
+					"etag": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Etag"
+					}
+				},
+				"additionalProperties": true,
+				"type": "object",
+				"title": "GroundTruthUpdateRequest"
+			},
 			"HTTPValidationError": {
 				"properties": {
 					"detail": {
@@ -2679,54 +2956,21 @@
 				"type": "object",
 				"title": "HTTPValidationError"
 			},
-			"HistoryItem": {
+			"HistoryEntry": {
 				"properties": {
 					"role": {
-						"$ref": "#/components/schemas/HistoryItemRole"
+						"type": "string",
+						"title": "Role"
 					},
 					"msg": {
 						"type": "string",
 						"title": "Msg"
-					},
-					"refs": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/Reference"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Refs"
-					},
-					"expectedBehavior": {
-						"anyOf": [
-							{
-								"items": {
-									"$ref": "#/components/schemas/ExpectedBehavior"
-								},
-								"type": "array"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Expectedbehavior",
-						"description": "Expected behavior(s) for this turn in the conversation (e.g., tool:search, generation:answer)"
 					}
 				},
+				"additionalProperties": false,
 				"type": "object",
 				"required": ["role", "msg"],
-				"title": "HistoryItem",
-				"description": "Represents a single item in the multi-turn history."
-			},
-			"HistoryItemRole": {
-				"type": "string",
-				"enum": ["user", "assistant"],
-				"title": "HistoryItemRole"
+				"title": "HistoryEntry"
 			},
 			"ImportBulkResponse": {
 				"properties": {
@@ -2857,8 +3101,29 @@
 					"hasNext",
 					"hasPrev"
 				],
-				"title": "PaginationMetadata",
-				"description": "Pagination metadata for list responses."
+				"title": "PaginationMetadata"
+			},
+			"PluginPayload": {
+				"properties": {
+					"kind": {
+						"type": "string",
+						"title": "Kind"
+					},
+					"version": {
+						"type": "string",
+						"title": "Version",
+						"default": "1.0"
+					},
+					"data": {
+						"additionalProperties": true,
+						"type": "object",
+						"title": "Data"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["kind"],
+				"title": "PluginPayload"
 			},
 			"RecomputeTagsResponse": {
 				"properties": {
@@ -2985,7 +3250,7 @@
 				"type": "object",
 				"required": ["url"],
 				"title": "Reference",
-				"description": "Wire reference object.\n\n{ url, title, content, keyExcerpt, type, bonus, messageIndex }"
+				"description": "Legacy RAG reference object retained for compatibility helpers and tests."
 			},
 			"RemoveTagsRequest": {
 				"properties": {
@@ -3005,7 +3270,7 @@
 				"properties": {
 					"assigned": {
 						"items": {
-							"$ref": "#/components/schemas/GroundTruthItem-Output"
+							"$ref": "#/components/schemas/AgenticGroundTruthEntry-Output"
 						},
 						"type": "array",
 						"title": "Assigned"
@@ -3269,6 +3534,103 @@
 				"required": ["groups"],
 				"title": "TagSchemaResponse"
 			},
+			"ToolCallRecord": {
+				"properties": {
+					"id": {
+						"type": "string",
+						"title": "Id",
+						"default": ""
+					},
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"callType": {
+						"type": "string",
+						"enum": ["tool", "subagent"],
+						"title": "Calltype",
+						"default": "tool"
+					},
+					"agent": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Agent"
+					},
+					"stepNumber": {
+						"anyOf": [
+							{
+								"type": "integer"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Stepnumber"
+					},
+					"parallelGroup": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Parallelgroup"
+					},
+					"parentCallId": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Parentcallid"
+					},
+					"response": {
+						"title": "Response"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["name"],
+				"title": "ToolCallRecord"
+			},
+			"ToolExpectation": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"title": "Name"
+					},
+					"arguments": {
+						"anyOf": [
+							{
+								"additionalProperties": true,
+								"type": "object"
+							},
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Arguments"
+					}
+				},
+				"additionalProperties": false,
+				"type": "object",
+				"required": ["name"],
+				"title": "ToolExpectation"
+			},
 			"ValidationError": {
 				"properties": {
 					"loc": {
@@ -3318,8 +3680,30 @@
 				},
 				"type": "object",
 				"required": ["total", "succeeded", "failed"],
-				"title": "ValidationSummary",
-				"description": "Summary statistics for bulk import."
+				"title": "ValidationSummary"
+			},
+			"app__api__v1__assignments__HistoryEntryPatch": {
+				"properties": {
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"msg": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Msg"
+					}
+				},
+				"additionalProperties": true,
+				"type": "object",
+				"required": ["role"],
+				"title": "HistoryEntryPatch"
 			}
 		}
 	}

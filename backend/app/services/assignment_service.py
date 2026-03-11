@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
+from typing import cast
 from app.adapters.repos.base import GroundTruthRepo
-from app.domain.models import GroundTruthItem, AssignmentDocument, Reference
+from app.domain.models import AgenticGroundTruthEntry, AssignmentDocument, GroundTruthItem, HistoryItem
 from app.plugins import get_default_registry
 from app.core.errors import AssignmentConflictError
 from app.core.config import get_sampling_allocation
@@ -98,7 +99,7 @@ class AssignmentService:
 
     def can_assign_item(
         self,
-        item: GroundTruthItem,
+        item: AgenticGroundTruthEntry,
         user_id: str,
         force: bool = False,
         user_roles: list[str] | None = None,
@@ -134,12 +135,12 @@ class AssignmentService:
 
         return True, None
 
-    async def get_assigned(self, user_id: str) -> list[GroundTruthItem]:
+    async def get_assigned(self, user_id: str) -> list[AgenticGroundTruthEntry]:
         return await self.repo.list_assigned(user_id)
 
     async def sample_candidates(
         self, user_id: str, limit: int, exclude_ids: list[str] | None = None
-    ) -> list[GroundTruthItem]:
+    ) -> list[AgenticGroundTruthEntry]:
         """Sample unassigned items with weighted allocation across datasets.
 
         This method implements the business logic for sampling candidates:
@@ -171,7 +172,7 @@ class AssignmentService:
                 "exclude_count": len(exclude_ids) if exclude_ids else 0,
             },
         )
-        results: list[GroundTruthItem] = await self.repo.list_assigned(user_id)
+        results: list[AgenticGroundTruthEntry] = await self.repo.list_assigned(user_id)
         seen_ids: set[str] = {it.id for it in results}
         # Add caller-provided excludes
         if exclude_ids:
@@ -230,7 +231,7 @@ class AssignmentService:
         )
 
         # 4) Query each dataset up to its quota (single pass)
-        per_dataset_results: dict[str, list[GroundTruthItem]] = {}
+        per_dataset_results: dict[str, list[AgenticGroundTruthEntry]] = {}
         for ds, q in quotas.items():
             if q <= 0:
                 logger.debug(
@@ -313,7 +314,7 @@ class AssignmentService:
         )
         return final
 
-    async def self_assign(self, user_id: str, limit: int) -> list[GroundTruthItem]:
+    async def self_assign(self, user_id: str, limit: int) -> list[AgenticGroundTruthEntry]:
         if limit <= 0:
             logger.debug(
                 "self_assign.skip_non_positive_limit",
@@ -324,7 +325,9 @@ class AssignmentService:
         assigned_docs: list[AssignmentDocument] = []
         seen_ids: set[str] = set()
 
-        async def _try_assign(candidates: list[GroundTruthItem], remaining: int) -> None:
+        async def _try_assign(
+            candidates: list[AgenticGroundTruthEntry], remaining: int
+        ) -> None:
             nonlocal assigned_docs, seen_ids
             if remaining <= 0:
                 return
@@ -416,7 +419,7 @@ class AssignmentService:
             await _try_assign(retry, remaining)
 
         # Return the underlying ground truth items in the order they were added
-        ground_truth_items: list[GroundTruthItem] = []
+        ground_truth_items: list[AgenticGroundTruthEntry] = []
         for ad in assigned_docs[:limit]:
             gt = await self.repo.get_gt(ad.datasetName, ad.bucket, ad.ground_truth_id)
             if gt:
@@ -460,7 +463,7 @@ class AssignmentService:
         user_id: str,
         force: bool = False,
         user_roles: list[str] | None = None,
-    ) -> GroundTruthItem:
+    ) -> AgenticGroundTruthEntry:
         """Assign a single ground truth item to a user.
 
         This method:
@@ -598,7 +601,9 @@ class AssignmentService:
 
         return updated
 
-    async def duplicate_item(self, original: GroundTruthItem, user_id: str) -> GroundTruthItem:
+    async def duplicate_item(
+        self, original: AgenticGroundTruthEntry, user_id: str
+    ) -> AgenticGroundTruthEntry:
         """Create a copy of a GroundTruth item for rephrasing.
 
         Rules:
@@ -617,34 +622,25 @@ class AssignmentService:
             new_tags.append(rephrase_tag)
 
         now = datetime.now(timezone.utc)
-        new_item = GroundTruthItem(
-            id=randomname.get_name(),
-            datasetName=original.datasetName,
-            bucket=original.bucket,
-            status=GroundTruthStatus.draft,
-            synthQuestion=original.synth_question,
-            edited_question=original.edited_question,
-            answer=original.answer,
-            refs=[Reference.model_validate(r) for r in (original.refs or [])],
-            manualTags=new_tags,
-            comment=original.comment,
-            history=original.history,
-            contextUsedForGeneration=original.contextUsedForGeneration,
-            contextSource=original.contextSource,
-            modelUsedForGeneration=original.modelUsedForGeneration,
-            semanticClusterNumber=original.semanticClusterNumber,
-            weight=original.weight,
-            samplingBucket=original.samplingBucket,
-            questionLength=original.questionLength,
-            assignedTo=user_id,
-            assigned_at=now,
-            updatedBy=None,
-            reviewed_at=None,
-        )
+        new_item = AgenticGroundTruthEntry.model_validate(original.model_dump(by_alias=True))
+        new_item.history = [
+            entry
+            if isinstance(entry, HistoryItem)
+            else HistoryItem.model_validate(entry.model_dump(by_alias=True))
+            for entry in (new_item.history or [])
+        ]
+        new_item.id = randomname.get_name()
+        new_item.status = GroundTruthStatus.draft
+        new_item.manual_tags = new_tags
+        new_item.assignedTo = user_id
+        new_item.assigned_at = now
+        new_item.updatedBy = None
+        new_item.reviewed_at = None
+        new_item.etag = None
 
         # Apply computed tags based on the new item's properties
         registry = get_default_registry()
-        computed_tags = registry.compute_all(new_item)
+        computed_tags = registry.compute_all(cast(GroundTruthItem, new_item))
         new_item.computed_tags = computed_tags
         # Strip any computed tag keys from manual tags to prevent duplicates
         # Uses pattern-based matching for dynamic tags (e.g., dataset:*)

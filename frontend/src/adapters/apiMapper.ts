@@ -2,7 +2,26 @@ import type { components } from "../api/generated";
 import type { GroundTruthItem, Reference } from "../models/groundTruth";
 import { urlToTitle } from "../models/utils";
 
-export type ApiGroundTruth = components["schemas"]["GroundTruthItem-Output"];
+type ConversationTurn = NonNullable<GroundTruthItem["history"]>[number];
+type ApiHistoryEntry = components["schemas"]["HistoryEntry"] & {
+	refs?: components["schemas"]["Reference"][];
+	expectedBehavior?: string[];
+};
+export type ApiGroundTruth =
+	components["schemas"]["AgenticGroundTruthEntry-Output"] & {
+		synthQuestion?: string | null;
+		editedQuestion?: string | null;
+		answer?: string | null;
+		refs?: components["schemas"]["Reference"][];
+		totalReferences?: number;
+		tags?: string[];
+		comment?: string | null;
+	} & Omit<
+			components["schemas"]["AgenticGroundTruthEntry-Output"],
+			"history"
+		> & {
+			history?: ApiHistoryEntry[];
+		};
 export type ApiReference = components["schemas"]["Reference"];
 
 export function groundTruthFromApi(api: ApiGroundTruth): GroundTruthItem {
@@ -20,7 +39,7 @@ export function groundTruthFromApi(api: ApiGroundTruth): GroundTruthItem {
 				content: h.msg,
 				expectedBehavior:
 					h.expectedBehavior && h.expectedBehavior.length > 0
-						? h.expectedBehavior
+						? (h.expectedBehavior as ConversationTurn["expectedBehavior"])
 						: undefined,
 			};
 

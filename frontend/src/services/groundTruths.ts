@@ -5,7 +5,25 @@ import { urlToTitle } from "../models/utils";
 import { getApiBaseUrl, withDevUser } from "./http";
 import { logEvent } from "./telemetry";
 
-type GroundTruthItemOut = components["schemas"]["GroundTruthItem-Output"];
+type ConversationTurn = NonNullable<GroundTruthItem["history"]>[number];
+type ApiReference = components["schemas"]["Reference"];
+type ApiHistoryEntry = components["schemas"]["HistoryEntry"] & {
+	refs?: ApiReference[];
+	expectedBehavior?: string[];
+};
+type GroundTruthItemOut = Omit<
+	components["schemas"]["AgenticGroundTruthEntry-Output"],
+	"history"
+> & {
+	synthQuestion?: string | null;
+	editedQuestion?: string | null;
+	answer?: string | null;
+	refs?: ApiReference[];
+	totalReferences?: number;
+	tags?: string[];
+	comment?: string | null;
+	history?: ApiHistoryEntry[];
+};
 
 export type GroundTruthListPagination =
 	components["schemas"]["PaginationMetadata"];
@@ -23,7 +41,7 @@ export function mapGroundTruthFromApi(
 			content: h.msg,
 			expectedBehavior:
 				h.expectedBehavior && h.expectedBehavior.length > 0
-					? h.expectedBehavior
+					? (h.expectedBehavior as ConversationTurn["expectedBehavior"])
 					: undefined,
 		}));
 	} else {
