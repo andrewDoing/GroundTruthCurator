@@ -1,6 +1,7 @@
 import { Lock } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { GroundTruthItem } from "../../models/groundTruth";
+import { getQueuePreview } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
 import { fetchAvailableDatasets } from "../../services/datasets";
 import type { GroundTruthListPagination } from "../../services/groundTruths";
@@ -909,7 +910,13 @@ export default function QuestionsExplorer({
 									</th>
 									<th className="px-3 py-3 text-left min-w-[60px]">Status</th>
 									<th className="px-3 py-3 text-left min-w-[160px] sm:min-w-[200px]">
-										Question
+										Question / Message
+									</th>
+									<th
+										className="px-3 py-3 text-center min-w-[50px] hidden lg:table-cell"
+										title="Number of conversation turns"
+									>
+										Turns
 									</th>
 									<th className="px-3 py-3 text-left min-w-[120px] hidden lg:table-cell">
 										Tags
@@ -1009,7 +1016,7 @@ export default function QuestionsExplorer({
 								{loadError ? (
 									<tr>
 										<td
-											colSpan={9}
+											colSpan={10}
 											className="px-4 py-8 text-center text-sm text-rose-600"
 										>
 											Failed to load items: {loadError}
@@ -1018,7 +1025,7 @@ export default function QuestionsExplorer({
 								) : isLoading && sourceItems.length === 0 ? (
 									<tr>
 										<td
-											colSpan={9}
+											colSpan={10}
 											className="px-4 py-8 text-center text-sm text-slate-500"
 										>
 											Loading ground truths…
@@ -1027,7 +1034,7 @@ export default function QuestionsExplorer({
 								) : displayItems.length === 0 ? (
 									<tr>
 										<td
-											colSpan={9}
+											colSpan={10}
 											className="px-4 py-8 text-center text-sm text-slate-500"
 										>
 											No items to display
@@ -1073,14 +1080,18 @@ export default function QuestionsExplorer({
 													)}
 												</div>
 											</td>
-											{/* Question */}
+											{/* Question / first user message */}
 											<td className="px-3 py-3 text-sm">
 												<div
 													className="truncate font-medium text-slate-800 max-w-[180px] sm:max-w-[240px] lg:max-w-[300px]"
-													title={item.question}
+													title={getQueuePreview(item)}
 												>
-													{item.question || "(no question)"}
+													{getQueuePreview(item)}
 												</div>
+											</td>
+											{/* Turns count */}
+											<td className="px-3 py-3 text-xs text-center hidden lg:table-cell text-slate-500">
+												{item.history?.length ? item.history.length : "—"}
 											</td>
 											{/* Tags */}
 											<td className="px-3 py-3 hidden lg:table-cell">

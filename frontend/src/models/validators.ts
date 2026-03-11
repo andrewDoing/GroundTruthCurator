@@ -38,10 +38,10 @@ type ConversationValidationResult = {
 
 /**
  * Validates that a conversation follows the required pattern:
- * - Must start with a user turn
- * - Must alternate between user and agent turns
- * - Every user turn must have a corresponding agent turn
- * - The conversation should end with an agent turn for approval
+ * - Must start with a user turn (role === "user")
+ * - Must alternate between user and non-user turns (free-form agent roles supported)
+ * - Every user turn must have a corresponding non-user (agent) turn
+ * - The conversation should end with a non-user turn for approval
  *
  * @param history - The conversation history to validate
  * @returns Validation result with any errors found
@@ -61,19 +61,23 @@ export function validateConversationPattern(
 		errors.push("Conversation must start with a user turn");
 	}
 
-	// Check alternating pattern and that every user has an agent response
+	// Check alternating pattern: even indices must be "user", odd indices must be non-"user"
 	for (let i = 0; i < history.length; i++) {
 		const currentTurn = history[i];
-		const expectedRole = i % 2 === 0 ? "user" : "agent";
+		const expectedIsUser = i % 2 === 0;
 
-		if (currentTurn.role !== expectedRole) {
+		if (expectedIsUser && currentTurn.role !== "user") {
 			errors.push(
-				`Turn ${i + 1} should be a ${expectedRole} turn, but found ${currentTurn.role} turn`,
+				`Turn ${i + 1} should be a user turn, but found role "${currentTurn.role}"`,
+			);
+		} else if (!expectedIsUser && currentTurn.role === "user") {
+			errors.push(
+				`Turn ${i + 1} should be an agent/non-user turn, but found user turn`,
 			);
 		}
 	}
 
-	// For approval, the conversation should end with an agent turn (even index count)
+	// For approval, the conversation should end with a non-user turn (even index count)
 	// This ensures every user query has an agent response
 	if (history.length % 2 !== 0) {
 		errors.push(

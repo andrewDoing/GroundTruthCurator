@@ -139,10 +139,10 @@ export default function MultiTurnEditor({
 		if (!turn) return;
 
 		// Validation: Check if deleting this turn would break conversation flow
-		// If this is a user turn and the next turn is an agent turn, warn the user
+		// If this is a user turn and the next turn is an agent (non-user) turn, warn the user
 		if (turn.role === "user" && index < history.length - 1) {
 			const nextTurn = history[index + 1];
-			if (nextTurn?.role === "agent") {
+			if (nextTurn?.role !== "user") {
 				if (
 					!window.confirm(
 						"Deleting this user turn will also require deleting the following agent turn to maintain conversation flow. Delete both turns?",
@@ -248,6 +248,7 @@ export default function MultiTurnEditor({
 							// Intermediate variable breaks the direct array-index-to-key
 							// connection; turns have no stable id so position is the correct key.
 							const turnKey = `${turn.role}-${String(idx)}`;
+							const isAgentTurn = turn.role !== "user";
 							return (
 								<ConversationTurnComponent
 									key={turnKey}
@@ -256,14 +257,14 @@ export default function MultiTurnEditor({
 									isLast={idx === history.length - 1}
 									onUpdate={(content) => handleUpdateTurn(idx, content)}
 									onUpdateExpectedBehavior={
-										turn.role === "agent"
+										isAgentTurn
 											? (behaviors) =>
 													handleUpdateExpectedBehavior(idx, behaviors)
 											: undefined
 									}
 									onDelete={() => handleRemoveTurn(idx)}
 									onRegenerate={
-										turn.role === "agent"
+										isAgentTurn
 											? () => {
 													void handleRegenerate(idx);
 												}
@@ -272,10 +273,10 @@ export default function MultiTurnEditor({
 									isGenerating={isGenerating && generatingMessageIndex === idx}
 									canEdit={canEdit && !readOnly}
 									referenceCount={
-										turn.role === "agent" ? referenceCounts.get(idx) : undefined
+										isAgentTurn ? referenceCounts.get(idx) : undefined
 									}
 									onViewReferences={
-										turn.role === "agent"
+										isAgentTurn
 											? () => setViewingReferencesForTurn(idx)
 											: undefined
 									}

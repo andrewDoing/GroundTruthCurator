@@ -76,7 +76,13 @@ export default function ConversationTurnComponent({
 	};
 
 	const isUser = turn.role === "user";
-	const isAgent = turn.role === "agent";
+	const isAgent = turn.role !== "user";
+	// Display label: "Agent" for generic "agent" role, capitalize for others
+	const roleLabel = isUser
+		? "User"
+		: turn.role === "agent"
+			? "Agent"
+			: turn.role;
 
 	// Sync editContent when turn.content changes (e.g., when switching queue items)
 	useEffect(() => {
@@ -117,7 +123,7 @@ export default function ConversationTurnComponent({
 							isAgent && "bg-violet-500 text-white",
 						)}
 					>
-						{isUser ? "User" : "Agent"}
+						{roleLabel}
 					</span>
 					<span className="text-xs text-slate-600">Turn #{turnNumber}</span>
 					<button

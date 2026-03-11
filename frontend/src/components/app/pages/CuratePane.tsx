@@ -34,10 +34,12 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../../../models/groundTruth";
+import { hasEvidenceData } from "../../../models/groundTruth";
 import { cn } from "../../../models/utils";
 import { validateConversationPattern } from "../../../models/validators";
 import TagsEditor from "../../app/editor/TagsEditor";
 import InstructionsPane from "../../app/InstructionsPane";
+import TracePanel from "../../app/TracePanel";
 import defaultCurateMd from "../defaultCurateInstructions.md?raw";
 import MultiTurnEditor from "../editor/MultiTurnEditor";
 
@@ -180,31 +182,35 @@ export default function CuratePane({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [current?.id]);
 
-	return (
-		<section className={cn("space-y-3 overflow-y-auto min-h-0", className)}>
-			{current?.deleted && (
-				<div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
-					This ground truth is marked as deleted. You can restore it or leave it
-					deleted. It will remain visible in the sidebar and exports.
-				</div>
-			)}
-			<InstructionsPane
-				className=""
-				title="Curation Instructions"
-				markdown={
-					(datasetMd?.trim() ? datasetMd : current?.curationInstructions) ||
-					(defaultCurateMd as unknown as string)
-				}
-			/>
-			{dsError && datasetName && (
-				<div className="-mt-2 text-xs text-amber-700">
-					Using default instructions — couldn't load dataset instructions for
-					<span className="ml-1 font-medium">{datasetName}</span>.
-				</div>
-			)}
+	const showEvidence = !!current && hasEvidenceData(current);
 
-			{/* Mode Toggle - DISABLED: Always use multi-turn mode */}
-			{/* <div className="flex items-center gap-2 rounded-2xl border bg-white p-2">
+	return (
+		<div className={cn("flex min-h-0 gap-3", className)}>
+			{/* Left pane: conversation editor, approval, actions */}
+			<section className="flex-1 min-w-0 space-y-3 overflow-y-auto min-h-0">
+				{current?.deleted && (
+					<div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
+						This ground truth is marked as deleted. You can restore it or leave
+						it deleted. It will remain visible in the sidebar and exports.
+					</div>
+				)}
+				<InstructionsPane
+					className=""
+					title="Curation Instructions"
+					markdown={
+						(datasetMd?.trim() ? datasetMd : current?.curationInstructions) ||
+						(defaultCurateMd as unknown as string)
+					}
+				/>
+				{dsError && datasetName && (
+					<div className="-mt-2 text-xs text-amber-700">
+						Using default instructions — couldn't load dataset instructions for
+						<span className="ml-1 font-medium">{datasetName}</span>.
+					</div>
+				)}
+
+				{/* Mode Toggle - DISABLED: Always use multi-turn mode */}
+				{/* <div className="flex items-center gap-2 rounded-2xl border bg-white p-2">
 				<button
 					type="button"
 					onClick={() => handleModeToggle("single")}
@@ -231,247 +237,212 @@ export default function CuratePane({
 				</button>
 			</div> */}
 
-			{/* Editor: Single-turn or Multi-turn */}
-			{editorMode === "single" ? (
-				<>
-					<div className="rounded-2xl border bg-white p-4 shadow-sm">
-						<div className="mb-3 text-sm font-medium">Question</div>
-						<textarea
-							ref={questionRef}
-							aria-label="Question"
-							className="h-24 w-full resize-y rounded-xl border p-3 focus:outline-none focus:ring-2 focus:ring-violet-300"
-							value={current?.question || ""}
-							onChange={(e) => onUpdateQuestion(e.target.value)}
-						/>
-					</div>
+				{/* Editor: Single-turn or Multi-turn */}
+				{editorMode === "single" ? (
+					<>
+						<div className="rounded-2xl border bg-white p-4 shadow-sm">
+							<div className="mb-3 text-sm font-medium">Question</div>
+							<textarea
+								ref={questionRef}
+								aria-label="Question"
+								className="h-24 w-full resize-y rounded-xl border p-3 focus:outline-none focus:ring-2 focus:ring-violet-300"
+								value={current?.question || ""}
+								onChange={(e) => onUpdateQuestion(e.target.value)}
+							/>
+						</div>
 
+						<div className="rounded-2xl border bg-white p-4 shadow-sm">
+							<div className="mb-3 text-sm font-medium">Answer</div>
+							<textarea
+								aria-label="Answer"
+								className="h-48 w-full resize-y rounded-xl border p-3 focus:outline-none focus:ring-2 focus:ring-violet-300"
+								value={current?.answer || ""}
+								onChange={(e) => onUpdateAnswer(e.target.value)}
+							/>
+						</div>
+					</>
+				) : (
 					<div className="rounded-2xl border bg-white p-4 shadow-sm">
-						<div className="mb-3 text-sm font-medium">Answer</div>
-						<textarea
-							aria-label="Answer"
-							className="h-48 w-full resize-y rounded-xl border p-3 focus:outline-none focus:ring-2 focus:ring-violet-300"
-							value={current?.answer || ""}
-							onChange={(e) => onUpdateAnswer(e.target.value)}
+						<MultiTurnEditor
+							current={current || null}
+							onUpdateHistory={onUpdateHistory}
+							onDeleteTurn={onDeleteTurn}
+							onGenerate={onGenerateAgentTurn}
+							canEdit={!current?.deleted}
+							onUpdateReference={onUpdateReference}
+							onRemoveReference={onRemoveReference}
+							onOpenReference={onOpenReference}
+							onAddReferences={onAddReferences}
+							onUpdateTags={onUpdateTags}
 						/>
 					</div>
-				</>
-			) : (
+				)}
+
+				{editorMode === "single" && (
+					<TagsEditor
+						selected={current?.manualTags || []}
+						computedTags={current?.computedTags}
+						onChange={onUpdateTags}
+						title="Tags"
+					/>
+				)}
+
+				{/* Comments Panel */}
 				<div className="rounded-2xl border bg-white p-4 shadow-sm">
-					<MultiTurnEditor
-						current={current || null}
-						onUpdateHistory={onUpdateHistory}
-						onDeleteTurn={onDeleteTurn}
-						onGenerate={onGenerateAgentTurn}
-						canEdit={!current?.deleted}
-						onUpdateReference={onUpdateReference}
-						onRemoveReference={onRemoveReference}
-						onOpenReference={onOpenReference}
-						onAddReferences={onAddReferences}
-						onUpdateTags={onUpdateTags}
+					<div className="mb-1 flex items-center gap-2">
+						<div className="text-sm font-medium">Comments</div>
+						<span className="ml-1 rounded-full border px-2 py-0.5 text-xs text-slate-500">
+							Optional
+						</span>
+					</div>
+					<textarea
+						aria-label="Comments"
+						placeholder="Add curator notes (optional)"
+						className="h-28 w-full resize-y rounded-xl border p-3 focus:outline-none focus:ring-2 focus:ring-violet-300"
+						value={current?.comment || ""}
+						onChange={(e) => onUpdateComment(e.target.value)}
 					/>
 				</div>
-			)}
 
-			{editorMode === "single" && (
-				<TagsEditor
-					selected={current?.manualTags || []}
-					computedTags={current?.computedTags}
-					onChange={onUpdateTags}
-					title="Tags"
-				/>
-			)}
-
-			{/* Comments Panel */}
-			<div className="rounded-2xl border bg-white p-4 shadow-sm">
-				<div className="mb-1 flex items-center gap-2">
-					<div className="text-sm font-medium">Comments</div>
-					<span className="ml-1 rounded-full border px-2 py-0.5 text-xs text-slate-500">
-						Optional
-					</span>
-				</div>
-				<textarea
-					aria-label="Comments"
-					placeholder="Add curator notes (optional)"
-					className="h-28 w-full resize-y rounded-xl border p-3 focus:outline-none focus:ring-2 focus:ring-violet-300"
-					value={current?.comment || ""}
-					onChange={(e) => onUpdateComment(e.target.value)}
-				/>
-			</div>
-
-			{/* Approval Requirements Explanation */}
-			{current && !canApprove && (
-				<div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-					<h3 className="mb-2 text-sm font-semibold text-amber-900">
-						⚠️ Issues Preventing Approval
-					</h3>
-					<div className="space-y-2 text-sm text-amber-800">
-						{current.deleted && (
-							<p className="flex items-start gap-2">
-								<span className="mt-0.5 flex-shrink-0">✗</span>
-								<span>
-									<strong>Item is deleted:</strong> Restore the item before
-									approving
-								</span>
-							</p>
-						)}
-						{editorMode === "multi" ? (
-							<>
-								{(() => {
-									// Validate conversation pattern
-									const patternValidation = validateConversationPattern(
-										current.history,
-									);
-									if (!patternValidation.valid) {
-										return (
-											<>
-												{patternValidation.errors.map((error) => (
-													<p key={error} className="flex items-start gap-2">
-														<span className="mt-0.5 flex-shrink-0">✗</span>
-														<span>
-															<strong>Conversation pattern error:</strong>{" "}
-															{error}
-														</span>
-													</p>
-												))}
-											</>
-										);
-									}
-									return null;
-								})()}
-								{(() => {
-									// Check that all agent turns have expected behavior
-									const agentTurns = (current.history || []).filter(
-										(turn) => turn.role === "agent",
-									);
-									const agentTurnsWithoutBehavior = agentTurns.filter(
-										(turn) =>
-											!turn.expectedBehavior ||
-											turn.expectedBehavior.length === 0,
-									);
-									if (agentTurnsWithoutBehavior.length > 0) {
-										return (
-											<p className="flex items-start gap-2">
+				{/* Approval Requirements Explanation */}
+				{current && !canApprove && (
+					<div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+						<h3 className="mb-2 text-sm font-semibold text-amber-900">
+							⚠️ Issues Preventing Approval
+						</h3>
+						<div className="space-y-2 text-sm text-amber-800">
+							{current.deleted && (
+								<p className="flex items-start gap-2">
+									<span className="mt-0.5 flex-shrink-0">✗</span>
+									<span>
+										<strong>Item is deleted:</strong> Restore the item before
+										approving
+									</span>
+								</p>
+							)}
+							{editorMode === "multi" ? (
+								validateConversationPattern(current.history).valid ? null : (
+									validateConversationPattern(current.history).errors.map(
+										(error) => (
+											<p key={error} className="flex items-start gap-2">
 												<span className="mt-0.5 flex-shrink-0">✗</span>
 												<span>
-													<strong>Missing expected behavior:</strong>{" "}
-													{agentTurnsWithoutBehavior.length} agent turn
-													{agentTurnsWithoutBehavior.length !== 1 ? "s" : ""}{" "}
-													need at least one expected behavior selected
+													<strong>Conversation pattern error:</strong> {error}
 												</span>
 											</p>
-										);
-									}
-									return null;
-								})()}
-							</>
-						) : (
-							<>
-								{(() => {
-									const hasSelected = current.references.length > 0;
-									if (!hasSelected) {
-										return (
-											<p className="flex items-start gap-2">
-												<span className="mt-0.5 flex-shrink-0">✗</span>
-												<span>
-													<strong>No references:</strong> Select at least one
-													reference
-												</span>
-											</p>
-										);
-									}
-									return null;
-								})()}
-								{(() => {
-									const unvisitedRefs = (current.references || []).filter(
-										(r) => !r.visitedAt,
-									);
-									if (unvisitedRefs.length > 0) {
-										return (
-											<p className="flex items-start gap-2">
-												<span className="mt-0.5 flex-shrink-0">✗</span>
-												<span>
-													<strong>Unvisited references:</strong>{" "}
-													{unvisitedRefs.length} reference
-													{unvisitedRefs.length !== 1 ? "s" : ""} need to be
-													opened and reviewed
-												</span>
-											</p>
-										);
-									}
-									return null;
-								})()}
-							</>
-						)}
+										),
+									)
+								)
+							) : (
+								<>
+									{current.references.length === 0 && (
+										<p className="flex items-start gap-2">
+											<span className="mt-0.5 flex-shrink-0">✗</span>
+											<span>
+												<strong>No references:</strong> Select at least one
+												reference
+											</span>
+										</p>
+									)}
+									{(current.references || []).filter((r) => !r.visitedAt)
+										.length > 0 && (
+										<p className="flex items-start gap-2">
+											<span className="mt-0.5 flex-shrink-0">✗</span>
+											<span>
+												<strong>Unvisited references:</strong>{" "}
+												{
+													(current.references || []).filter((r) => !r.visitedAt)
+														.length
+												}{" "}
+												reference
+												{(current.references || []).filter((r) => !r.visitedAt)
+													.length !== 1
+													? "s"
+													: ""}{" "}
+												need to be opened and reviewed
+											</span>
+										</p>
+									)}
+								</>
+							)}
+						</div>
 					</div>
-				</div>
-			)}
-			{current && canApprove && (
-				<div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-					<h3 className="mb-2 text-sm font-semibold text-emerald-900">
-						✓ Ready for Approval
-					</h3>
-					<p className="text-sm text-emerald-800">
-						All requirements are met. You can approve this item.
-					</p>
-				</div>
-			)}
+				)}
+				{current && canApprove && (
+					<div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+						<h3 className="mb-2 text-sm font-semibold text-emerald-900">
+							✓ Ready for Approval
+						</h3>
+						<p className="text-sm text-emerald-800">
+							All requirements are met. You can approve this item.
+						</p>
+					</div>
+				)}
 
-			<div className="flex items-center gap-2">
-				<button
-					type="button"
-					onClick={onSaveDraft}
-					disabled={saving}
-					className="inline-flex items-center gap-2 rounded-2xl border bg-white px-4 py-2 hover:bg-violet-50 disabled:opacity-50"
-				>
-					<Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Draft"}
-				</button>
-				<button
-					type="button"
-					onClick={onApprove}
-					disabled={saving || !!current?.deleted || !canApprove}
-					className="inline-flex items-center gap-2 rounded-2xl border border-violet-300 bg-violet-600 px-4 py-2 text-white shadow hover:bg-violet-700 disabled:opacity-50"
-				>
-					<Check className="h-4 w-4" /> {saving ? "Saving…" : "Approve"}
-				</button>
-				<button
-					type="button"
-					onClick={onDuplicate}
-					disabled={!current || saving}
-					className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-					title="Create a new draft rephrasing of this item"
-				>
-					{/* Using RefreshCw icon to indicate 'create a variant'; could be Copy icon if added */}
-					<RefreshCw className="h-4 w-4" /> Duplicate
-				</button>
-				<button
-					type="button"
-					onClick={onSkip}
-					className="inline-flex items-center gap-2 rounded-2xl border bg-white px-4 py-2 hover:bg-violet-50"
-					title="Skip this ground truth (mark skipped) and move to the next"
-				>
-					Skip
-				</button>
-				{current && !current.deleted && (
+				<div className="flex items-center gap-2">
 					<button
 						type="button"
-						onClick={onDelete}
-						className="ml-auto inline-flex items-center gap-2 rounded-2xl border border-rose-300 bg-white px-4 py-2 text-rose-700 hover:bg-rose-50"
-						title="Soft delete this ground truth"
+						onClick={onSaveDraft}
+						disabled={saving}
+						className="inline-flex items-center gap-2 rounded-2xl border bg-white px-4 py-2 hover:bg-violet-50 disabled:opacity-50"
 					>
-						<Trash2 className="h-4 w-4" /> Delete
+						<Save className="h-4 w-4" /> {saving ? "Saving…" : "Save Draft"}
 					</button>
-				)}
-				{current?.deleted && (
 					<button
 						type="button"
-						onClick={onRestore}
-						className="ml-auto inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 py-2 text-emerald-700 hover:bg-emerald-50"
-						title="Restore this ground truth"
+						onClick={onApprove}
+						disabled={saving || !!current?.deleted || !canApprove}
+						className="inline-flex items-center gap-2 rounded-2xl border border-violet-300 bg-violet-600 px-4 py-2 text-white shadow hover:bg-violet-700 disabled:opacity-50"
 					>
-						<RefreshCw className="h-4 w-4" /> Restore
+						<Check className="h-4 w-4" /> {saving ? "Saving…" : "Approve"}
 					</button>
-				)}
-			</div>
-		</section>
+					<button
+						type="button"
+						onClick={onDuplicate}
+						disabled={!current || saving}
+						className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+						title="Create a new draft rephrasing of this item"
+					>
+						{/* Using RefreshCw icon to indicate 'create a variant'; could be Copy icon if added */}
+						<RefreshCw className="h-4 w-4" /> Duplicate
+					</button>
+					<button
+						type="button"
+						onClick={onSkip}
+						className="inline-flex items-center gap-2 rounded-2xl border bg-white px-4 py-2 hover:bg-violet-50"
+						title="Skip this ground truth (mark skipped) and move to the next"
+					>
+						Skip
+					</button>
+					{current && !current.deleted && (
+						<button
+							type="button"
+							onClick={onDelete}
+							className="ml-auto inline-flex items-center gap-2 rounded-2xl border border-rose-300 bg-white px-4 py-2 text-rose-700 hover:bg-rose-50"
+							title="Soft delete this ground truth"
+						>
+							<Trash2 className="h-4 w-4" /> Delete
+						</button>
+					)}
+					{current?.deleted && (
+						<button
+							type="button"
+							onClick={onRestore}
+							className="ml-auto inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 py-2 text-emerald-700 hover:bg-emerald-50"
+							title="Restore this ground truth"
+						>
+							<RefreshCw className="h-4 w-4" /> Restore
+						</button>
+					)}
+				</div>
+			</section>
+
+			{/* Right pane: evidence/trace panel (shown when item has generic trace data) */}
+			{showEvidence && current && (
+				<aside className="hidden lg:block w-80 xl:w-96 flex-none overflow-y-auto min-h-0">
+					<TracePanel item={current} />
+				</aside>
+			)}
+		</div>
 	);
 }

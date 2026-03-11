@@ -71,7 +71,7 @@ describe("validateConversationPattern", () => {
 		expect(result.valid).toBe(false);
 		expect(result.errors.length).toBeGreaterThan(0);
 		expect(
-			result.errors.some((e) => e.includes("Turn 2 should be a agent turn")),
+			result.errors.some((e) => e.includes("Turn 2 should be an agent/non-user turn")),
 		).toBe(true);
 	});
 

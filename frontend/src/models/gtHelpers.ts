@@ -49,49 +49,46 @@ export function dedupeReferences(
 	return Array.from(map.values());
 }
 
-// Determine if an item can be approved (single-turn or multi-turn)
+// Determine if an item can be approved (generic or single-turn)
 export function canApproveCandidate(
 	item: GroundTruthItem | null | undefined,
 ): boolean {
 	if (!item) return false;
 	if (item.deleted) return false;
 
-	// Check if multi-turn
+	// Check if multi-turn or generic (has history)
 	if (item.history && item.history.length > 0) {
 		return canApproveMultiTurn(item);
 	}
 
-	// Single-turn validation (existing logic)
+	// Single-turn fallback (compatibility — kept for items without history)
 	const hasReferences =
 		Array.isArray(item.references) && item.references.length > 0;
 	return hasReferences && refsApprovalReady(item);
 }
 
-// Determine if a multi-turn item can be approved
+// Determine if a multi-turn / generic item can be approved.
+// Generic approval gate: valid conversation pattern + not deleted.
+// Reference-visit and per-turn expectedBehavior requirements are now
+// optional/configurable rather than hard gates (moved toward compatibility pack).
 export function canApproveMultiTurn(
 	item: GroundTruthItem | null | undefined,
 ): boolean {
 	if (!item || !item.history || item.history.length === 0) return false;
 	if (item.deleted) return false;
 
-	// Validate conversation pattern (user → agent alternating, complete pairs)
+	// Validate conversation pattern (starts with user, pairs complete)
 	const patternValidation = validateConversationPattern(item.history);
 	if (!patternValidation.valid) return false;
 
-	// Check that all agent turns have at least one expected behavior (REQUIRED)
-	const allAgentTurnsHaveExpectedBehavior = item.history
-		.filter((turn) => turn.role === "agent")
-		.every((turn) => turn.expectedBehavior && turn.expectedBehavior.length > 0);
-	if (!allAgentTurnsHaveExpectedBehavior) return false;
-
 	// Check if all references must be visited (configurable)
-	if (requireReferenceVisit()) {
+	if (requireReferenceVisit() && item.references.length > 0) {
 		const allVisited = item.references.every((r) => Boolean(r.visitedAt));
 		if (!allVisited) return false;
 	}
 
 	// Check if key paragraphs are required (configurable)
-	if (requireKeyParagraph()) {
+	if (requireKeyParagraph() && item.references.length > 0) {
 		const allHaveKeyParagraph = item.references.every(
 			(r) => r.keyParagraph && r.keyParagraph.trim().length >= 40,
 		);

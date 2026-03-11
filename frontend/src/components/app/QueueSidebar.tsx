@@ -1,6 +1,7 @@
 import { CircleAlert, Clipboard, RefreshCw } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { GroundTruthItem } from "../../models/groundTruth";
+import { getQueuePreview } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
 
 type Props = {
@@ -197,9 +198,9 @@ export default function QueueSidebar({
 							</div>
 							<div
 								className="truncate text-xs text-slate-600"
-								title={it.question}
+								title={getQueuePreview(it)}
 							>
-								{it.question}
+								{getQueuePreview(it)}
 							</div>
 						</div>
 					))}

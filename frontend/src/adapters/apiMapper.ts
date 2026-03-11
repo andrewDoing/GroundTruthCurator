@@ -37,8 +37,10 @@ export function groundTruthFromApi(
 
 		for (let idx = 0; idx < api.history.length; idx++) {
 			const h = api.history[idx];
+			// Preserve free-form roles; map "assistant" to "agent" for backward compat.
+			const role = h.role === "assistant" ? "agent" : h.role;
 			history[idx] = {
-				role: h.role === "assistant" ? "agent" : "user",
+				role,
 				content: h.msg,
 				expectedBehavior:
 					h.expectedBehavior && h.expectedBehavior.length > 0
@@ -111,6 +113,28 @@ export function groundTruthFromApi(
 		computedTags: api.computedTags || [],
 		reviewedAt: api.reviewedAt ?? null,
 		totalReferences: api.totalReferences,
+		// Generic schema fields — passed through from the API
+		scenarioId: api.scenarioId || undefined,
+		contextEntries: api.contextEntries?.length ? api.contextEntries : undefined,
+		toolCalls: api.toolCalls?.length ? api.toolCalls : undefined,
+		expectedTools: api.expectedTools ?? undefined,
+		feedback: api.feedback?.length ? api.feedback : undefined,
+		metadata:
+			api.metadata && Object.keys(api.metadata).length
+				? (api.metadata as Record<string, unknown>)
+				: undefined,
+		plugins:
+			api.plugins && Object.keys(api.plugins).length
+				? (api.plugins as Record<
+						string,
+						import("../models/groundTruth").PluginPayload
+					>)
+				: undefined,
+		traceIds: api.traceIds ?? undefined,
+		tracePayload:
+			api.tracePayload && Object.keys(api.tracePayload).length
+				? (api.tracePayload as Record<string, unknown>)
+				: undefined,
 		...({
 			datasetName: api.datasetName,
 			bucket: (api.bucket as string) || "0",
@@ -166,7 +190,7 @@ export function groundTruthToPatch(args: {
 	if (item.history && item.history.length > 0) {
 		body.history = item.history.map((turn, idx) => {
 			let turnRefs: ApiReference[] | undefined;
-			if (turn.role === "agent") {
+			if (turn.role !== "user") {
 				const refsForTurn = (item.references || []).filter(
 					(r) => r.messageIndex === idx,
 				);
@@ -181,8 +205,11 @@ export function groundTruthToPatch(args: {
 				}
 			}
 
+			// Map "agent" back to "assistant" for backward compat; preserve other free-form roles.
+			const apiRole = turn.role === "agent" ? "assistant" : turn.role;
+
 			return {
-				role: turn.role === "agent" ? "assistant" : "user",
+				role: apiRole,
 				msg: turn.content,
 				expectedBehavior: turn.expectedBehavior || undefined,
 				...(turnRefs ? { refs: turnRefs } : {}),
@@ -192,6 +219,29 @@ export function groundTruthToPatch(args: {
 
 	if (typeof item.comment !== "undefined") {
 		(body as Record<string, unknown>).comment = item.comment ?? null;
+	}
+
+	// Pass through generic fields when present
+	if (item.contextEntries?.length) {
+		(body as Record<string, unknown>).contextEntries = item.contextEntries;
+	}
+	if (item.toolCalls?.length) {
+		(body as Record<string, unknown>).toolCalls = item.toolCalls;
+	}
+	if (item.expectedTools) {
+		(body as Record<string, unknown>).expectedTools = item.expectedTools;
+	}
+	if (item.feedback?.length) {
+		(body as Record<string, unknown>).feedback = item.feedback;
+	}
+	if (item.metadata && Object.keys(item.metadata).length) {
+		(body as Record<string, unknown>).metadata = item.metadata;
+	}
+	if (item.traceIds) {
+		(body as Record<string, unknown>).traceIds = item.traceIds;
+	}
+	if (item.tracePayload && Object.keys(item.tracePayload).length) {
+		(body as Record<string, unknown>).tracePayload = item.tracePayload;
 	}
 
 	return body;

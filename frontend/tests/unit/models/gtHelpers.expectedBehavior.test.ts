@@ -1,5 +1,11 @@
 /**
  * Unit tests for expected behavior validation in gtHelpers
+ *
+ * NOTE (Phase 2 generic schema): canApproveMultiTurn no longer requires
+ * expectedBehavior on every agent turn. Approval is gated only on:
+ *   - valid conversation pattern (user/non-user alternating, ends on non-user)
+ *   - item not deleted
+ * These tests document the current generic-approval behavior.
  */
 
 import { describe, expect, it } from "vitest";
@@ -32,7 +38,7 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 		expect(result).toBe(true);
 	});
 
-	it("should block approval when agent turn has no expected behavior", () => {
+	it("should allow approval when agent turn has no expected behavior (generic schema: not required)", () => {
 		const itemWithoutBehavior: GroundTruthItem = {
 			...baseItem,
 			history: [
@@ -43,16 +49,16 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 				{
 					role: "agent",
 					content: "Here is how you extrude a shape...",
-					// Missing expectedBehavior
+					// Missing expectedBehavior — no longer blocks approval
 				},
 			],
 		};
 
 		const result = canApproveMultiTurn(itemWithoutBehavior);
-		expect(result).toBe(false);
+		expect(result).toBe(true);
 	});
 
-	it("should block approval when agent turn has empty expected behavior array", () => {
+	it("should allow approval when agent turn has empty expected behavior array (generic schema: not required)", () => {
 		const itemWithEmptyBehavior: GroundTruthItem = {
 			...baseItem,
 			history: [
@@ -69,7 +75,7 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 		};
 
 		const result = canApproveMultiTurn(itemWithEmptyBehavior);
-		expect(result).toBe(false);
+		expect(result).toBe(true);
 	});
 
 	it("should allow approval when all multiple agent turns have expected behavior", () => {
@@ -101,7 +107,7 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 		expect(result).toBe(true);
 	});
 
-	it("should block approval when any agent turn is missing expected behavior", () => {
+	it("should allow approval when any agent turn is missing expected behavior (generic schema: not required)", () => {
 		const multiTurnItem: GroundTruthItem = {
 			...baseItem,
 			history: [
@@ -121,13 +127,13 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 				{
 					role: "agent",
 					content: "Here is how you extrude in a CAD application...",
-					// Missing expectedBehavior on second agent turn
+					// Missing expectedBehavior on second agent turn — no longer blocks
 				},
 			],
 		};
 
 		const result = canApproveMultiTurn(multiTurnItem);
-		expect(result).toBe(false);
+		expect(result).toBe(true);
 	});
 
 	it("should allow approval with single expected behavior", () => {

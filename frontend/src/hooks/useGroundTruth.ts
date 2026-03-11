@@ -80,7 +80,7 @@ type UseGroundTruth = {
 
 	// Multi-turn support
 	updateHistory: (history: ConversationTurn[]) => void;
-	addTurn: (role: "user" | "agent", content: string) => void;
+	addTurn: (role: string, content: string) => void;
 	deleteTurn: (messageIndex: number) => void;
 	regenerateAgentTurn: (messageIndex: number) => Promise<AgentGenerationResult>;
 	generateAgentTurn: (messageIndex: number) => Promise<AgentGenerationResult>;
@@ -514,7 +514,7 @@ function useGroundTruth(): UseGroundTruth {
 		setCurrent((prev) => {
 			if (!prev) return prev;
 
-			// Find last user and agent turns in single reverse iteration
+			// Find last user and last non-user (agent) turn in single reverse iteration
 			let lastUser: ConversationTurn | undefined;
 			let lastAgent: ConversationTurn | undefined;
 
@@ -522,7 +522,7 @@ function useGroundTruth(): UseGroundTruth {
 				const turn = history[i];
 				if (turn.role === "user" && !lastUser) {
 					lastUser = turn;
-				} else if (turn.role === "agent" && !lastAgent) {
+				} else if (turn.role !== "user" && !lastAgent) {
 					lastAgent = turn;
 				}
 
@@ -539,7 +539,7 @@ function useGroundTruth(): UseGroundTruth {
 		});
 	}, []);
 
-	const addTurn = useCallback((role: "user" | "agent", content: string) => {
+	const addTurn = useCallback((role: string, content: string) => {
 		setCurrent((prev) => {
 			if (!prev) return prev;
 			const newHistory: ConversationTurn[] = [
@@ -550,7 +550,7 @@ function useGroundTruth(): UseGroundTruth {
 			const lastUser = [...newHistory].reverse().find((t) => t.role === "user");
 			const lastAgent = [...newHistory]
 				.reverse()
-				.find((t) => t.role === "agent");
+				.find((t) => t.role !== "user");
 			return {
 				...prev,
 				history: newHistory,
