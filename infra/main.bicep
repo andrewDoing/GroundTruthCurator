@@ -194,3 +194,6 @@ output managedIdentityPrincipalId string = managedIdentity.properties.principalI
 
 @description('Cosmos data role assignment resource ID, if created.')
 output cosmosDataRoleAssignmentId string? = cosmosShouldAssignDataRole ? cosmosDataRoleAssignment.id : null
+
+@description('Whether the Cosmos DB account uses serverless capacity mode.')
+output cosmosIsServerless bool = cosmosShouldEnableServerless
