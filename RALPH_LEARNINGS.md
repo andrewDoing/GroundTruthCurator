@@ -28,6 +28,7 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - `npm run lint` applies auto-fix (writes changes); `npm run lint:check` is the gate check (no writes, exits non-zero on error).
 - Biome will skip "unsafe" fixes. `noUselessFragments` wrapping a single IIFE is marked unsafe — fix manually by rewriting JSX to use direct conditionals instead of IIFEs or useless fragment wrappers.
 - Phase 2 iteration 2 validation command: `cd frontend && npm run lint:check && npm run typecheck && npm run test:run -- --pool=threads --poolOptions.threads.singleThread && npm run build`.
+- Phase 2 reviewer rerun confirmed `R-001` is closed; regression coverage now exists in `frontend/tests/unit/components/app/pages/CuratePane.test.tsx`, `frontend/tests/unit/hooks/useGroundTruth-deleteTurn.test.tsx`, and `frontend/tests/unit/hooks/useGroundTruth-multiturn.test.tsx`. Current frontend gate result is `249/249` tests passing with only the known `QuestionsExplorer` `act(...)` warnings and Vite chunk-size warning still emitted.
 
 ### QueueSidebar and QuestionsExplorer (Phase 2)
 - Item preview text uses `getQueuePreview(item)` — returns first user history message content, falling back to `item.question`.
