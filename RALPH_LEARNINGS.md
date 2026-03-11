@@ -14,6 +14,7 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 ### Frontend role model (Phase 2)
 - `ConversationTurn.role` is `string`, not `"user" | "agent"`. Always use `role !== "user"` (never `role === "agent"`) to identify non-user turns — the backend may send "assistant", "output-agent", "orchestrator-agent", etc.
 - `groundTruthFromApi` maps "assistant"→"agent"; all other roles are passed through. `groundTruthToPatch` maps "agent"→"assistant"; all other roles are passed through.
+- Iteration 2 fixed the last reviewed hard-coded `"agent"` checks in `frontend/src/hooks/useGroundTruth.ts` and `frontend/src/components/app/editor/MultiTurnEditor.tsx`; add-user gating plus delete/regenerate answer sync now work for preserved non-user roles like `"output-agent"` and `"orchestrator-agent"`.
 
 ### Approval logic (Phase 2)
 - `canApproveMultiTurn` no longer requires `expectedBehavior` on every agent turn and no longer reuses retrieval-specific reference gating. Approval requires only: valid conversation pattern (user/non-user alternating, ends on non-user turn) + item not deleted. The `expectedBehavior` field is still in the model and editor UI but is not gated.
@@ -26,6 +27,7 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 ### Biome lint (Frontend)
 - `npm run lint` applies auto-fix (writes changes); `npm run lint:check` is the gate check (no writes, exits non-zero on error).
 - Biome will skip "unsafe" fixes. `noUselessFragments` wrapping a single IIFE is marked unsafe — fix manually by rewriting JSX to use direct conditionals instead of IIFEs or useless fragment wrappers.
+- Phase 2 iteration 2 validation command: `cd frontend && npm run lint:check && npm run typecheck && npm run test:run -- --pool=threads --poolOptions.threads.singleThread && npm run build`.
 
 ### QueueSidebar and QuestionsExplorer (Phase 2)
 - Item preview text uses `getQueuePreview(item)` — returns first user history message content, falling back to `item.question`.

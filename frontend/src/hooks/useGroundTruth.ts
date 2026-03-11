@@ -588,11 +588,11 @@ function useGroundTruth(): UseGroundTruth {
 				})
 				.filter((ref): ref is Reference => ref !== null);
 
-			// Sync last user/agent turns to question/answer for backward compatibility
+			// Sync last user/non-user turns to question/answer for backward compatibility
 			const lastUser = [...newHistory].reverse().find((t) => t.role === "user");
 			const lastAgent = [...newHistory]
 				.reverse()
-				.find((t) => t.role === "agent");
+				.find((t) => t.role !== "user");
 
 			return {
 				...prev,
@@ -696,8 +696,8 @@ function useGroundTruth(): UseGroundTruth {
 				return { ok: false, error: "Turn index is out of range." };
 
 			const targetTurn = history[messageIndex];
-			if (targetTurn.role !== "agent")
-				return { ok: false, error: "Only agent turns can be regenerated." };
+			if (targetTurn.role === "user")
+				return { ok: false, error: "Only non-user turns can be regenerated." };
 
 			// Format conversation history up to this turn
 			const transcript = formatConversationForAgent(history, messageIndex);
@@ -753,10 +753,10 @@ function useGroundTruth(): UseGroundTruth {
 						messageIndex,
 					);
 
-					// Find last agent turn efficiently (reverse search, early exit)
+					// Find last non-user turn efficiently (reverse search, early exit)
 					let lastAgentContent = prev.answer;
 					for (let i = updatedHistory.length - 1; i >= 0; i--) {
-						if (updatedHistory[i].role === "agent") {
+						if (updatedHistory[i].role !== "user") {
 							lastAgentContent = updatedHistory[i].content;
 							break;
 						}

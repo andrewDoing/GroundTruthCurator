@@ -212,6 +212,35 @@ describe("useGroundTruth deleteTurn", () => {
 		expect(result.current.current?.answer).toBe("First answer");
 	});
 
+	it("should sync answer to the last remaining non-user turn after deletion", async () => {
+		const { result } = renderHook(() => useGroundTruth());
+
+		await waitFor(() => {
+			expect(result.current.current).toBeTruthy();
+		});
+
+		const history: ConversationTurn[] = [
+			{ role: "user", content: "First question" },
+			{ role: "output-agent", content: "First answer" },
+			{ role: "user", content: "Second question" },
+			{ role: "orchestrator-agent", content: "Second answer" },
+		];
+
+		await act(async () => {
+			result.current.updateHistory(history);
+		});
+
+		expect(result.current.current?.question).toBe("Second question");
+		expect(result.current.current?.answer).toBe("Second answer");
+
+		await act(async () => {
+			result.current.deleteTurn(3);
+		});
+
+		expect(result.current.current?.question).toBe("Second question");
+		expect(result.current.current?.answer).toBe("First answer");
+	});
+
 	it("should handle deletion with no references", async () => {
 		const { result } = renderHook(() => useGroundTruth());
 

@@ -95,7 +95,7 @@ export default function MultiTurnEditor({
 
 	// Determine which turn types can be added next
 	const lastTurn = history.length > 0 ? history[history.length - 1] : null;
-	const canAddUser = !lastTurn || lastTurn.role === "agent";
+	const canAddUser = !lastTurn || lastTurn.role !== "user";
 	const canAddAgent = lastTurn?.role === "user";
 
 	const handleAddUserTurn = () => {
@@ -317,7 +317,7 @@ export default function MultiTurnEditor({
 						disabled={!canAddUser || isGenerating}
 						title={
 							!canAddUser
-								? "Can only add user turn after agent turn or as first turn"
+								? "Can only add user turn after a non-user turn or as first turn"
 								: "Add a new user turn"
 						}
 						className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-50"
