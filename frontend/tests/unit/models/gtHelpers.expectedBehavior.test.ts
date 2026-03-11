@@ -155,4 +155,20 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 		const result = canApproveMultiTurn(itemWithSingleBehavior);
 		expect(result).toBe(true);
 	});
+
+	it("should allow approval for multi-turn items even when references are unvisited", () => {
+		const itemWithUnvisitedReferences: GroundTruthItem = {
+			...baseItem,
+			references: [
+				{
+					id: "ref-1",
+					url: "https://example.com/trace",
+					visitedAt: null,
+				},
+			],
+		};
+
+		const result = canApproveMultiTurn(itemWithUnvisitedReferences);
+		expect(result).toBe(true);
+	});
 });

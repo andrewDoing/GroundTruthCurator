@@ -16,7 +16,8 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - `groundTruthFromApi` maps "assistant"→"agent"; all other roles are passed through. `groundTruthToPatch` maps "agent"→"assistant"; all other roles are passed through.
 
 ### Approval logic (Phase 2)
-- `canApproveMultiTurn` no longer requires `expectedBehavior` on every agent turn. Approval requires only: valid conversation pattern (user/non-user alternating, ends on non-user turn) + item not deleted. The `expectedBehavior` field is still in the model and editor UI but is not gated.
+- `canApproveMultiTurn` no longer requires `expectedBehavior` on every agent turn and no longer reuses retrieval-specific reference gating. Approval requires only: valid conversation pattern (user/non-user alternating, ends on non-user turn) + item not deleted. The `expectedBehavior` field is still in the model and editor UI but is not gated.
+- `canApproveCandidate` still keeps the old `refsApprovalReady()` checks for the single-turn compatibility path (items without `history`).
 
 ### Generic schema fields (Phase 2)
 - `GroundTruthItem` now carries: `contextEntries`, `toolCalls`, `expectedTools`, `feedback`, `metadata`, `plugins`, `traceIds`, `tracePayload`, `scenarioId` — all passed through by the mapper from `AgenticGroundTruthEntry-Output` in `generated.ts`.
