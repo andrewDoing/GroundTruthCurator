@@ -734,7 +734,7 @@ export interface components {
             /** Comment */
             comment?: string | null;
             /** Status */
-            status?: components["schemas"]["GroundTruthStatus"] | string | null;
+            status?: components["schemas"]["GroundTruthStatus"] | string;
             /** Manualtags */
             manualTags?: string[] | null;
             /** Approve */
@@ -742,7 +742,7 @@ export interface components {
             /** Etag */
             etag?: string | null;
             /** History */
-            history?: components["schemas"]["app__api__v1__ground_truths__HistoryEntryPatch"][] | null;
+            history?: components["schemas"]["app__api__v1__assignments__HistoryEntryPatch"][] | null;
             /** Contextentries */
             contextEntries?: components["schemas"]["ContextEntry"][] | null;
             /** Toolcalls */
@@ -994,11 +994,11 @@ export interface components {
         /** GroundTruthUpdateRequest */
         GroundTruthUpdateRequest: {
             /** Status */
-            status?: components["schemas"]["GroundTruthStatus"] | string | null;
+            status?: components["schemas"]["GroundTruthStatus"] | string;
             /** Comment */
             comment?: string | null;
             /** History */
-            history?: components["schemas"]["app__api__v1__ground_truths__HistoryEntryPatch"][] | null;
+            history?: components["schemas"]["app__api__v1__assignments__HistoryEntryPatch"][] | null;
             /** Contextentries */
             contextEntries?: components["schemas"]["ContextEntry"][] | null;
             /** Toolcalls */
@@ -1401,7 +1401,7 @@ export interface components {
             failed: number;
         };
         /** HistoryEntryPatch */
-        app__api__v1__ground_truths__HistoryEntryPatch: {
+        app__api__v1__assignments__HistoryEntryPatch: {
             /** Role */
             role: string;
             /** Msg */

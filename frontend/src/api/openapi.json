@@ -2121,9 +2121,6 @@
 							},
 							{
 								"type": "string"
-							},
-							{
-								"type": "null"
 							}
 						],
 						"title": "Status"
@@ -2766,9 +2763,6 @@
 							},
 							{
 								"type": "string"
-							},
-							{
-								"type": "null"
 							}
 						],
 						"title": "Status"
