@@ -1,0 +1,95 @@
+{
+  "prdFile": "docs/prds/agentic-curation-redesign.md",
+  "lastAccessed": "2026-03-11T04:10:52.010Z",
+  "currentPhase": "build",
+  "questionsAsked": [
+    "initiative-direction",
+    "architecture-strategy",
+    "primary-reference",
+    "schema-source",
+    "rag-compatibility-strategy",
+    "legacy-code-strategy"
+  ],
+  "answeredQuestions": {
+    "initiative-direction": "Create a new PRD that replaces the separate-mode direction with an agentic-first redesign.",
+    "architecture-strategy": "Rework the current RAG-focused code to support the desired agentic curation workflow while reusing durable plumbing.",
+    "primary-reference": "The primary UX goal is defined in wireframes/agent-curation-wireframe-v2.2.html.",
+    "schema-source": "The generic schema is defined in wireframes/gt_schema_v5_generic.py.",
+    "rag-compatibility-strategy": "The existing RAG-focused curation flow must run in the redesigned architecture via UI plugins and extension points.",
+    "legacy-code-strategy": "A lot of the current code should be deleted and replaced because there are no current users of the existing setup."
+  },
+  "referencesProcessed": [
+    {
+      "file": "wireframes/agent-curation-wireframe-v2.2.html",
+      "status": "integrated",
+      "timestamp": "2026-03-11T04:10:52.010Z",
+      "keyFindings": "Defines the target agentic-first workspace: queue sidebar, split pane, tool-call-first review, evidence drawer, and lifecycle actions.",
+      "integratedSections": [
+        "executive-summary",
+        "product-overview",
+        "functional-requirements",
+        "references"
+      ],
+      "conflicts": [],
+      "pendingActions": []
+    },
+    {
+      "file": "wireframes/gt_schema_v5_generic.py",
+      "status": "integrated",
+      "timestamp": "2026-03-11T04:10:52.010Z",
+      "keyFindings": "Defines the generic agentic core record and flexible extension surfaces such as feedback, metadata, plugins, context entries, tool calls, and trace payload.",
+      "integratedSections": [
+        "executive-summary",
+        "scope",
+        "functional-requirements",
+        "references"
+      ],
+      "conflicts": [],
+      "pendingActions": []
+    },
+    {
+      "file": "wireframes/AGENTIC_REQUIREMENTS.md",
+      "status": "integrated",
+      "timestamp": "2026-03-11T04:10:52.010Z",
+      "keyFindings": "Clarifies that tool calls are first-class, grounding summary/evaluation criteria should be removed from the host flow, feedback should be generic, and at least one required tool should be selected.",
+      "integratedSections": [
+        "problem-definition",
+        "functional-requirements",
+        "references"
+      ],
+      "conflicts": [],
+      "pendingActions": []
+    },
+    {
+      "file": "docs/prds/agentic-curation-mode.md",
+      "status": "analyzed",
+      "timestamp": "2026-03-11T04:10:52.010Z",
+      "keyFindings": "Captures the superseded separate-mode direction and provides historical context for what this new PRD is replacing.",
+      "integratedSections": [
+        "executive-summary",
+        "problem-definition",
+        "references"
+      ],
+      "conflicts": [
+        "This new PRD replaces the separate-mode architecture with a single redesigned generic core."
+      ],
+      "pendingActions": []
+    }
+  ],
+  "nextActions": [
+    "Validate the open questions around RAG compatibility boundaries and adapter strategy.",
+    "Review the supersession plan for docs/prds/agentic-curation-mode.md with stakeholders.",
+    "Translate the PRD into an implementation plan once the redesign direction is approved."
+  ],
+  "qualityChecks": [
+    "wireframe-referenced",
+    "schema-referenced",
+    "separate-mode-superseded",
+    "rag-plugin-requirement-recorded",
+    "required-sections-populated"
+  ],
+  "userPreferences": {
+    "detail-level": "comprehensive",
+    "question-style": "structured"
+  }
+}
