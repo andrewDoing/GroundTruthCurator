@@ -92,6 +92,11 @@ def collect_approval_validation_errors(item: AgenticGroundTruthEntry) -> list[st
 
 def validate_item_for_approval(item: AgenticGroundTruthEntry) -> None:
     errors = collect_approval_validation_errors(item)
+    # Run plugin-pack approval hooks after the generic core checks.
+    # Each registered pack may contribute additional domain-specific errors
+    # (e.g. RagCompatPack enforcing per-retrieval-call selection completeness).
+    pack_errors = container.plugin_pack_registry.collect_approval_errors(item)
+    errors.extend(pack_errors)
     if errors:
         raise ApprovalValidationError(errors)
 

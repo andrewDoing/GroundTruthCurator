@@ -1,7 +1,10 @@
-"""Base classes for the computed tags plugin system.
+"""Base classes for the plugin system.
 
-This module defines the abstract base class for computed tag plugins
-and the registry for managing them.
+This module defines:
+- ComputedTagPlugin: abstract base for computed-tag plugins
+- TagPluginRegistry: registry for computed-tag plugins
+- PluginPack: abstract base for broader plugin packs (validators, explorer contributions)
+- PluginPackRegistry: startup-validated registry for plugin packs
 """
 
 from __future__ import annotations
@@ -10,7 +13,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from app.domain.models import GroundTruthItem
+    from app.domain.models import AgenticGroundTruthEntry, GroundTruthItem
 
 
 class ComputedTagPlugin(ABC):
@@ -215,3 +218,162 @@ class TagPluginRegistry:
     def __len__(self) -> int:
         """Return the number of registered plugins."""
         return len(self._plugins)
+
+
+# ---------------------------------------------------------------------------
+# Plugin-pack contract (broader than computed tags)
+# ---------------------------------------------------------------------------
+
+
+class PluginPack(ABC):
+    """Abstract base class for plugin packs.
+
+    A plugin pack is a named unit of domain behavior that can contribute:
+    - Startup validation (via validate_registration)
+    - Approval-time error hooks (via collect_approval_errors)
+
+    The generic core hosts plugin packs without being aware of domain details.
+    Computed-tag plugins continue to work unchanged through TagPluginRegistry.
+
+    Example (minimal no-op pack)::
+
+        class MyDomainPack(PluginPack):
+            @property
+            def name(self) -> str:
+                return "my-domain"
+
+            def validate_registration(self) -> None:
+                # assert required config exists; raise ValueError on failure
+                pass
+
+    Example (approval-contributing pack)::
+
+        class StrictRefPack(PluginPack):
+            @property
+            def name(self) -> str:
+                return "strict-ref"
+
+            def collect_approval_errors(
+                self, item: AgenticGroundTruthEntry
+            ) -> list[str]:
+                errors: list[str] = []
+                if not item.refs:
+                    errors.append("strict-ref: at least one reference is required")
+                return errors
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Unique identifier for this plugin pack (e.g., 'rag-compat').
+
+        Used for duplicate-registration detection and telemetry.
+        Must be a non-empty string stable across restarts.
+        """
+
+    def validate_registration(self) -> None:
+        """Validate this pack's own registration contract at startup.
+
+        Called once during application startup by PluginPackRegistry.validate_all().
+        Raise ValueError with an actionable message if the pack is misconfigured.
+        The default implementation is a no-op.
+
+        Raises:
+            ValueError: If the pack is not correctly configured.
+        """
+
+    def collect_approval_errors(self, item: AgenticGroundTruthEntry) -> list[str]:
+        """Return pack-specific approval validation errors for an item.
+
+        Called after the generic core approval checks. Return an empty list
+        when the item is acceptable from this pack's perspective.
+
+        Args:
+            item: The item being evaluated for approval.
+
+        Returns:
+            A list of human-readable error messages, or an empty list on success.
+        """
+        return []
+
+
+class PluginPackRegistry:
+    """Registry for plugin packs with startup validation.
+
+    Maintains a named collection of PluginPack instances. Startup validation
+    calls each pack's validate_registration() method so misconfigured packs
+    fail fast with actionable errors rather than silently degrading behavior.
+
+    Example::
+
+        registry = PluginPackRegistry()
+        registry.register(RagCompatPack())
+        registry.validate_all()  # called once during app startup
+    """
+
+    def __init__(self) -> None:
+        self._packs: dict[str, PluginPack] = {}
+
+    def register(self, pack: PluginPack) -> None:
+        """Register a plugin pack.
+
+        Args:
+            pack: The plugin pack instance to register.
+
+        Raises:
+            ValueError: If a pack with the same name is already registered,
+                or if pack.name is empty.
+        """
+        pack_name = pack.name
+        if not pack_name or not pack_name.strip():
+            raise ValueError("Plugin pack name must be a non-empty string")
+        if pack_name in self._packs:
+            raise ValueError(
+                f"Duplicate plugin pack name '{pack_name}': "
+                "a pack with this name is already registered"
+            )
+        self._packs[pack_name] = pack
+
+    def validate_all(self) -> None:
+        """Run startup validation for all registered packs.
+
+        Calls validate_registration() on every registered pack. If any pack
+        raises, this method re-raises a ValueError with the pack name included
+        so the startup error is actionable.
+
+        Raises:
+            ValueError: If any pack's validate_registration() fails.
+        """
+        for name, pack in self._packs.items():
+            try:
+                pack.validate_registration()
+            except ValueError as exc:
+                raise ValueError(
+                    f"Plugin pack '{name}' failed startup validation: {exc}"
+                ) from exc
+
+    def collect_approval_errors(self, item: AgenticGroundTruthEntry) -> list[str]:
+        """Gather approval errors from all registered packs.
+
+        Args:
+            item: The item being evaluated for approval.
+
+        Returns:
+            Combined list of approval error messages from all packs.
+        """
+        errors: list[str] = []
+        for pack in self._packs.values():
+            errors.extend(pack.collect_approval_errors(item))
+        return errors
+
+    def get(self, name: str) -> PluginPack | None:
+        """Return the pack with the given name, or None if not registered."""
+        return self._packs.get(name)
+
+    def names(self) -> list[str]:
+        """Return sorted list of registered pack names."""
+        return sorted(self._packs.keys())
+
+    def __len__(self) -> int:
+        """Return the number of registered packs."""
+        return len(self._packs)

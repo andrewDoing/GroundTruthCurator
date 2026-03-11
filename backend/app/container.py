@@ -26,6 +26,8 @@ from app.exports.registry import (
 from app.exports.storage.base import ExportStorage
 from app.exports.storage.blob import BlobExportStorage
 from app.exports.storage.local import LocalExportStorage
+from app.plugins.pack_registry import get_default_pack_registry
+from app.plugins.base import PluginPackRegistry
 
 
 logger = logging.getLogger("gtc.container")
@@ -49,6 +51,7 @@ class Container:
     export_formatter_registry: ExportFormatterRegistry
     export_storage: ExportStorage
     export_default_processor_order: list[str]
+    plugin_pack_registry: PluginPackRegistry
 
     def __init__(self) -> None:
         # Lazily initialize repo and services. Tests and app lifespan will call
@@ -74,6 +77,9 @@ class Container:
             steps_store=self.agent_steps_store,
             store_steps=settings.STORE_AGENT_STEPS,
         )
+        # Plugin-pack registry — lazily populated on first use (startup_cosmos
+        # calls validate_all() to ensure all packs pass their startup checks).
+        self.plugin_pack_registry = get_default_pack_registry()
 
     def _build_default_credential(self) -> Any:
         """Create a DefaultAzureCredential for runtime use.
@@ -238,6 +244,15 @@ class Container:
         await self.tags_repo.validate_container()
         await self.tag_definitions_repo.validate_container()
         logger.info("Cosmos DB validation passed.")
+
+        # Step 4: Run plugin-pack startup validation so misconfigured packs
+        # fail here with an actionable error rather than silently at runtime.
+        logger.info("Running plugin-pack startup validation...")
+        self.plugin_pack_registry.validate_all()
+        logger.info(
+            "Plugin-pack validation passed. Registered packs: %s",
+            self.plugin_pack_registry.names(),
+        )
 
     def init_search(self) -> None:
         """Configure search adapter if Azure Search settings are present."""

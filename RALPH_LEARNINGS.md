@@ -33,3 +33,10 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 ### QueueSidebar and QuestionsExplorer (Phase 2)
 - Item preview text uses `getQueuePreview(item)` — returns first user history message content, falling back to `item.question`.
 - `QuestionsExplorer` has a "Turns" column (history.length); colSpan is 10 (was 9). Column header is "Question / Message" (was "Question").
+
+### Backend plugin packs (Phase 3)
+- Plugin-pack startup validation now runs in `backend/app/container.py` via `container.plugin_pack_registry.validate_all()` during `startup_cosmos()`. Misconfigured packs should fail startup there, not lazily at request time.
+- The minimal backend plugin-pack contract lives in `backend/app/plugins/base.py` (`PluginPack`, `PluginPackRegistry`); the default registry wiring is in `backend/app/plugins/pack_registry.py`.
+- RAG-specific helper ownership moved to `backend/app/plugins/packs/rag_compat.py`. Reuse `RagCompatPack` helpers instead of hard-coding the `"rag-compat"` plugin key or adding ref attach/detach logic back into generic services.
+- `backend/app/services/search_service.py` is now query-only. Plugin-specific approval extensions flow through `backend/app/services/validation_service.py` by calling `container.plugin_pack_registry.collect_approval_errors(item)` after the generic approval checks.
+- Phase 3 validation command: `cd backend && uv run ruff check app/ && uv run ty check app/ && uv run pytest tests/integration/ -v -k 'assignments or ground_truths or search or snapshot'`.
