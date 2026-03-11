@@ -27,6 +27,7 @@ from app.domain.models import (
     Stats,
     AssignmentDocument,
     DatasetCurationInstructions,
+    BulkImportPersistenceError,
     BulkImportResult,
     PaginationMetadata,
 )
@@ -563,7 +564,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         assert gt is not None
         success = 0
         errors: list[str] = []
-        for it in items:
+        persistence_errors: list[BulkImportPersistenceError] = []
+        for persistence_index, it in enumerate(items):
             doc = self._to_doc(it)
 
             # Apply UTF-8 fix when using Cosmos emulator
@@ -582,8 +584,14 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                         if doc.get("refs")
                         else "unknown"
                     )
-                    errors.append(
-                        f"exists (article: {article_num}, id: {doc.get('id', 'unknown')})"
+                    message = f"exists (article: {article_num}, id: {doc.get('id', 'unknown')})"
+                    errors.append(message)
+                    persistence_errors.append(
+                        BulkImportPersistenceError(
+                            message=message,
+                            item_id=doc.get("id", "unknown"),
+                            persistence_index=persistence_index,
+                        )
                     )
                 else:
                     article_num = (
@@ -591,22 +599,36 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                         if doc.get("refs")
                         else "unknown"
                     )
-                    errors.append(
-                        f"create_failed (article: {article_num}, id: {doc.get('id', 'unknown')}): {getattr(e, 'message', str(e))}"
+                    message = (
+                        f"create_failed (article: {article_num}, id: {doc.get('id', 'unknown')}): "
+                        f"{getattr(e, 'message', str(e))}"
                     )
-        return BulkImportResult(imported=success, errors=errors)
+                    errors.append(message)
+                    persistence_errors.append(
+                        BulkImportPersistenceError(
+                            message=message,
+                            item_id=doc.get("id", "unknown"),
+                            persistence_index=persistence_index,
+                        )
+                    )
+        return BulkImportResult(
+            imported=success,
+            errors=errors,
+            persistence_errors=persistence_errors,
+        )
 
     async def list_all_gt(
         self, status: Optional[GroundTruthStatus] = None
     ) -> list[AgenticGroundTruthEntry]:
         await self._ensure_initialized()
-        # Cross-partition scan for all GT items; filter by status if provided
-        status_filter = ""
+        # Cross-partition scan for all GT items; exclude non-ground-truth documents (e.g. curation-instructions)
+        clauses: list[str] = ["c.docType = 'ground-truth-item'"]
         params: list[dict[str, Any]] = []
         if status is not None:
-            status_filter = " WHERE c.status = @status"
+            clauses.append("c.status = @status")
             params.append({"name": "@status", "value": status.value})
-        query = f"SELECT * FROM c{status_filter}"
+        where = " WHERE " + " AND ".join(clauses)
+        query = f"SELECT * FROM c{where}"
         items: list[AgenticGroundTruthEntry] = []
         gt = self._gt_container
         assert gt is not None

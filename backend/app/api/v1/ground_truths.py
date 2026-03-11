@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Header, Query
@@ -10,6 +11,7 @@ from uuid import UUID
 import randomname  # type: ignore
 
 from pydantic import BaseModel, Field, ConfigDict
+from pydantic.json_schema import SkipJsonSchema
 from fastapi.responses import JSONResponse
 
 from app.core.auth import get_current_user, UserContext
@@ -25,6 +27,7 @@ from app.domain.models import (
     PluginPayload,
     ToolCallRecord,
     BulkImportError,
+    BulkImportPersistenceError,
     ValidationSummary,
 )
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
@@ -49,6 +52,15 @@ from app.services.tagging_service import apply_computed_tags
 logger = logging.getLogger("gtc.ground_truths")
 
 router = APIRouter()
+_PERSISTENCE_ERROR_ITEM_ID_RE = re.compile(r"\bid:\s*([^)]+?)\)")
+
+
+def _extract_persistence_error_item_id(error_msg: str) -> str | None:
+    match = _PERSISTENCE_ERROR_ITEM_ID_RE.search(error_msg)
+    if match is None:
+        return None
+    item_id = match.group(1).strip()
+    return item_id or None
 
 
 class ImportBulkResponse(BaseModel):
@@ -111,7 +123,7 @@ class HistoryEntryPatch(BaseModel):
 class GroundTruthUpdateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    status: GroundTruthStatus | str | None = None
+    status: GroundTruthStatus | str | SkipJsonSchema[None] = None
     comment: str | None = None
     history: list[HistoryEntryPatch] | None = None
     context_entries: list[ContextEntry] | None = Field(default=None, alias="contextEntries")
@@ -160,6 +172,7 @@ async def import_bulk(
     errors: list[BulkImportError] = []
     uuids: list[str] = []
     gt_items: list[AgenticGroundTruthEntry] = []
+    unknown_persistence_failures: int = 0
 
     # Ensure IDs in input order, preserving provided IDs when present
     for it in items:
@@ -170,21 +183,34 @@ async def import_bulk(
         it.id = item_id
         uuids.append(item_id)
 
+    # Track failed request-entry positions for accurate per-entry failed counting.
+    # Using a set[int] of original request indices avoids undercounting when
+    # duplicate IDs appear in the same request.
+    failed_request_indices: set[int] = set()
+    # Parallel list of original request indices for items that reach gt_items;
+    # maintains a 1-to-1 correspondence with gt_items throughout the pipeline.
+    gt_item_orig_indices: list[int] = []
+
     # Validate all items before processing
+    # validate_bulk_items is keyed by request-position index (not item.id) so
+    # duplicate IDs in one request do not collapse per-entry error attribution.
     validation_errors = await validate_bulk_items(items)
 
     # If there are validation errors, filter out invalid items and collect errors
     if validation_errors:
-        for item in items:
-            if item.id in validation_errors:
-                # Collect all validation errors for this item
-                errors.extend(validation_errors[item.id])
+        for req_idx, item in enumerate(items):
+            if req_idx in validation_errors:
+                # Collect all validation errors for this request entry
+                errors.extend(validation_errors[req_idx])
+                failed_request_indices.add(req_idx)
             else:
                 # Only include valid items
                 gt_items.append(item)
+                gt_item_orig_indices.append(req_idx)
     else:
         # All items are valid
-        gt_items = items
+        gt_items = list(items)
+        gt_item_orig_indices = list(range(len(items)))
 
     # Optionally set approval metadata
     if approve:
@@ -195,18 +221,24 @@ async def import_bulk(
             it.reviewed_at = now
             it.updatedBy = updater
         
-        # Enforce generic approval validation for approved items
+        # Enforce generic approval validation for approved items.
+        # validate_bulk_items returns results keyed by position within gt_items here
+        # (not by item.id) so duplicate IDs in the filtered list remain distinct.
         approval_validation_errors = await validate_bulk_items(gt_items)
         
         # Also check generic approval invariants for each item
         from app.services.validation_service import collect_approval_validation_errors
         approval_ready_items: list[AgenticGroundTruthEntry] = []
-        for idx, item in enumerate(gt_items):
+        approval_ready_orig_indices: list[int] = []
+        for gt_pos, item in enumerate(gt_items):
+            orig_idx = gt_item_orig_indices[gt_pos]
             item_errors = []
             
-            # Add tag validation errors if present
-            if item.id in approval_validation_errors:
-                item_errors.extend(approval_validation_errors[item.id])
+            # Add tag validation errors if present; fix index to original request position
+            if gt_pos in approval_validation_errors:
+                for err in approval_validation_errors[gt_pos]:
+                    err.index = orig_idx
+                item_errors.extend(approval_validation_errors[gt_pos])
             
             # Check generic approval invariants
             approval_errors = collect_approval_validation_errors(item)
@@ -214,7 +246,7 @@ async def import_bulk(
                 for err_msg in approval_errors:
                     item_errors.append(
                         BulkImportError(
-                            index=idx,
+                            index=orig_idx,
                             item_id=item.id,
                             field="approval",
                             code="APPROVAL_VALIDATION_FAILED",
@@ -224,10 +256,13 @@ async def import_bulk(
             
             if item_errors:
                 errors.extend(item_errors)
+                failed_request_indices.add(orig_idx)
             else:
                 approval_ready_items.append(item)
+                approval_ready_orig_indices.append(orig_idx)
         
         gt_items = approval_ready_items
+        gt_item_orig_indices = approval_ready_orig_indices
 
     # Persist only validated items
     if gt_items:
@@ -240,18 +275,53 @@ async def import_bulk(
 
         result = await container.repo.import_bulk_gt(gt_items, buckets=buckets)
 
-        # Convert repository errors (plain strings) to structured errors
-        # Repository doesn't provide index, so we can't map back to original position
-        # These are persistence errors after validation passed
-        for error_msg in result.errors:
+        # Convert repository errors (plain strings) to structured errors.
+        # Cosmos error messages include the item id when available, so recover it
+        # to preserve original request indices and per-entry failed-item counting.
+        # Build a per-id ordered list of original indices from the items submitted
+        # to persistence so duplicate IDs get distinct request positions.
+        id_to_orig_indices: dict[str, list[int]] = {}
+        for orig_idx, it in zip(gt_item_orig_indices, gt_items):
+            id_to_orig_indices.setdefault(it.id, []).append(orig_idx)
+        id_consumed: dict[str, int] = {}  # tracks how many errors per id we've consumed
+        unknown_persistence_failures = 0
+        persistence_errors = result.persistence_errors or [
+            BulkImportPersistenceError(
+                message=error_msg,
+                item_id=_extract_persistence_error_item_id(error_msg),
+            )
+            for error_msg in result.errors
+        ]
+        for persistence_error in persistence_errors:
+            error_msg = persistence_error.message
+            item_id = persistence_error.item_id or _extract_persistence_error_item_id(error_msg)
+            error_code = "CREATE_FAILED" if "create_failed" in error_msg.lower() else "DUPLICATE_ID"
+            if (
+                persistence_error.persistence_index is not None
+                and 0 <= persistence_error.persistence_index < len(gt_item_orig_indices)
+            ):
+                error_index = gt_item_orig_indices[persistence_error.persistence_index]
+                failed_request_indices.add(error_index)
+            elif item_id and item_id in id_to_orig_indices:
+                consumed = id_consumed.get(item_id, 0)
+                indices = id_to_orig_indices[item_id]
+                # Use the consumed-th matching index; clamp to last for extra errors.
+                error_index = indices[consumed] if consumed < len(indices) else indices[-1]
+                id_consumed[item_id] = consumed + 1
+                failed_request_indices.add(error_index)
+            elif item_id:
+                # item_id was in the error but not in our submission set; use -1
+                error_index = -1
+                failed_request_indices.add(-1)
+            else:
+                error_index = -1
+                unknown_persistence_failures += 1
             errors.append(
                 BulkImportError(
-                    index=-1,  # Index unknown for persistence errors
-                    item_id=None,  # Parse from error message if needed
+                    index=error_index,
+                    item_id=item_id,
                     field=None,
-                    code="CREATE_FAILED"
-                    if "create_failed" in error_msg.lower()
-                    else "DUPLICATE_ID",
+                    code=error_code,
                     message=error_msg,
                 )
             )
@@ -301,7 +371,10 @@ async def import_bulk(
 
     # Build validation summary
     total_items = len(items)
-    failed_count = len(errors)
+    # Count unique failed request entries (not raw error count — one item may produce
+    # multiple errors, and duplicate IDs in one request each count independently).
+    # unknown_persistence_failures counts errors with no recoverable item id.
+    failed_count = len(failed_request_indices) + unknown_persistence_failures
     validation_summary = ValidationSummary(
         total=total_items,
         succeeded=imported_count,
@@ -534,6 +607,11 @@ async def update_ground_truth(
     payload_extras = payload.model_extra or {}
 
     if "status" in provided_fields:
+        if payload.status is None:
+            raise HTTPException(
+                status_code=400,
+                detail="status cannot be null; omit the field to leave it unchanged",
+            )
         try:
             val = payload.status
             if isinstance(val, GroundTruthStatus):

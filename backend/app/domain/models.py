@@ -618,9 +618,26 @@ class ValidationSummary(BaseModel):
     failed: int = Field(description="Items that failed")
 
 
+class BulkImportPersistenceError(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    message: str = Field(description="Human-readable persistence error description")
+    item_id: str | None = Field(
+        default=None,
+        alias="itemId",
+        description="ID of the failed item when the repository can identify it",
+    )
+    persistence_index: int | None = Field(
+        default=None,
+        alias="persistenceIndex",
+        description="0-based position in the repository persistence batch",
+    )
+
+
 class BulkImportResult(BaseModel):
     imported: int = 0
     errors: list[str] = Field(default_factory=list)
+    persistence_errors: list[BulkImportPersistenceError] = Field(default_factory=list)
 
 
 class DatasetCurationInstructions(BaseModel):

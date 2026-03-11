@@ -6,6 +6,7 @@ from typing import Any, cast, Optional, Set
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict
+from pydantic.json_schema import SkipJsonSchema
 import logging
 
 from app.core.auth import get_current_user, UserContext
@@ -53,7 +54,7 @@ class AssignmentUpdateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     comment: Optional[str] = None
-    status: Optional[GroundTruthStatus | str] = None
+    status: GroundTruthStatus | str | SkipJsonSchema[None] = None
     manual_tags: Optional[list[str]] = Field(default=None, alias="manualTags")
     approve: Optional[bool] = None
     etag: Optional[str] = Field(default=None, alias="etag")
@@ -193,10 +194,15 @@ async def update_item(
 
     # Status update handling (skip/delete/approved explicitly)
     if "status" in provided_fields:
+        if payload.status is None:
+            raise HTTPException(
+                status_code=400,
+                detail="status cannot be null; omit the field to leave it unchanged",
+            )
         try:
             val = payload.status
-            if isinstance(val, GroundTruthStatus) or val is None:
-                it.status = val  # type: ignore[assignment]
+            if isinstance(val, GroundTruthStatus):
+                it.status = val
             else:
                 it.status = GroundTruthStatus(str(val))
         except (ValueError, KeyError):

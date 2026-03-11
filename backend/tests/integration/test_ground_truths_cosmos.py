@@ -132,18 +132,35 @@ async def test_snapshot_and_stats(async_client: AsyncClient, user_headers):
 @pytest.mark.anyio
 async def test_import_with_approve_flag(async_client: AsyncClient, user_headers):
     dataset = "test-approve-on-import"
-    item = make_item(dataset)
-    # Import with approve=true so items are automatically approved
-    r = await async_client.post("/v1/ground-truths?approve=true", json=[item], headers=user_headers)
+
+    # Item WITHOUT history: approval validation should reject it
+    invalid_item = make_item(dataset)
+    r = await async_client.post("/v1/ground-truths?approve=true", json=[invalid_item], headers=user_headers)
+    assert r.status_code == 200
+    data = r.json()
+    # Approval-invalid items must NOT be imported
+    assert data.get("imported") == 0
+    assert data.get("failed") == 1
+    assert any(e.get("code") == "APPROVAL_VALIDATION_FAILED" for e in data.get("errors", []))
+
+    # Item WITH history: approval validation should accept it
+    valid_item = make_item(dataset)
+    valid_item["history"] = [
+        {"role": "user", "msg": "What is the capital of France?"},
+        {"role": "assistant", "msg": "The capital of France is Paris."},
+    ]
+    r = await async_client.post("/v1/ground-truths?approve=true", json=[valid_item], headers=user_headers)
     assert r.status_code == 200
     data = r.json()
     assert data.get("imported") == 1
+    assert data.get("failed") == 0
 
-    # Verify the item is approved on read
+    # Verify the valid item is approved on read
     r = await async_client.get(f"/v1/ground-truths/{dataset}", headers=user_headers)
     assert r.status_code == 200
     lst = r.json()
-    assert lst and lst[0]["status"] == GroundTruthStatus.approved.value
+    approved = [i for i in lst if i["id"] == valid_item["id"]]
+    assert approved and approved[0]["status"] == GroundTruthStatus.approved.value
 
     # Stats should include at least one approved
     r = await async_client.get("/v1/ground-truths/stats", headers=user_headers)

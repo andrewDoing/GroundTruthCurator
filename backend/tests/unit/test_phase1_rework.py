@@ -4,6 +4,9 @@ Tests cover:
 - IV-001: approve=true bulk import enforces generic approval validation
 - IV-002: Assignment route history edits reset totalReferences
 - IV-003: Invalid status values rejected with HTTP 400 on both routes
+- RR-001: Explicit status: null rejected with HTTP 400 on both update routes
+- RR-002: Bulk import failed count reports unique failed items, not raw error count
+- RR-003: Bulk import approval errors carry original request indices
 """
 
 from __future__ import annotations
@@ -15,7 +18,12 @@ import pytest
 
 from fastapi import HTTPException
 
-from app.domain.models import AgenticGroundTruthEntry, BulkImportResult, HistoryEntry
+from app.domain.models import (
+    AgenticGroundTruthEntry,
+    BulkImportPersistenceError,
+    BulkImportResult,
+    HistoryEntry,
+)
 from app.domain.enums import GroundTruthStatus
 
 
@@ -369,5 +377,474 @@ class TestInvalidStatusRejection:
             assert exc_info.value.status_code == 400
             assert "invalid status value" in exc_info.value.detail.lower()
 
+        finally:
+            container.repo = original_repo
+
+
+class TestNullStatusRejection:
+    """RR-001: Explicit status: null must be rejected with HTTP 400 on both update routes."""
+
+    @pytest.mark.asyncio
+    async def test_ground_truth_route_rejects_null_status(self):
+        """Ground truths PUT route must return HTTP 400 for explicit status: null."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.ground_truths import update_ground_truth, GroundTruthUpdateRequest
+
+        item_id = str(uuid4())
+        existing_item = AgenticGroundTruthEntry(
+            id=item_id,
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            _etag="e1",
+        )
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.get_gt = AsyncMock(return_value=existing_item)
+
+        try:
+            payload = GroundTruthUpdateRequest.model_validate({"status": None, "etag": "e1"})
+            with pytest.raises(HTTPException) as exc_info:
+                await update_ground_truth(
+                    datasetName="ds",
+                    bucket=existing_item.bucket,
+                    item_id=item_id,
+                    payload=payload,
+                    user=UserContext(user_id="u1"),
+                    if_match=None,
+                )
+            assert exc_info.value.status_code == 400
+            assert "null" in exc_info.value.detail.lower()
+        finally:
+            container.repo = original_repo
+
+    @pytest.mark.asyncio
+    async def test_assignments_route_rejects_null_status(self):
+        """Assignments PUT route must return HTTP 400 for explicit status: null."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.assignments import update_item, AssignmentUpdateRequest
+
+        item_id = str(uuid4())
+        existing_item = AgenticGroundTruthEntry(
+            id=item_id,
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            assignedTo="u1",
+            _etag="e1",
+        )
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.get_gt = AsyncMock(return_value=existing_item)
+
+        try:
+            payload = AssignmentUpdateRequest.model_validate({"status": None, "etag": "e1"})
+            with pytest.raises(HTTPException) as exc_info:
+                await update_item(
+                    dataset="ds",
+                    bucket=existing_item.bucket,
+                    item_id=item_id,
+                    payload=payload,
+                    user=UserContext(user_id="u1"),
+                    if_match=None,
+                )
+            assert exc_info.value.status_code == 400
+            assert "null" in exc_info.value.detail.lower()
+        finally:
+            container.repo = original_repo
+
+    def test_ground_truth_update_request_schema_non_nullable_status(self):
+        """GroundTruthUpdateRequest must not advertise nullable status in OpenAPI schema."""
+        from app.api.v1.ground_truths import GroundTruthUpdateRequest
+
+        schema = GroundTruthUpdateRequest.model_json_schema()
+        status_prop = schema.get("properties", {}).get("status", {})
+        # status must NOT contain anyOf with null type
+        any_of = status_prop.get("anyOf", [])
+        null_entries = [e for e in any_of if e.get("type") == "null"]
+        assert not null_entries, f"status field advertises nullable in schema: {status_prop}"
+
+    def test_assignment_update_request_schema_non_nullable_status(self):
+        """AssignmentUpdateRequest must not advertise nullable status in OpenAPI schema."""
+        from app.api.v1.assignments import AssignmentUpdateRequest
+
+        schema = AssignmentUpdateRequest.model_json_schema()
+        status_prop = schema.get("properties", {}).get("status", {})
+        any_of = status_prop.get("anyOf", [])
+        null_entries = [e for e in any_of if e.get("type") == "null"]
+        assert not null_entries, f"status field advertises nullable in schema: {status_prop}"
+
+
+class TestBulkImportFailedCount:
+    """RR-002/RR-003: Bulk import failed count = unique failed items; indices preserved."""
+
+    @pytest.mark.asyncio
+    async def test_failed_count_is_unique_item_count_not_error_count(self):
+        """One item with multiple validation errors must count as 1 failed item."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.ground_truths import import_bulk
+        from app.domain.models import BulkImportError
+
+        # Two invalid items; each produces at least one error via approval validation
+        item1 = AgenticGroundTruthEntry(
+            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
+            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+        )
+        item2 = AgenticGroundTruthEntry(
+            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
+            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+        )
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.import_bulk_gt = AsyncMock(return_value=BulkImportResult(imported=0, errors=[]))
+        container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
+
+        try:
+            result = await import_bulk(
+                items=[item1, item2],
+                user=UserContext(user_id="u1"),
+                buckets=1,
+                approve=True,
+            )
+            # Both items fail, but failed must equal 2 (unique items), not the raw error count
+            assert result.failed == 2
+            assert result.imported == 0
+        finally:
+            container.repo = original_repo
+
+    @pytest.mark.asyncio
+    async def test_approval_errors_carry_original_request_index(self):
+        """Approval errors must reference the original request index, not the filtered-list index."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.ground_truths import import_bulk
+        from app.domain.models import BulkImportError, HistoryEntry
+
+        # First item is valid (passes tag validation), second is approval-invalid
+        item_valid = AgenticGroundTruthEntry(
+            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
+            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+            history=[
+                HistoryEntry(role="user", msg="Q"),
+                HistoryEntry(role="assistant", msg="A"),
+            ],
+        )
+        item_invalid = AgenticGroundTruthEntry(
+            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
+            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+            # no history → approval validation fails
+        )
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.import_bulk_gt = AsyncMock(return_value=BulkImportResult(imported=1, errors=[]))
+        container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
+
+        try:
+            # Payload: [valid_at_idx_0, invalid_at_idx_1]
+            result = await import_bulk(
+                items=[item_valid, item_invalid],
+                user=UserContext(user_id="u1"),
+                buckets=1,
+                approve=True,
+            )
+            assert result.imported == 1
+            assert result.failed == 1
+            # Error must reference original request index 1 (not 0 from filtered list)
+            approval_errors = [e for e in result.errors if e.code == "APPROVAL_VALIDATION_FAILED"]
+            assert approval_errors, "Expected APPROVAL_VALIDATION_FAILED errors"
+            assert all(e.index == 1 for e in approval_errors), (
+                f"Expected all error indices to be 1 (original request position), "
+                f"got: {[e.index for e in approval_errors]}"
+            )
+        finally:
+            container.repo = original_repo
+
+    @pytest.mark.asyncio
+    async def test_persistence_errors_recover_original_request_index_and_unique_failed_count(self):
+        """Persistence errors should map back to request indices and count unique real item ids once."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.ground_truths import import_bulk
+
+        item0 = AgenticGroundTruthEntry(
+            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
+            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+        )
+        item1 = AgenticGroundTruthEntry(
+            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
+            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+        )
+        item2 = AgenticGroundTruthEntry(
+            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
+            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+        )
+
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.import_bulk_gt = AsyncMock(
+            return_value=BulkImportResult(
+                imported=0,
+                errors=[
+                    f"exists (article: article-1, id: {item1.id})",
+                    f"create_failed (article: article-1, id: {item1.id}): boom",
+                    f"create_failed (article: article-2, id: {item2.id}): boom",
+                ],
+            )
+        )
+        container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
+
+        try:
+            result = await import_bulk(
+                items=[item0, item1, item2],
+                user=UserContext(user_id="u1"),
+                buckets=1,
+                approve=False,
+            )
+
+            assert result.imported == 0
+            assert result.failed == 2
+            assert [error.index for error in result.errors] == [1, 1, 2]
+            assert [error.item_id for error in result.errors] == [item1.id, item1.id, item2.id]
+            assert [error.code for error in result.errors] == [
+                "DUPLICATE_ID",
+                "CREATE_FAILED",
+                "CREATE_FAILED",
+            ]
+        finally:
+            container.repo = original_repo
+
+    @pytest.mark.asyncio
+    async def test_persistence_errors_without_item_id_keep_safe_fallback(self):
+        """Persistence errors without an id should still fall back to index=-1 and item_id=None."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.ground_truths import import_bulk
+
+        item = AgenticGroundTruthEntry(
+            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
+            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+        )
+
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.import_bulk_gt = AsyncMock(
+            return_value=BulkImportResult(
+                imported=0,
+                errors=["create_failed (article: article-1): boom"],
+            )
+        )
+        container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
+
+        try:
+            result = await import_bulk(
+                items=[item],
+                user=UserContext(user_id="u1"),
+                buckets=1,
+                approve=False,
+            )
+
+            assert result.imported == 0
+            assert result.failed == 1
+            assert len(result.errors) == 1
+            assert result.errors[0].index == -1
+            assert result.errors[0].item_id is None
+            assert result.errors[0].code == "CREATE_FAILED"
+        finally:
+            container.repo = original_repo
+
+
+class TestDuplicateIdBulkImport:
+    """Step 1.8 — Duplicate IDs in a single bulk-import request must not collapse
+    per-request-entry error attribution or undercount failed request entries.
+
+    Covers the IQ-001 finding from the 2026-03-11 plan review.
+    """
+
+    @pytest.mark.asyncio
+    async def test_duplicate_id_approval_error_uses_correct_request_index(self):
+        """[invalid(id=X), valid(id=X)] approve=true → error index=0, failed=1, imported=1."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.ground_truths import import_bulk
+        from app.domain.models import HistoryEntry
+
+        shared_id = str(uuid4())
+
+        # Item at index 0: no history → fails approval validation
+        item_invalid = AgenticGroundTruthEntry(
+            id=shared_id,
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            # no history → collect_approval_validation_errors will complain
+        )
+        # Item at index 1: has history → passes approval validation
+        item_valid = AgenticGroundTruthEntry(
+            id=shared_id,
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            history=[
+                HistoryEntry(role="user", msg="Q"),
+                HistoryEntry(role="assistant", msg="A"),
+            ],
+        )
+
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.import_bulk_gt = AsyncMock(
+            return_value=BulkImportResult(imported=1, errors=[])
+        )
+        container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
+
+        try:
+            result = await import_bulk(
+                items=[item_invalid, item_valid],
+                user=UserContext(user_id="u1"),
+                buckets=1,
+                approve=True,
+            )
+            assert result.imported == 1, f"Expected 1 imported, got {result.imported}"
+            assert result.failed == 1, f"Expected 1 failed, got {result.failed}"
+
+            approval_errors = [e for e in result.errors if e.code == "APPROVAL_VALIDATION_FAILED"]
+            assert approval_errors, "Expected APPROVAL_VALIDATION_FAILED errors"
+            assert all(e.index == 0 for e in approval_errors), (
+                f"Error must reference original request index 0 (the invalid entry), "
+                f"got indices: {[e.index for e in approval_errors]}"
+            )
+        finally:
+            container.repo = original_repo
+
+    @pytest.mark.asyncio
+    async def test_duplicate_id_both_fail_approval_counts_two_failed(self):
+        """[invalid(id=X), invalid(id=X)] approve=true → failed=2, errors at index 0 and 1."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.ground_truths import import_bulk
+
+        shared_id = str(uuid4())
+
+        item0 = AgenticGroundTruthEntry(
+            id=shared_id,
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            # no history
+        )
+        item1 = AgenticGroundTruthEntry(
+            id=shared_id,
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            # no history
+        )
+
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.import_bulk_gt = AsyncMock(
+            return_value=BulkImportResult(imported=0, errors=[])
+        )
+        container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
+
+        try:
+            result = await import_bulk(
+                items=[item0, item1],
+                user=UserContext(user_id="u1"),
+                buckets=1,
+                approve=True,
+            )
+            assert result.imported == 0
+            assert result.failed == 2, (
+                f"Both request entries must be counted as failed, got {result.failed}"
+            )
+            approval_errors = [e for e in result.errors if e.code == "APPROVAL_VALIDATION_FAILED"]
+            error_indices = sorted(e.index for e in approval_errors)
+            assert 0 in error_indices, "Expected an error at index 0"
+            assert 1 in error_indices, "Expected an error at index 1"
+        finally:
+            container.repo = original_repo
+
+    @pytest.mark.asyncio
+    async def test_duplicate_id_persistence_collision_uses_later_request_index(self):
+        """[valid(id=X), valid(id=X)] repo duplicate on second item → error index=1."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.ground_truths import import_bulk
+        from app.domain.models import HistoryEntry
+
+        shared_id = str(uuid4())
+
+        item0 = AgenticGroundTruthEntry(
+            id=shared_id,
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            history=[
+                HistoryEntry(role="user", msg="Q0"),
+                HistoryEntry(role="assistant", msg="A0"),
+            ],
+        )
+        item1 = AgenticGroundTruthEntry(
+            id=shared_id,
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            history=[
+                HistoryEntry(role="user", msg="Q1"),
+                HistoryEntry(role="assistant", msg="A1"),
+            ],
+        )
+
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.import_bulk_gt = AsyncMock(
+            return_value=BulkImportResult(
+                imported=1,
+                errors=[f"exists (article: article-1, id: {shared_id})"],
+                persistence_errors=[
+                    BulkImportPersistenceError(
+                        message=f"exists (article: article-1, id: {shared_id})",
+                        item_id=shared_id,
+                        persistence_index=1,
+                    )
+                ],
+            )
+        )
+        container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
+
+        try:
+            result = await import_bulk(
+                items=[item0, item1],
+                user=UserContext(user_id="u1"),
+                buckets=1,
+                approve=False,
+            )
+
+            assert result.imported == 1
+            assert result.failed == 1
+            assert len(result.errors) == 1
+            assert result.errors[0].code == "DUPLICATE_ID"
+            assert result.errors[0].item_id == shared_id
+            assert result.errors[0].index == 1
         finally:
             container.repo = original_repo

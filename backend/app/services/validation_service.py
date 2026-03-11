@@ -142,14 +142,16 @@ async def validate_ground_truth_item(
 
 async def validate_bulk_items(
     items: list[AgenticGroundTruthEntry],
-) -> dict[str, list[BulkImportError]]:
+) -> dict[int, list[BulkImportError]]:
     """Validate a list of ground truth items for bulk import.
 
-    Returns a dict mapping item ID to list of structured validation errors.
+    Returns a dict mapping request-position index to list of structured validation
+    errors.  Keyed by index rather than item.id so duplicate IDs in one request
+    do not collapse per-entry error attribution or undercount failed request entries.
     Items with no errors are not included in the result.
     """
 
-    validation_results: dict[str, list[BulkImportError]] = {}
+    validation_results: dict[int, list[BulkImportError]] = {}
 
     valid_tags_cache: set[str] | None = None
     has_items_with_tags = any(item.manual_tags for item in items)
@@ -163,8 +165,8 @@ async def validate_bulk_items(
 
     results = await asyncio.gather(*validation_tasks, return_exceptions=False)
 
-    for item, item_errors in zip(items, results):
+    for index, item_errors in enumerate(results):
         if item_errors:
-            validation_results[item.id] = item_errors
+            validation_results[index] = item_errors
 
     return validation_results
