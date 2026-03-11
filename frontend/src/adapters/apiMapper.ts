@@ -3,7 +3,7 @@ import type { GroundTruthItem, Reference } from "../models/groundTruth";
 import { urlToTitle } from "../models/utils";
 
 type ConversationTurn = NonNullable<GroundTruthItem["history"]>[number];
-type ApiHistoryEntry = components["schemas"]["HistoryEntry"] & {
+export type ApiHistoryEntry = components["schemas"]["HistoryEntry"] & {
 	refs?: components["schemas"]["Reference"][];
 	expectedBehavior?: string[];
 };
@@ -24,7 +24,10 @@ export type ApiGroundTruth =
 		};
 export type ApiReference = components["schemas"]["Reference"];
 
-export function groundTruthFromApi(api: ApiGroundTruth): GroundTruthItem {
+export function groundTruthFromApi(
+	api: ApiGroundTruth,
+	providerId = "api",
+): GroundTruthItem {
 	let history: GroundTruthItem["history"];
 	const refs: Reference[] = [];
 	let refIndex = 0;
@@ -93,7 +96,7 @@ export function groundTruthFromApi(api: ApiGroundTruth): GroundTruthItem {
 
 	return {
 		id: api.id,
-		providerId: "api",
+		providerId,
 		question,
 		answer: api.answer ?? "",
 		history,
@@ -106,6 +109,7 @@ export function groundTruthFromApi(api: ApiGroundTruth): GroundTruthItem {
 		tags: api.tags || [],
 		manualTags: api.manualTags || [],
 		computedTags: api.computedTags || [],
+		reviewedAt: api.reviewedAt ?? null,
 		totalReferences: api.totalReferences,
 		...({
 			datasetName: api.datasetName,

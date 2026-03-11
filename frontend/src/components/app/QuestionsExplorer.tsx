@@ -33,6 +33,19 @@ export interface QuestionsExplorerItem extends GroundTruthItem {
 	reviewedAt?: string | null;
 }
 
+// Module-level constant: stable reference so effects that read defaultFilter
+// do not need to list it as a dependency (it never changes).
+const defaultFilter: FilterState = {
+	status: "all",
+	dataset: "all",
+	tags: { include: [], exclude: [] },
+	itemId: "",
+	refUrl: "",
+	keyword: "",
+	sortColumn: null,
+	sortDirection: "desc",
+};
+
 interface QuestionsExplorerProps {
 	items?: QuestionsExplorerItem[];
 	onAssign: (item: QuestionsExplorerItem) => void | Promise<void>;
@@ -56,18 +69,6 @@ export default function QuestionsExplorer({
 
 	// Flag to track whether URL has been synchronized (prevent infinite loops)
 	const urlSyncedRef = useRef(false);
-
-	// Default filter state
-	const defaultFilter: FilterState = {
-		status: "all",
-		dataset: "all",
-		tags: { include: [], exclude: [] },
-		itemId: "",
-		refUrl: "",
-		keyword: "",
-		sortColumn: null,
-		sortDirection: "desc",
-	};
 
 	// Initialize filter state from URL parameters
 	const initializeFilterStateFromUrl = (): FilterState => {
@@ -204,6 +205,9 @@ export default function QuestionsExplorer({
 			const filterChanged =
 				prev.status !== appliedFilter.status ||
 				prev.dataset !== appliedFilter.dataset ||
+				prev.itemId !== appliedFilter.itemId ||
+				prev.refUrl !== appliedFilter.refUrl ||
+				prev.keyword !== appliedFilter.keyword ||
 				prev.sortColumn !== appliedFilter.sortColumn ||
 				prev.sortDirection !== appliedFilter.sortDirection ||
 				JSON.stringify(prev.tags) !== JSON.stringify(appliedFilter.tags);

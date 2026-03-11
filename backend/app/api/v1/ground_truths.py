@@ -128,7 +128,7 @@ class GroundTruthUpdateRequest(BaseModel):
     history: list[HistoryEntryPatch] | None = None
     context_entries: list[ContextEntry] | None = Field(default=None, alias="contextEntries")
     tool_calls: list[ToolCallRecord] | None = Field(default=None, alias="toolCalls")
-    expected_tools: ExpectedTools | None = Field(default=None, alias="expectedTools")
+    expected_tools: ExpectedTools | SkipJsonSchema[None] = Field(default=None, alias="expectedTools")
     feedback: list[FeedbackEntry] | None = None
     metadata: dict[str, Any] | None = None
     plugins: dict[str, PluginPayload] | None = None
@@ -642,7 +642,12 @@ async def update_ground_truth(
         it.context_entries = payload.context_entries or []
     if "tool_calls" in provided_fields:
         it.tool_calls = payload.tool_calls or []
-    if "expected_tools" in provided_fields and payload.expected_tools is not None:
+    if "expected_tools" in provided_fields:
+        if payload.expected_tools is None:
+            raise HTTPException(
+                status_code=400,
+                detail="expectedTools cannot be null; omit the field to leave it unchanged",
+            )
         it.expected_tools = payload.expected_tools
     if "feedback" in provided_fields:
         it.feedback = payload.feedback or []

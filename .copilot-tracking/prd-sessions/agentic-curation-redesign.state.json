@@ -1,14 +1,26 @@
 {
   "prdFile": "docs/prds/agentic-curation-redesign.md",
-  "lastAccessed": "2026-03-11T04:10:52.010Z",
-  "currentPhase": "build",
+  "lastAccessed": "2026-03-11T14:07:15.642Z",
+  "currentPhase": "validate",
   "questionsAsked": [
     "initiative-direction",
     "architecture-strategy",
     "primary-reference",
     "schema-source",
     "rag-compatibility-strategy",
-    "legacy-code-strategy"
+    "legacy-code-strategy",
+    "q-001-minimal-plugin-surface",
+    "q-002-legacy-payload-adaptation",
+    "q-003-v1-rag-compatibility-boundary",
+    "q-004-rules-engine-separation",
+    "decision-retrieval-tool-call-specialization",
+    "decision-action-capable-review-components",
+    "decision-enumerate-flexible-extensibility-surfaces",
+    "decision-reference-persistence-scoped-to-tool-call",
+    "decision-derived-item-level-retrieval-summaries",
+    "decision-common-candidate-reference-contract",
+    "decision-runtime-fallback-for-plugin-components",
+    "decision-lazy-loaded-low-overhead-extensibility"
   ],
   "answeredQuestions": {
     "initiative-direction": "Create a new PRD that replaces the separate-mode direction with an agentic-first redesign.",
@@ -16,7 +28,19 @@
     "primary-reference": "The primary UX goal is defined in wireframes/agent-curation-wireframe-v2.2.html.",
     "schema-source": "The generic schema is defined in wireframes/gt_schema_v5_generic.py.",
     "rag-compatibility-strategy": "The existing RAG-focused curation flow must run in the redesigned architecture via UI plugins and extension points.",
-    "legacy-code-strategy": "A lot of the current code should be deleted and replaced because there are no current users of the existing setup."
+    "legacy-code-strategy": "A lot of the current code should be deleted and replaced because there are no current users of the existing setup.",
+    "q-001-minimal-plugin-surface": "The minimal RAG compatibility surface must include a retrieval review plugin experience that can bind search backends, let curators select primary and bonus references, persist those selections in plugin-owned data on the generic core, and integrate with validation, explorer, computed-tag, and import/export extension points without restoring RAG-only core fields.",
+    "q-002-legacy-payload-adaptation": "Legacy RAG payloads should be adapted at import/export boundaries only. The redesigned system should store and read the normalized generic record, and any migration toggles used during implementation must remain temporary rather than becoming a shipped transitional read path.",
+    "q-003-v1-rag-compatibility-boundary": "v1 compatibility should preserve the curator-visible essentials of the current RAG flow: retrieval/search, primary and bonus reference selection, reference visit validation when enabled, multi-turn reference attachment where applicable, assignment/approval/export lifecycle continuity, and tags. Richer legacy RAG-only affordances such as stricter key-paragraph expectations, older grounding-summary/evaluation-specific surfaces, and similar non-essential conveniences may be simplified while there are no active users.",
+    "q-004-rules-engine-separation": "The optional rules engine should remain fully separate in v1. The plugin model should not reserve a dedicated standard hook for rules-engine integration until the generic plugin model and the RAG compatibility pack are proven in practice.",
+    "decision-retrieval-tool-call-specialization": "RAG retrieval should be modeled as a specialized extension of the generic tool-call review surface. The retrieval step remains a tool call, and the RAG plugin adds retrieval-specific affordances there for selecting primary and bonus references.",
+    "decision-action-capable-review-components": "The extensibility contract should explicitly support action-capable plugin review components for tool responses and plugin-owned payloads, not just passive renderers, so the RAG plugin can select and persist primary and bonus references from the retrieval tool-call experience.",
+    "decision-enumerate-flexible-extensibility-surfaces": "The PRD should explicitly enumerate the six flexible extensibility surfaces from the research \u2014 feedback, metadata, plugins[].data, tracePayload, contextEntries[].value, and toolCalls[].response \u2014 with documented default fallback behavior and plugin override points.",
+    "decision-reference-persistence-scoped-to-tool-call": "RAG-selected references should be persisted as plugin-owned data keyed to the specific retrieval tool call instance so selections remain tied to the exact call and turn that produced them.",
+    "decision-derived-item-level-retrieval-summaries": "The plugin model should support derived item-level summaries from per-tool-call retrieval data for explorer, queue, and approval views, so those surfaces can use selected-reference counts, unreviewed retrieval states, and similar signals without flattening the stored data model.",
+    "decision-common-candidate-reference-contract": "The PRD should require retrieval adapters to normalize different search engine outputs into a common candidate-reference contract for the retrieval review component, while preserving the raw backend or tool response for fallback rendering and auditability.",
+    "decision-runtime-fallback-for-plugin-components": "The PRD should explicitly require plugin-contributed retrieval review components and other pluggable field components to run behind error boundaries with explicit fallback behavior so runtime failures degrade safely instead of breaking the workspace.",
+    "decision-lazy-loaded-low-overhead-extensibility": "The PRD should explicitly require custom pluggable review and rendering components to be lazy-loaded and near-zero overhead when unused so optional RAG-specific extensibility does not materially increase generic host startup or bundle cost."
   },
   "referencesProcessed": [
     {
@@ -77,16 +101,24 @@
     }
   ],
   "nextActions": [
-    "Validate the open questions around RAG compatibility boundaries and adapter strategy.",
-    "Review the supersession plan for docs/prds/agentic-curation-mode.md with stakeholders.",
-    "Translate the PRD into an implementation plan once the redesign direction is approved."
+    "Validate the updated PRD language against the approved extensibility decisions and the RAG-as-tool-call mental model.",
+    "Translate the approved extensibility decisions into an implementation plan.",
+    "Review whether the superseded PRD needs any explicit cross-reference updates.",
+    "Confirm final approval language and ownership fields before PRD sign-off."
   ],
   "qualityChecks": [
     "wireframe-referenced",
     "schema-referenced",
     "separate-mode-superseded",
     "rag-plugin-requirement-recorded",
-    "required-sections-populated"
+    "required-sections-populated",
+    "q-001-resolved",
+    "q-002-resolved",
+    "q-003-resolved",
+    "q-004-resolved",
+    "all-open-questions-resolved",
+    "rag-extensibility-decisions-recorded",
+    "rag-extensibility-surfaces-documented"
   ],
   "userPreferences": {
     "detail-level": "comprehensive",

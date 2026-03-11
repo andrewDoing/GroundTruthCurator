@@ -1,15 +1,7 @@
+import type { ApiGroundTruth as GroundTruthItemOut } from "../adapters/apiMapper";
 import { client } from "../api/client";
 import type { components } from "../api/generated";
 
-type GroundTruthItemOut =
-	components["schemas"]["AgenticGroundTruthEntry-Output"] & {
-		synthQuestion?: string | null;
-		editedQuestion?: string | null;
-		answer?: string | null;
-		refs?: components["schemas"]["Reference"][];
-		totalReferences?: number;
-		tags?: string[];
-	};
 type SelfServeResponse = components["schemas"]["SelfServeResponse"];
 
 // Request new assignments (self-serve). Returns payload with assigned items and counts.

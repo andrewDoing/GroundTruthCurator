@@ -1,8 +1,33 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import QuestionsExplorer, {
 	type QuestionsExplorerItem,
 } from "../../../../src/components/app/QuestionsExplorer";
+
+const serviceMocks = vi.hoisted(() => ({
+	listAllGroundTruths: vi.fn(),
+	fetchTagsWithComputed: vi.fn(),
+	fetchAvailableDatasets: vi.fn(),
+}));
+
+vi.mock("../../../../src/services/groundTruths", async () => {
+	const actual = await vi.importActual<
+		typeof import("../../../../src/services/groundTruths")
+	>("../../../../src/services/groundTruths");
+
+	return {
+		...actual,
+		listAllGroundTruths: serviceMocks.listAllGroundTruths,
+	};
+});
+
+vi.mock("../../../../src/services/tags", () => ({
+	fetchTagsWithComputed: serviceMocks.fetchTagsWithComputed,
+}));
+
+vi.mock("../../../../src/services/datasets", () => ({
+	fetchAvailableDatasets: serviceMocks.fetchAvailableDatasets,
+}));
 
 const createMockItem = (
 	overrides: Partial<QuestionsExplorerItem> = {},
@@ -32,6 +57,47 @@ describe("QuestionsExplorer", () => {
 		mockOnAssign.mockClear();
 		mockOnInspect.mockClear();
 		mockOnDelete.mockClear();
+		window.history.replaceState({}, "", "/");
+		serviceMocks.listAllGroundTruths.mockReset();
+		serviceMocks.fetchTagsWithComputed.mockReset();
+		serviceMocks.fetchAvailableDatasets.mockReset();
+		serviceMocks.fetchTagsWithComputed.mockResolvedValue({
+			manualTags: [],
+			computedTags: [],
+		});
+		serviceMocks.fetchAvailableDatasets.mockResolvedValue([]);
+		serviceMocks.listAllGroundTruths.mockImplementation(
+			async (
+				params: {
+					itemId?: string;
+					refUrl?: string;
+					keyword?: string;
+					page?: number;
+				} = {},
+			) => {
+				const hasTextFilter =
+					Boolean(params.itemId) ||
+					Boolean(params.refUrl) ||
+					Boolean(params.keyword);
+				const page = typeof params.page === "number" ? params.page : 1;
+				const totalPages = hasTextFilter ? 1 : 3;
+
+				return {
+					items: [
+						createMockItem({
+							id: hasTextFilter ? "filtered-item" : `page-${page}-item`,
+							question: hasTextFilter
+								? "Filtered Question"
+								: `Question from page ${page}`,
+						}),
+					],
+					pagination: {
+						total: hasTextFilter ? 1 : 75,
+						totalPages,
+					},
+				};
+			},
+		);
 	});
 
 	it("should render all items when no filter is active", () => {
@@ -285,6 +351,62 @@ describe("QuestionsExplorer", () => {
 
 			// Should reset to page 1
 			expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+		});
+
+		it.each([
+			{
+				name: "item ID",
+				placeholder: "Enter item ID to search...",
+				value: "item-42",
+				expectedFilter: { itemId: "item-42" },
+			},
+			{
+				name: "reference URL",
+				placeholder: "Enter the reference URL to search...",
+				value: "https://example.com/ref",
+				expectedFilter: { refUrl: "https://example.com/ref" },
+			},
+			{
+				name: "keyword",
+				placeholder: "Search questions, answers, and history...",
+				value: "agentic",
+				expectedFilter: { keyword: "agentic" },
+			},
+		])("should reset to page 1 when applying a $name filter from page 2", async ({
+			placeholder,
+			value,
+			expectedFilter,
+		}) => {
+			render(<QuestionsExplorer {...defaultProps} items={undefined} />);
+
+			await waitFor(() => {
+				expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+			});
+
+			fireEvent.click(screen.getByRole("button", { name: "2" }));
+
+			await waitFor(() => {
+				expect(screen.getByText("Page 2 of 3")).toBeInTheDocument();
+			});
+
+			fireEvent.change(screen.getByPlaceholderText(placeholder), {
+				target: { value },
+			});
+			fireEvent.click(screen.getByRole("button", { name: "Apply Filters" }));
+
+			await waitFor(() => {
+				expect(serviceMocks.listAllGroundTruths).toHaveBeenLastCalledWith(
+					expect.objectContaining({
+						page: 1,
+						...expectedFilter,
+					}),
+				);
+			});
+
+			await waitFor(() => {
+				expect(screen.getByText("Filtered Question")).toBeInTheDocument();
+				expect(screen.getByText("Showing 1 of 1 items")).toBeInTheDocument();
+			});
 		});
 	});
 });

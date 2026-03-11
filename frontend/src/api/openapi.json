@@ -2204,14 +2204,8 @@
 						"title": "Toolcalls"
 					},
 					"expectedTools": {
-						"anyOf": [
-							{
-								"$ref": "#/components/schemas/ExpectedTools"
-							},
-							{
-								"type": "null"
-							}
-						]
+						"$ref": "#/components/schemas/ExpectedTools",
+						"title": "Expectedtools"
 					},
 					"feedback": {
 						"anyOf": [
@@ -2821,14 +2815,8 @@
 						"title": "Toolcalls"
 					},
 					"expectedTools": {
-						"anyOf": [
-							{
-								"$ref": "#/components/schemas/ExpectedTools"
-							},
-							{
-								"type": "null"
-							}
-						]
+						"$ref": "#/components/schemas/ExpectedTools",
+						"title": "Expectedtools"
 					},
 					"feedback": {
 						"anyOf": [

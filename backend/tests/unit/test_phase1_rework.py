@@ -421,6 +421,87 @@ class TestNullStatusRejection:
         finally:
             container.repo = original_repo
 
+
+class TestNullExpectedToolsRejection:
+    """RR-002: Explicit expectedTools: null must be rejected with HTTP 400 on both update routes."""
+
+    @pytest.mark.asyncio
+    async def test_ground_truth_route_rejects_null_expected_tools(self):
+        """Ground truths PUT route must return HTTP 400 for explicit expectedTools: null."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.ground_truths import update_ground_truth, GroundTruthUpdateRequest
+
+        item_id = str(uuid4())
+        existing_item = AgenticGroundTruthEntry(
+            id=item_id,
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            _etag="e1",
+        )
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.get_gt = AsyncMock(return_value=existing_item)
+
+        try:
+            payload = GroundTruthUpdateRequest.model_validate({"expectedTools": None, "etag": "e1"})
+            with pytest.raises(HTTPException) as exc_info:
+                await update_ground_truth(
+                    datasetName="ds",
+                    bucket=existing_item.bucket,
+                    item_id=item_id,
+                    payload=payload,
+                    user=UserContext(user_id="u1"),
+                    if_match=None,
+                )
+            assert exc_info.value.status_code == 400
+            assert "expectedtools" in exc_info.value.detail.lower()
+            assert "null" in exc_info.value.detail.lower()
+        finally:
+            container.repo = original_repo
+
+    @pytest.mark.asyncio
+    async def test_assignments_route_rejects_null_expected_tools(self):
+        """Assignments PUT route must return HTTP 400 for explicit expectedTools: null."""
+        from app.core.auth import UserContext
+        from app.container import container
+        from app.api.v1.assignments import update_item, AssignmentUpdateRequest
+
+        item_id = str(uuid4())
+        existing_item = AgenticGroundTruthEntry(
+            id=item_id,
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            assignedTo="u1",
+            _etag="e1",
+        )
+        original_repo = container.repo
+        container.repo = AsyncMock()
+        container.repo.get_gt = AsyncMock(return_value=existing_item)
+
+        try:
+            payload = AssignmentUpdateRequest.model_validate({"expectedTools": None, "etag": "e1"})
+            with pytest.raises(HTTPException) as exc_info:
+                await update_item(
+                    dataset="ds",
+                    bucket=existing_item.bucket,
+                    item_id=item_id,
+                    payload=payload,
+                    user=UserContext(user_id="u1"),
+                    if_match=None,
+                )
+            assert exc_info.value.status_code == 400
+            assert "expectedtools" in exc_info.value.detail.lower()
+            assert "null" in exc_info.value.detail.lower()
+        finally:
+            container.repo = original_repo
+
     @pytest.mark.asyncio
     async def test_assignments_route_rejects_null_status(self):
         """Assignments PUT route must return HTTP 400 for explicit status: null."""

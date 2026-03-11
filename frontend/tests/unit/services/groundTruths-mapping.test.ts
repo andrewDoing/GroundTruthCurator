@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { ApiGroundTruth } from "../../../src/adapters/apiMapper";
+import { groundTruthFromApi } from "../../../src/adapters/apiMapper";
 import type { components } from "../../../src/api/generated";
 import { mapGroundTruthFromApi } from "../../../src/services/groundTruths";
 
@@ -273,5 +275,99 @@ describe("mapGroundTruthFromApi", () => {
 
 			expect(result.providerId).toBe("custom-provider");
 		});
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Parity: provider path vs explorer/service path must produce identical output
+// ---------------------------------------------------------------------------
+describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
+	function makeSharedPayload(
+		overrides: Partial<ApiGroundTruth> = {},
+	): ApiGroundTruth {
+		return {
+			id: "parity-1",
+			status: "draft",
+			answer: "Parity answer",
+			synthQuestion: "Synth parity Q",
+			editedQuestion: "Edited parity Q",
+			history: undefined,
+			refs: [],
+			tags: ["t1"],
+			manualTags: ["m1"],
+			computedTags: ["c1"],
+			comment: "a comment",
+			datasetName: "ds",
+			bucket: "bkt" as ApiGroundTruth["bucket"],
+			_etag: "etag-parity",
+			reviewedAt: "2024-01-01T00:00:00Z",
+			...overrides,
+		} as ApiGroundTruth;
+	}
+
+	it("produces identical output for a legacy single-turn payload", () => {
+		const payload = makeSharedPayload();
+		const fromProvider = groundTruthFromApi(payload);
+		const fromService = mapGroundTruthFromApi(payload);
+
+		// Both paths must return the same domain object
+		expect(fromProvider).toEqual(fromService);
+	});
+
+	it("produces identical output for a multi-turn payload with per-turn refs", () => {
+		const payload = makeSharedPayload({
+			editedQuestion: "",
+			synthQuestion: "",
+			answer: "",
+			history: [
+				{ role: "user", msg: "First question" },
+				{
+					role: "assistant",
+					msg: "First answer",
+					refs: [{ url: "https://ref1.com", content: "Ref 1", bonus: false }],
+				},
+				{ role: "user", msg: "Follow-up" },
+				{
+					role: "assistant",
+					msg: "Follow-up answer",
+					refs: [{ url: "https://ref2.com", content: "Ref 2", bonus: true }],
+				},
+			],
+		});
+		const fromProvider = groundTruthFromApi(payload);
+		const fromService = mapGroundTruthFromApi(payload);
+
+		expect(fromProvider).toEqual(fromService);
+		// Sanity: both should have 2 references
+		expect(fromProvider.references).toHaveLength(2);
+	});
+
+	it("produces identical output when providerId is supplied", () => {
+		const payload = makeSharedPayload();
+		const fromProvider = groundTruthFromApi(payload, "explorer");
+		const fromService = mapGroundTruthFromApi(payload, "explorer");
+
+		expect(fromProvider).toEqual(fromService);
+		expect(fromProvider.providerId).toBe("explorer");
+	});
+
+	it("produces identical output for deleted status", () => {
+		const payload = makeSharedPayload({ status: "deleted" });
+		const fromProvider = groundTruthFromApi(payload);
+		const fromService = mapGroundTruthFromApi(payload);
+
+		expect(fromProvider).toEqual(fromService);
+		expect(fromProvider.deleted).toBe(true);
+		expect(fromProvider.status).toBe("draft");
+	});
+
+	it("preserves reviewedAt through both paths identically", () => {
+		const payload = makeSharedPayload({ reviewedAt: "2025-06-01T12:00:00Z" });
+		const fromProvider = groundTruthFromApi(payload);
+		const fromService = mapGroundTruthFromApi(payload);
+
+		expect(fromProvider.reviewedAt).toBe("2025-06-01T12:00:00Z");
+		expect(fromService.reviewedAt).toBe("2025-06-01T12:00:00Z");
+		expect(fromProvider).toEqual(fromService);
 	});
 });

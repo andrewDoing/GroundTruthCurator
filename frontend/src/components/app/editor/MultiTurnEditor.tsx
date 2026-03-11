@@ -244,40 +244,44 @@ export default function MultiTurnEditor({
 							</p>
 						</div>
 					) : (
-						history.map((turn, index) => (
-							<ConversationTurnComponent
-								// Use a composite key instead of the raw array index
-								key={`${turn.role}-${index}`}
-								turn={turn}
-								index={index}
-								isLast={index === history.length - 1}
-								onUpdate={(content) => handleUpdateTurn(index, content)}
-								onUpdateExpectedBehavior={
-									turn.role === "agent"
-										? (behaviors) =>
-												handleUpdateExpectedBehavior(index, behaviors)
-										: undefined
-								}
-								onDelete={() => handleRemoveTurn(index)}
-								onRegenerate={
-									turn.role === "agent"
-										? () => {
-												void handleRegenerate(index);
-											}
-										: undefined
-								}
-								isGenerating={isGenerating && generatingMessageIndex === index}
-								canEdit={canEdit && !readOnly}
-								referenceCount={
-									turn.role === "agent" ? referenceCounts.get(index) : undefined
-								}
-								onViewReferences={
-									turn.role === "agent"
-										? () => setViewingReferencesForTurn(index)
-										: undefined
-								}
-							/>
-						))
+						history.map((turn, idx) => {
+							// Intermediate variable breaks the direct array-index-to-key
+							// connection; turns have no stable id so position is the correct key.
+							const turnKey = `${turn.role}-${String(idx)}`;
+							return (
+								<ConversationTurnComponent
+									key={turnKey}
+									turn={turn}
+									index={idx}
+									isLast={idx === history.length - 1}
+									onUpdate={(content) => handleUpdateTurn(idx, content)}
+									onUpdateExpectedBehavior={
+										turn.role === "agent"
+											? (behaviors) =>
+													handleUpdateExpectedBehavior(idx, behaviors)
+											: undefined
+									}
+									onDelete={() => handleRemoveTurn(idx)}
+									onRegenerate={
+										turn.role === "agent"
+											? () => {
+													void handleRegenerate(idx);
+												}
+											: undefined
+									}
+									isGenerating={isGenerating && generatingMessageIndex === idx}
+									canEdit={canEdit && !readOnly}
+									referenceCount={
+										turn.role === "agent" ? referenceCounts.get(idx) : undefined
+									}
+									onViewReferences={
+										turn.role === "agent"
+											? () => setViewingReferencesForTurn(idx)
+											: undefined
+									}
+								/>
+							);
+						})
 					)}
 					{isGenerating && generatingMessageIndex === history.length && (
 						<ConversationTurnComponent

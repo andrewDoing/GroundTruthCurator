@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest  # type: ignore[import-not-found]
 
@@ -405,3 +406,65 @@ def test_list_all_gt_query_with_status_filter(repo: CosmosGroundTruthRepo) -> No
     assert "c.status = @status" in query
     # Ensure both clauses are present (not SELECT * FROM c WHERE c.status = @status alone)
     assert "c.docType = 'ground-truth-item' AND c.status = @status" in query
+
+
+# ---------------------------------------------------------------------------
+# IQ-003 strengthened: call list_all_gt() directly and assert query emitted
+# ---------------------------------------------------------------------------
+
+
+async def _empty_aiter():  # type: ignore[return]
+    """Empty async generator used to stub out Cosmos query_items in unit tests."""
+    return
+    yield  # pragma: no cover – presence makes this an async generator function
+
+
+@pytest.mark.asyncio
+async def test_list_all_gt_directly_emits_doctype_filter(
+    repo: CosmosGroundTruthRepo,
+) -> None:
+    """Calling list_all_gt() directly must pass the docType filter to query_items."""
+    captured: list[str] = []
+
+    def _mock_query_items(*args: object, **kwargs: object) -> object:
+        query = kwargs.get("query") or (args[0] if args else "")
+        captured.append(str(query))
+        return _empty_aiter()
+
+    mock_container = MagicMock()
+    mock_container.query_items = _mock_query_items
+
+    with patch.object(repo, "_ensure_initialized", new_callable=AsyncMock):
+        repo._gt_container = mock_container  # type: ignore[assignment]
+        result = await repo.list_all_gt()
+
+    assert result == []
+    assert len(captured) == 1
+    assert "c.docType = 'ground-truth-item'" in captured[0]
+    assert "SELECT * FROM c WHERE" in captured[0]
+
+
+@pytest.mark.asyncio
+async def test_list_all_gt_directly_emits_doctype_and_status_filter(
+    repo: CosmosGroundTruthRepo,
+) -> None:
+    """list_all_gt(status=draft) must emit BOTH docType and status clauses."""
+    captured: list[str] = []
+
+    def _mock_query_items(*args: object, **kwargs: object) -> object:
+        query = kwargs.get("query") or (args[0] if args else "")
+        captured.append(str(query))
+        return _empty_aiter()
+
+    mock_container = MagicMock()
+    mock_container.query_items = _mock_query_items
+
+    with patch.object(repo, "_ensure_initialized", new_callable=AsyncMock):
+        repo._gt_container = mock_container  # type: ignore[assignment]
+        result = await repo.list_all_gt(status=GroundTruthStatus.draft)
+
+    assert result == []
+    assert len(captured) == 1
+    assert "c.docType = 'ground-truth-item'" in captured[0]
+    assert "c.status = @status" in captured[0]
+    assert "c.docType = 'ground-truth-item' AND c.status = @status" in captured[0]
