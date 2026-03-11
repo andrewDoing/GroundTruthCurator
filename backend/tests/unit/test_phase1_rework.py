@@ -132,6 +132,77 @@ class TestBulkImportApprovalValidation:
         finally:
             container.repo = original_repo
 
+    @pytest.mark.asyncio
+    async def test_bulk_import_approve_enforces_plugin_pack_approval_hooks(self):
+        """Plugin-pack approval errors must block bulk approve=true entries (R-001).
+
+        Regression test: the bulk import approval path must run
+        validate_item_for_approval() (which includes
+        plugin_pack_registry.collect_approval_errors) rather than the
+        generic-only collect_approval_validation_errors().
+        """
+        from app.core.auth import UserContext
+        from app.container import container
+
+        # A structurally valid item — generic core would approve it.
+        valid_item = AgenticGroundTruthEntry(
+            id=str(uuid4()),
+            datasetName="test-dataset",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
+            history=[
+                HistoryEntry(role="user", msg="Which city is the capital of France?"),
+                HistoryEntry(role="assistant", msg="Paris."),
+            ],
+        )
+
+        original_repo = container.repo
+        original_registry = container.plugin_pack_registry
+        container.repo = AsyncMock()
+        container.repo.import_bulk_gt = AsyncMock(
+            return_value=BulkImportResult(imported=0, errors=[])
+        )
+        container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
+
+        # Inject a mock plugin-pack registry that returns a pack-level error.
+        mock_registry = AsyncMock()
+        mock_registry.collect_approval_errors = lambda _item: [
+            "plugin-pack: retrieval reference is incomplete"
+        ]
+        container.plugin_pack_registry = mock_registry
+
+        try:
+            mock_user = UserContext(user_id="test-user")
+            from app.api.v1.ground_truths import import_bulk
+
+            result = await import_bulk(
+                items=[valid_item],
+                user=mock_user,
+                buckets=1,
+                approve=True,
+            )
+
+            # The plugin-pack error must surface as an APPROVAL_VALIDATION_FAILED entry.
+            approval_errors = [e for e in result.errors if e.code == "APPROVAL_VALIDATION_FAILED"]
+            assert len(approval_errors) >= 1, (
+                "Expected at least one APPROVAL_VALIDATION_FAILED error from plugin-pack hook"
+            )
+            assert any(
+                "plugin-pack" in e.message for e in approval_errors
+            ), "Error message should contain plugin-pack content"
+
+            # Original request index must be preserved (0 for a single-item request).
+            assert all(e.index == 0 for e in approval_errors)
+
+            # No items should have been imported.
+            assert result.imported == 0
+
+        finally:
+            container.repo = original_repo
+            container.plugin_pack_registry = original_registry
+
 
 class TestAssignmentHistoryReset:
     """Test IV-002: Assignment route history edits reset totalReferences."""

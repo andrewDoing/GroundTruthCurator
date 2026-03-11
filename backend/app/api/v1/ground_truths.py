@@ -226,24 +226,27 @@ async def import_bulk(
         # (not by item.id) so duplicate IDs in the filtered list remain distinct.
         approval_validation_errors = await validate_bulk_items(gt_items)
         
-        # Also check generic approval invariants for each item
-        from app.services.validation_service import collect_approval_validation_errors
+        # Check generic approval invariants plus plugin-pack hooks for each item
         approval_ready_items: list[AgenticGroundTruthEntry] = []
         approval_ready_orig_indices: list[int] = []
         for gt_pos, item in enumerate(gt_items):
             orig_idx = gt_item_orig_indices[gt_pos]
             item_errors = []
-            
+
             # Add tag validation errors if present; fix index to original request position
             if gt_pos in approval_validation_errors:
                 for err in approval_validation_errors[gt_pos]:
                     err.index = orig_idx
                 item_errors.extend(approval_validation_errors[gt_pos])
-            
-            # Check generic approval invariants
-            approval_errors = collect_approval_validation_errors(item)
-            if approval_errors:
-                for err_msg in approval_errors:
+
+            # Run the shared approval path (generic core + plugin-pack hooks).
+            # validate_item_for_approval combines collect_approval_validation_errors
+            # with container.plugin_pack_registry.collect_approval_errors so that
+            # plugin-owned constraints (e.g. RagCompatPack) are enforced here too.
+            try:
+                validate_item_for_approval(item)
+            except ApprovalValidationError as exc:
+                for err_msg in exc.errors:
                     item_errors.append(
                         BulkImportError(
                             index=orig_idx,
