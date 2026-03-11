@@ -62,11 +62,16 @@ Options:
   --allow-anon-paths CSV         Easy Auth excluded paths
   --cosmos-indexing-policy PATH  Cosmos indexing policy JSON
   --no-cosmos-key                Do not set GTC_COSMOS_KEY in the app env
+  --token-store-account NAME     Storage account for Easy Auth token store
+  --token-store-container NAME   Blob container name for tokens (default: gtc-tokenstore)
   -h, --help                     Show this help and exit
 
 Notes:
   - The script deploys infra via Bicep and configures the Container App via az CLI.
   - Easy Auth is enabled at the Container App level using the provided client/tenant.
+  - A client secret is created on the Entra app and stored as a Container App secret.
+  - If --token-store-account is set, a blob-backed token store is configured with
+    the necessary RBAC role assignment. Without a token store, Easy Auth may not work.
   - Cosmos containers are created with the Python container manager (HPK-safe).
 EOF
 }
@@ -105,6 +110,8 @@ ALLOW_ANON_PATHS="${GTC_EZAUTH_ALLOW_ANONYMOUS_PATHS:-}"
 COSMOS_INDEXING_POLICY="${COSMOS_INDEXING_POLICY:-backend/scripts/indexing-policy.json}"
 SET_COSMOS_KEY="${SET_COSMOS_KEY:-false}"
 COSMOS_MAX_THROUGHPUT="${COSMOS_MAX_THROUGHPUT:-1000}"
+TOKEN_STORE_STORAGE_ACCOUNT="${TOKEN_STORE_STORAGE_ACCOUNT:-}"
+TOKEN_STORE_BLOB_CONTAINER="${TOKEN_STORE_BLOB_CONTAINER:-gtc-tokenstore}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -150,6 +157,10 @@ while [[ $# -gt 0 ]]; do
       COSMOS_INDEXING_POLICY="$2"; shift 2 ;;
     --no-cosmos-key)
       SET_COSMOS_KEY="false"; shift ;;
+    --token-store-account)
+      TOKEN_STORE_STORAGE_ACCOUNT="$2"; shift 2 ;;
+    --token-store-container)
+      TOKEN_STORE_BLOB_CONTAINER="$2"; shift 2 ;;
     -h|--help)
       usage; exit 0 ;;
     *)
@@ -291,6 +302,11 @@ managed_identity_client_id=$(az deployment group show \
   --resource-group "$RESOURCE_GROUP" \
   --query "properties.outputs.managedIdentityClientId.value" \
   --output tsv)
+cosmos_is_serverless=$(az deployment group show \
+  --name "$DEPLOYMENT_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --query "properties.outputs.cosmosIsServerless.value" \
+  --output tsv 2>/dev/null || echo "false")
 
 if [[ -z "$cosmos_account_name" || -z "$cosmos_endpoint" || -z "$cosmos_db_name" ]]; then
   err "Failed to read Cosmos outputs from deployment."
@@ -410,6 +426,66 @@ az containerapp auth microsoft update \
   --client-id "$AUTH_CLIENT_ID" \
   --tenant-id "$TENANT_ID"
 
+# Create a client secret for the Entra app and configure it on the Container App.
+# Easy Auth requires a client secret to complete the OAuth authorization code flow.
+auth_secret=$(az ad app credential reset \
+  --id "$AUTH_CLIENT_ID" \
+  --display-name "EasyAuth-$(date +%Y%m%d)" \
+  --query password \
+  --output tsv)
+if [[ -z "$auth_secret" ]]; then
+  err "Failed to create Entra app client secret."
+fi
+
+az containerapp secret set \
+  --name "$CONTAINER_APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --secrets microsoft-provider-authentication-secret="$auth_secret"
+
+az containerapp auth microsoft update \
+  --name "$CONTAINER_APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --client-secret-name microsoft-provider-authentication-secret
+
+# Enable system-assigned identity and configure a blob-backed token store.
+# Without the token store, the auth middleware cannot persist session state.
+az containerapp identity assign \
+  --name "$CONTAINER_APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --system-assigned
+
+system_principal_id=$(az containerapp show \
+  --name "$CONTAINER_APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --query identity.principalId \
+  --output tsv)
+
+if [[ -n "${TOKEN_STORE_STORAGE_ACCOUNT:-}" ]]; then
+  token_store_container="${TOKEN_STORE_BLOB_CONTAINER:-gtc-tokenstore}"
+
+  az storage container create \
+    --name "$token_store_container" \
+    --account-name "$TOKEN_STORE_STORAGE_ACCOUNT" \
+    --auth-mode login 2>/dev/null || true
+
+  storage_scope="/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/$TOKEN_STORE_STORAGE_ACCOUNT"
+  az role assignment create \
+    --assignee "$system_principal_id" \
+    --role "Storage Blob Data Contributor" \
+    --scope "$storage_scope" 2>/dev/null || true
+
+  az containerapp auth update \
+    --name "$CONTAINER_APP_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --token-store true \
+    --sas-url-setting-name "" \
+    --blob-container-uri "https://${TOKEN_STORE_STORAGE_ACCOUNT}.blob.core.windows.net/${token_store_container}"
+else
+  echo "WARNING: TOKEN_STORE_STORAGE_ACCOUNT not set. Skipping token store configuration."
+  echo "  Easy Auth may not work correctly without a blob-backed token store."
+  echo "  Set TOKEN_STORE_STORAGE_ACCOUNT to enable it."
+fi
+
 RUNNER=()
 if command -v uv &>/dev/null; then
   RUNNER=("uv" "run" "python")
@@ -419,13 +495,19 @@ else
   RUNNER=("python")
 fi
 
-"${RUNNER[@]}" backend/scripts/cosmos_container_manager.py \
-  --endpoint "$GTC_COSMOS_ENDPOINT" \
-  --use-aad \
-  --db "$GTC_COSMOS_DB_NAME" \
-  --gt-container "$GTC_COSMOS_CONTAINER_GT" \
-  --assignments-container "$GTC_COSMOS_CONTAINER_ASSIGNMENTS" \
-  --tags-container "$GTC_COSMOS_CONTAINER_TAGS" \
-  --tag-definitions-container "$GTC_COSMOS_CONTAINER_TAG_DEFINITIONS" \
-  --indexing-policy "$COSMOS_INDEXING_POLICY" \
-  --max-throughput "$COSMOS_MAX_THROUGHPUT"
+cosmos_mgr_args=(
+  --endpoint "$GTC_COSMOS_ENDPOINT"
+  --use-aad
+  --db "$GTC_COSMOS_DB_NAME"
+  --gt-container "$GTC_COSMOS_CONTAINER_GT"
+  --assignments-container "$GTC_COSMOS_CONTAINER_ASSIGNMENTS"
+  --tags-container "$GTC_COSMOS_CONTAINER_TAGS"
+  --tag-definitions-container "$GTC_COSMOS_CONTAINER_TAG_DEFINITIONS"
+  --indexing-policy "$COSMOS_INDEXING_POLICY"
+)
+# Serverless Cosmos DB does not support provisioned throughput.
+if [[ "$cosmos_is_serverless" != "true" ]]; then
+  cosmos_mgr_args+=(--max-throughput "$COSMOS_MAX_THROUGHPUT")
+fi
+
+"${RUNNER[@]}" backend/scripts/cosmos_container_manager.py "${cosmos_mgr_args[@]}"
