@@ -1,7 +1,39 @@
-.PHONY: setup format smoke test backend-integration-test lint typecheck check ci verify observe
+.PHONY: setup backend frontend dev dev-up dev-down format smoke test backend-integration-test lint typecheck check ci verify observe
 
 setup:
 	@./scripts/harness/setup.sh
+
+backend:
+	@cd backend && uv run uvicorn app.main:app --reload
+
+frontend:
+	@cd frontend && npm run dev
+
+dev:
+	@backend_pid=''; frontend_pid=''; \
+	trap 'status=$$?; if [ -n "$$backend_pid" ]; then kill $$backend_pid 2>/dev/null || true; fi; if [ -n "$$frontend_pid" ]; then kill $$frontend_pid 2>/dev/null || true; fi; exit $$status' INT TERM EXIT; \
+	( cd backend && uv run uvicorn app.main:app --reload ) & backend_pid=$$!; \
+	( cd frontend && npm run dev ) & frontend_pid=$$!; \
+	while kill -0 $$backend_pid 2>/dev/null && kill -0 $$frontend_pid 2>/dev/null; do \
+		sleep 1; \
+	done; \
+	status=0; \
+	if ! kill -0 $$backend_pid 2>/dev/null; then \
+		wait $$backend_pid || status=$$?; \
+	fi; \
+	if ! kill -0 $$frontend_pid 2>/dev/null; then \
+		wait $$frontend_pid || status=$$?; \
+	fi; \
+	trap - INT TERM EXIT; \
+	kill $$backend_pid $$frontend_pid 2>/dev/null || true; \
+	wait $$backend_pid $$frontend_pid 2>/dev/null || true; \
+	exit $$status
+
+dev-up:
+	@./scripts/harness/dev_up.sh
+
+dev-down:
+	@./scripts/harness/dev_down.sh
 
 format:
 	@./scripts/harness/format.sh

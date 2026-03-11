@@ -15,6 +15,11 @@ Run from repository root:
 | Goal | Command |
 |---|---|
 | Install dependencies | `make -f Makefile.harness setup` |
+| Start backend dev server | `make -f Makefile.harness backend` |
+| Start frontend dev server | `make -f Makefile.harness frontend` |
+| Start both dev servers (foreground) | `make -f Makefile.harness dev` |
+| Start both dev servers (background) | `make -f Makefile.harness dev-up` |
+| Stop background dev servers | `make -f Makefile.harness dev-down` |
 | Auto-format code | `make -f Makefile.harness format` |
 | Fast sanity check | `make -f Makefile.harness smoke` |
 | Static checks | `make -f Makefile.harness check` |
@@ -22,6 +27,8 @@ Run from repository root:
 | Backend integration tests | `make -f Makefile.harness backend-integration-test` |
 | CI-equivalent local run | `make -f Makefile.harness ci` |
 | CI + telemetry review | `make -f Makefile.harness verify` |
+
+Use `dev` for interactive local work, and `dev-up` / `dev-down` when an agent or developer needs the servers managed in the background. Background PID files and logs live under `.harness/dev/`.
 
 ## Backend Commands
 
