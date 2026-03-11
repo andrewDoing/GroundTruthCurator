@@ -742,13 +742,12 @@ export interface components {
             /** Etag */
             etag?: string | null;
             /** History */
-            history?: components["schemas"]["app__api__v1__ground_truths__HistoryEntryPatch"][] | null;
+            history?: components["schemas"]["app__api__v1__assignments__HistoryEntryPatch"][] | null;
             /** Contextentries */
             contextEntries?: components["schemas"]["ContextEntry"][] | null;
             /** Toolcalls */
             toolCalls?: components["schemas"]["ToolCallRecord"][] | null;
-            /** Expectedtools */
-            expectedTools?: components["schemas"]["ExpectedTools"];
+            expectedTools?: components["schemas"]["ExpectedTools"] | null;
             /** Feedback */
             feedback?: components["schemas"]["FeedbackEntry"][] | null;
             /** Metadata */
@@ -999,13 +998,12 @@ export interface components {
             /** Comment */
             comment?: string | null;
             /** History */
-            history?: components["schemas"]["app__api__v1__ground_truths__HistoryEntryPatch"][] | null;
+            history?: components["schemas"]["app__api__v1__assignments__HistoryEntryPatch"][] | null;
             /** Contextentries */
             contextEntries?: components["schemas"]["ContextEntry"][] | null;
             /** Toolcalls */
             toolCalls?: components["schemas"]["ToolCallRecord"][] | null;
-            /** Expectedtools */
-            expectedTools?: components["schemas"]["ExpectedTools"];
+            expectedTools?: components["schemas"]["ExpectedTools"] | null;
             /** Feedback */
             feedback?: components["schemas"]["FeedbackEntry"][] | null;
             /** Metadata */
@@ -1403,7 +1401,7 @@ export interface components {
             failed: number;
         };
         /** HistoryEntryPatch */
-        app__api__v1__ground_truths__HistoryEntryPatch: {
+        app__api__v1__assignments__HistoryEntryPatch: {
             /** Role */
             role: string;
             /** Msg */
