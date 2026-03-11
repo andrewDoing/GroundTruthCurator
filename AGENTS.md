@@ -99,6 +99,11 @@ See `docs/OBSERVABILITY.md` for field names, examples, and query patterns.
 - Capture the objective, non-goals, relevant files, risks, and the exact commands that prove the work is done.
 - Refresh the plan when scope changes so a restarted agent can pick up quickly.
 
+## Ralph Loop Handoff
+
+- If you are running `scripts/ralph_wiggum_loop.py`, read and update `RALPH_LEARNINGS.md` during each implementor and reviewer pass.
+- Use `RALPH_LEARNINGS.md` for durable cross-context handoff notes only: key pitfalls, validated commands, touched files, stable review item IDs, and remaining risks.
+
 ## Static Analysis And Quality Gates
 
 - Run `make -f Makefile.harness check` before `make -f Makefile.harness test`.

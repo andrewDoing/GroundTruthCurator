@@ -12,6 +12,21 @@ from pathlib import Path
 
 REVIEW_GATE_JSON_START = "<!-- REVIEW_GATE_JSON_START -->"
 REVIEW_GATE_JSON_END = "<!-- REVIEW_GATE_JSON_END -->"
+DEFAULT_MAX_ITERATIONS = 25
+DEFAULT_RALPH_LEARNINGS = """# RALPH_LEARNINGS.md
+
+Purpose: persistent handoff notes for Ralph loop runs across fresh context windows.
+
+How to use:
+- Read this file before starting implementor or reviewer work.
+- Keep notes concise, durable, and specific to this repository.
+- Prefer actionable guidance: file paths, commands, pitfalls, review item IDs, and remaining risks.
+- Remove or rewrite stale guidance instead of appending noisy transcripts.
+
+## Active learnings
+
+- No durable Ralph learnings recorded yet.
+"""
 PHASE_PATTERN = re.compile(
     r"^### \[(?P<checked>[ xX])\] Implementation Phase (?P<number>\d+): (?P<title>.+)$",
     re.MULTILINE,
@@ -39,23 +54,35 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--plan", required=True, help="Path to the plan instructions markdown file.")
-    parser.add_argument("--phase", type=int, help="Implementation phase number to run. Defaults to loop state or first unchecked phase.")
+    parser.add_argument(
+        "--phase",
+        type=int,
+        help=(
+            "Implementation phase number to run. When omitted, the loop resumes from state "
+            "or the first unchecked phase and continues into later phases until blocked or complete."
+        ),
+    )
     parser.add_argument("--date", help="Date folder to use for review artifacts in YYYY-MM-DD format. Defaults to current UTC date.")
     parser.add_argument("--copilot-bin", default="copilot", help="Copilot CLI binary to invoke.")
     parser.add_argument("--model", default="gpt-5.4", help="Copilot model to use.")
     parser.add_argument(
         "--reasoning-effort",
-        default="high",
+        default="medium",
         choices=["low", "medium", "high", "xhigh"],
         help="Copilot reasoning effort level.",
     )
     parser.add_argument("--implementor-agent", default="task-implementor", help="Copilot custom agent for the implementation pass.")
     parser.add_argument("--reviewer-agent", default="task-reviewer", help="Copilot custom agent for the review pass.")
     parser.add_argument(
+        "--committer-agent",
+        default="task-implementor",
+        help="Copilot custom agent for the final phase commit pass after approval.",
+    )
+    parser.add_argument(
         "--max-iterations",
         type=int,
-        default=5,
-        help="Maximum implementor/reviewer iterations to run for a phase before exiting blocked.",
+        default=DEFAULT_MAX_ITERATIONS,
+        help="Maximum implementor/reviewer iterations to run per phase before exiting blocked.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print the computed workflow without invoking Copilot.")
     return parser.parse_args()
@@ -133,6 +160,10 @@ def build_loop_state_path(repo_root: Path, slug: str) -> Path:
     return repo_root / ".copilot-tracking" / "prd-sessions" / f"{slug}.implementation-loop.state.json"
 
 
+def build_learnings_path(repo_root: Path) -> Path:
+    return repo_root / "RALPH_LEARNINGS.md"
+
+
 def make_relative(path: Path, repo_root: Path) -> str:
     return str(path.relative_to(repo_root))
 
@@ -141,6 +172,12 @@ def load_loop_state(path: Path) -> dict:
     if not path.exists():
         return {}
     return json.loads(read_text(path))
+
+
+def ensure_learnings_file(path: Path) -> None:
+    if path.exists():
+        return
+    path.write_text(DEFAULT_RALPH_LEARNINGS, encoding="utf-8")
 
 
 def find_phase_by_number(phases: list[Phase], number: int) -> Phase | None:
@@ -182,10 +219,15 @@ def unresolved_review_items(loop_state: dict, phase_number: int) -> list[dict]:
     return []
 
 
+def should_auto_advance(args: argparse.Namespace) -> bool:
+    return args.phase is None
+
+
 def implementor_prompt(
     repo_root: Path,
     plan_path: Path,
     changes_path: Path,
+    learnings_path: Path,
     phase: Phase,
     prior_open_items: list[dict],
     iteration: int,
@@ -197,19 +239,64 @@ def implementor_prompt(
 Repository root: {repo_root}
 Plan file: {make_relative(plan_path, repo_root)}
 Changes log path: {make_relative(changes_path, repo_root)}
+Learnings handoff path: {make_relative(learnings_path, repo_root)}
 Loop iteration: {iteration} of {max_iterations}
 
 Primary instructions:
 1. Implement only the current phase from the plan.
 2. If the unresolved review items list below is non-empty, address every one of those items before doing any new work for this phase.
 3. Update the changes log at the path above so it reflects the implementation you actually made.
-4. Run the validation commands listed for this phase and fix any issues introduced by your changes.
-5. Do not advance the implementation phase state yourself.
+4. Read the learnings handoff file before coding, then update it before you finish with durable notes that help the next context window.
+5. Run the validation commands listed for this phase and fix any issues introduced by your changes.
+6. Commit your phase-specific implementation work before you finish this iteration if there is anything safe and relevant to commit.
+7. Do not advance the implementation phase state yourself.
 
 Unresolved review items to address first:
 {unresolved_items}
 
+When updating the learnings handoff, keep it concise and cumulative. Capture only durable guidance such as confirmed pitfalls, useful commands, touched files, and remaining risks. Avoid diary-style chatter.
+
+When creating an iteration commit:
+- Inspect `git status` first.
+- Stage only files that belong to this phase and that you intentionally changed.
+- Never include unrelated pre-existing changes or runtime artifacts under `.copilot-tracking/`.
+- Do not create an empty commit.
+- Use this subject line: `ralph: phase {phase.number} iteration {iteration} - {phase.title}`
+- Include this trailer exactly at the end of the commit message: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
+
 Keep stable review-item IDs if you are clearly addressing prior reviewer findings. Avoid unrelated files and preserve existing repository conventions.
+"""
+
+
+def committer_prompt(
+    repo_root: Path,
+    plan_path: Path,
+    changes_path: Path,
+    learnings_path: Path,
+    review_path: Path,
+    phase: Phase,
+) -> str:
+    return f"""You are the phase-committer for implementation phase {phase.number}: {phase.title}.
+
+Repository root: {repo_root}
+Plan file: {make_relative(plan_path, repo_root)}
+Changes log path: {make_relative(changes_path, repo_root)}
+Learnings handoff path: {make_relative(learnings_path, repo_root)}
+Approved review file: {make_relative(review_path, repo_root)}
+
+Primary instructions:
+1. Read the plan, changes log, learnings handoff, and approved review file before committing.
+2. Inspect `git status` and identify only the files that belong to this phase and should persist in git.
+3. Create a final phase commit if there are remaining approved phase changes that are not already committed.
+4. Never include unrelated pre-existing changes or runtime artifacts under `.copilot-tracking/`.
+5. Do not create an empty commit if there is nothing phase-specific left to commit.
+
+Commit requirements:
+- Use this subject line: `ralph: phase {phase.number} - {phase.title}`
+- Add a short body summarizing the phase outcome.
+- Include this trailer exactly at the end of the commit message: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
+
+This is a clean-up/finalization pass after approval, so prefer a focused commit over broad staging.
 """
 
 
@@ -217,6 +304,7 @@ def reviewer_prompt(
     repo_root: Path,
     plan_path: Path,
     changes_path: Path,
+    learnings_path: Path,
     review_path: Path,
     phase: Phase,
     prior_open_items: list[dict],
@@ -229,19 +317,23 @@ def reviewer_prompt(
 Repository root: {repo_root}
 Plan file: {make_relative(plan_path, repo_root)}
 Changes log path: {make_relative(changes_path, repo_root)}
+Learnings handoff path: {make_relative(learnings_path, repo_root)}
 Write the review output to: {make_relative(review_path, repo_root)}
 Loop iteration: {iteration} of {max_iterations}
 
 Review instructions:
 1. Review the current phase implementation against the plan, the changes log, and any relevant validation results.
 2. Overwrite the target review file with your full review.
-3. Reuse stable IDs for still-relevant prior review items whenever possible.
-4. If an item is fully fixed, keep it in the JSON block with status "addressed". If it remains a problem, use status "open".
-5. If any review item remains open, the overall review status must be "changes_requested" and all_review_items_addressed must be false.
-6. If every review item is addressed, the overall review status must be "approved" and all_review_items_addressed must be true.
+3. Read the learnings handoff file before reviewing, then update it with concise reviewer learnings that would help the next implementor or reviewer context window.
+4. Reuse stable IDs for still-relevant prior review items whenever possible.
+5. If an item is fully fixed, keep it in the JSON block with status "addressed". If it remains a problem, use status "open".
+6. If any review item remains open, the overall review status must be "changes_requested" and all_review_items_addressed must be false.
+7. If every review item is addressed, the overall review status must be "approved" and all_review_items_addressed must be true.
 
 Prior open review items:
 {prior_items}
+
+When updating the learnings handoff, keep it concise and cumulative. Capture durable review guidance such as recurring failure modes, validated checks, and risks the next pass should watch for.
 
 At the end of the markdown file, include this exact machine-readable block:
 {REVIEW_GATE_JSON_START}
@@ -386,11 +478,13 @@ def update_loop_state(
     state_payload = {
         "planFile": make_relative(plan_path, repo_root),
         "changesFile": make_relative(changes_path, repo_root),
+        "learningsFile": make_relative(build_learnings_path(repo_root), repo_root),
         "lastRunAt": utc_now_iso(),
         "model": args.model,
         "reasoningEffort": args.reasoning_effort,
         "implementorAgent": args.implementor_agent,
         "reviewerAgent": args.reviewer_agent,
+        "committerAgent": args.committer_agent,
         "lastReviewedPhase": phase.number,
         "lastReviewedPhaseTitle": phase.title,
         "lastReviewFile": make_relative(review_path, repo_root),
@@ -423,6 +517,7 @@ def run_phase_loop(
     repo_root: Path,
     plan_path: Path,
     changes_path: Path,
+    learnings_path: Path,
     review_path: Path,
     status_path: Path,
     loop_state_path: Path,
@@ -448,6 +543,7 @@ def run_phase_loop(
                 repo_root=repo_root,
                 plan_path=plan_path,
                 changes_path=changes_path,
+                learnings_path=learnings_path,
                 phase=phase,
                 prior_open_items=current_open_items,
                 iteration=iteration,
@@ -466,6 +562,7 @@ def run_phase_loop(
                 repo_root=repo_root,
                 plan_path=plan_path,
                 changes_path=changes_path,
+                learnings_path=learnings_path,
                 review_path=review_path,
                 phase=phase,
                 prior_open_items=current_open_items,
@@ -511,6 +608,118 @@ def run_phase_loop(
     raise AssertionError("run_phase_loop exhausted without returning")
 
 
+def run_phase_commit(
+    args: argparse.Namespace,
+    repo_root: Path,
+    plan_path: Path,
+    changes_path: Path,
+    learnings_path: Path,
+    review_path: Path,
+    phase: Phase,
+) -> None:
+    print(f"Running phase committer for phase {phase.number}: {phase.title}", flush=True)
+    run_copilot(
+        copilot_bin=args.copilot_bin,
+        repo_root=repo_root,
+        agent=args.committer_agent,
+        model=args.model,
+        reasoning_effort=args.reasoning_effort,
+        prompt=committer_prompt(
+            repo_root=repo_root,
+            plan_path=plan_path,
+            changes_path=changes_path,
+            learnings_path=learnings_path,
+            review_path=review_path,
+            phase=phase,
+        ),
+    )
+
+
+def run_selected_phases(
+    args: argparse.Namespace,
+    repo_root: Path,
+    plan_path: Path,
+    changes_path: Path,
+    learnings_path: Path,
+    loop_state_path: Path,
+    phases: list[Phase],
+    starting_phase: Phase,
+    date_folder: str,
+    loop_state: dict,
+) -> int:
+    phase = starting_phase
+    current_loop_state = loop_state
+    slug = derive_plan_slug(plan_path)
+
+    while True:
+        review_path = build_review_path(repo_root, date_folder, slug, phase.number)
+        status_path = build_status_path(review_path)
+        upcoming_phase = next_phase(phases, phase.number)
+        prior_open_items = unresolved_review_items(current_loop_state, phase.number)
+        review_path.parent.mkdir(parents=True, exist_ok=True)
+
+        gate_passed, open_items, completed_iteration = run_phase_loop(
+            args=args,
+            repo_root=repo_root,
+            plan_path=plan_path,
+            changes_path=changes_path,
+            learnings_path=learnings_path,
+            review_path=review_path,
+            status_path=status_path,
+            loop_state_path=loop_state_path,
+            phase=phase,
+            upcoming_phase=upcoming_phase,
+            prior_open_items=prior_open_items,
+        )
+
+        if gate_passed:
+            run_phase_commit(
+                args=args,
+                repo_root=repo_root,
+                plan_path=plan_path,
+                changes_path=changes_path,
+                learnings_path=learnings_path,
+                review_path=review_path,
+                phase=phase,
+            )
+
+        if gate_passed and upcoming_phase is not None and should_auto_advance(args):
+            print(
+                f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
+                f"Moving to phase {upcoming_phase.number}: {upcoming_phase.title}",
+                flush=True,
+            )
+            current_loop_state = {
+                "lastReviewedPhase": phase.number,
+                "openReviewItems": open_items,
+            }
+            phase = upcoming_phase
+            continue
+
+        if gate_passed and upcoming_phase is not None:
+            print(
+                f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
+                f"Next phase is {upcoming_phase.number}: {upcoming_phase.title}",
+                flush=True,
+            )
+            return 0
+
+        if gate_passed:
+            print(
+                f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
+                "All implementation phases are complete.",
+                flush=True,
+            )
+            return 0
+
+        print(
+            f"Phase {phase.number} hit the max iteration limit ({args.max_iterations}). "
+            f"{len(open_items)} review item(s) still need to be addressed.",
+            flush=True,
+        )
+        return 2
+
+
 def main() -> None:
     args = parse_args()
     if args.max_iterations < 1:
@@ -527,64 +736,43 @@ def main() -> None:
     slug = derive_plan_slug(plan_path)
     date_folder = args.date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     changes_path = resolve_changes_path(repo_root, frontmatter, date_folder, slug)
+    learnings_path = build_learnings_path(repo_root)
     loop_state_path = build_loop_state_path(repo_root, slug)
     loop_state = load_loop_state(loop_state_path)
     phase = select_phase(phases, args.phase, loop_state)
-    review_path = build_review_path(repo_root, date_folder, slug, phase.number)
-    status_path = build_status_path(review_path)
-    upcoming_phase = next_phase(phases, phase.number)
-    prior_open_items = unresolved_review_items(loop_state, phase.number)
 
     if args.dry_run:
+        review_path = build_review_path(repo_root, date_folder, slug, phase.number)
         print("Ralph Wiggum loop dry run")
         print(f"repo_root: {repo_root}")
         print(f"phase: {phase.number} - {phase.title}")
         print(f"plan: {make_relative(plan_path, repo_root)}")
         print(f"changes: {make_relative(changes_path, repo_root)}")
+        print(f"learnings: {make_relative(learnings_path, repo_root)}")
         print(f"review: {make_relative(review_path, repo_root)}")
         print(f"state: {make_relative(loop_state_path, repo_root)}")
         print(f"max_iterations: {args.max_iterations}")
-        print(f"prior_open_review_items: {len(prior_open_items)}")
+        print(f"committer_agent: {args.committer_agent}")
+        print(f"auto_advance_phases: {should_auto_advance(args)}")
+        print(f"prior_open_review_items: {len(unresolved_review_items(loop_state, phase.number))}")
         return
 
-    review_path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_learnings_file(learnings_path)
     loop_state_path.parent.mkdir(parents=True, exist_ok=True)
-
-    gate_passed, open_items, completed_iteration = run_phase_loop(
+    exit_code = run_selected_phases(
         args=args,
         repo_root=repo_root,
         plan_path=plan_path,
         changes_path=changes_path,
-        review_path=review_path,
-        status_path=status_path,
+        learnings_path=learnings_path,
         loop_state_path=loop_state_path,
-        phase=phase,
-        upcoming_phase=upcoming_phase,
-        prior_open_items=prior_open_items,
+        phases=phases,
+        starting_phase=phase,
+        date_folder=date_folder,
+        loop_state=loop_state,
     )
-
-    if gate_passed and upcoming_phase is not None:
-        print(
-            f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
-            f"Moving to phase {upcoming_phase.number}: {upcoming_phase.title}",
-            flush=True,
-        )
-        return
-
-    if gate_passed:
-        print(
-            f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
-            "All implementation phases are complete.",
-            flush=True,
-        )
-        return
-
-    print(
-        f"Phase {phase.number} hit the max iteration limit ({args.max_iterations}). "
-        f"{len(open_items)} review item(s) still need to be addressed.",
-        flush=True,
-    )
-    raise SystemExit(2)
+    if exit_code != 0:
+        raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":
