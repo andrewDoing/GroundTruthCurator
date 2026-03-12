@@ -56,6 +56,16 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Current frontend gate after Phase 4 iteration 2: `267/267` tests passing, with the long-standing `QuestionsExplorer` `act(...)` warnings and the existing Vite chunk-size warning still emitted. The render-phase `ReferencesTabs` warning is gone.
 - Reviewer rerun on 2026-03-12 re-confirmed Phase 4 closeout: `ReferencesSection.test.tsx` and `ReferencesTabs.multiturn.test.tsx` still cover the fixed paths, `267/267` frontend tests pass, and only the long-standing `QuestionsExplorer` `act(...)` plus Vite chunk-size warnings remain.
 
+### Frontend component registry (Phase 2 — registry implementation)
+- Registry files live at `frontend/src/registry/`: `FieldComponentRegistry.ts` (singleton), `RegistryRenderer.tsx` (wrapper), `PluginErrorBoundary.tsx`, and `fallbacks/` directory.
+- Barrel at `frontend/src/registry/index.ts` re-exports everything — Biome enforces alphabetical named exports.
+- `FieldComponentRegistry.resolve()` does exact match first, then prefix match (registered `"toolCall"` matches `"toolCall:retrieval"` — separator must be `:`).
+- `RegistryRenderer` selects fallback by data shape: objects→`KVDictFallback`, strings→`CodeBlockFallback`, everything else→`JsonFallback`.
+- `PluginErrorBoundary` logs to `console.error` only under `import.meta.env.DEV`.
+- Tests are in `frontend/tests/unit/registry/` (NOT `frontend/src/registry/__tests__/`) — vitest includes `tests/unit/**/*.{test,spec}.{ts,tsx}`.
+- Phase 2 validation: `cd frontend && npm run typecheck && npm run lint:check && npm run test:run -- --pool=threads --poolOptions.threads.singleThread` — expect 288+ tests, 38+ test files.
+- `reset()` exists on the class for testing — use fresh `new FieldComponentRegistry()` instances in tests rather than the module singleton.
+
 ### Phase 1 contract stabilization (Phase 1)
 
 - `RetrievalCandidate` added to `backend/app/domain/models.py` (after `ExpectedTools`) and `frontend/src/models/groundTruth.ts` (after `PluginPayload`). Not yet used by any API endpoint — will appear in OpenAPI when Phase 5/6 wires it into responses.
@@ -65,6 +75,7 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Frontend registry types live at `frontend/src/registry/types.ts` with barrel at `frontend/src/registry/index.ts`. Phase 2 will add the concrete `FieldComponentRegistry` implementation.
 - Biome enforces alphabetical named exports — keep barrel exports sorted.
 - Wireframe-to-schema field mapping at `.copilot-tracking/research/2026-03-12/wireframe-schema-field-mapping.md` — key difference is `toolCallDecisions` (wireframe per-ID map) vs `expectedTools` (schema categorized lists).
+- Phase 1 reviewer validation (iteration 1): all gates pass — `ruff check`, `ty check`, `tsc`, Biome lint, 343 backend unit tests. No review items opened. `RetrievalCandidate` backend model uses `extra="forbid"` and validators for `url` (non-empty) and `relevance` (enum constraint) — later phases wiring this into APIs should preserve those guards.
 
 ### Phase 5 full-stack validation (Phase 5)
 

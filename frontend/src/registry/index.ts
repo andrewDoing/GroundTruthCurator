@@ -1,8 +1,16 @@
 // Public API for the plugin component registry.
-//
-// Phase 1 exports type definitions only.  The concrete registry
-// implementation is added in Phase 2 (FieldComponentRegistry).
 
+export {
+	FieldComponentRegistry,
+	fieldComponentRegistry,
+} from "./FieldComponentRegistry";
+export {
+	CodeBlockFallback,
+	JsonFallback,
+	KVDictFallback,
+} from "./fallbacks";
+export { PluginErrorBoundary } from "./PluginErrorBoundary";
+export { RegistryRenderer } from "./RegistryRenderer";
 export type {
 	ComponentRegistration,
 	EditorProps,
