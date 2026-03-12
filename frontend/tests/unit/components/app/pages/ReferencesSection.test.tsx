@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import ReferencesSection from "../../../../../src/components/app/pages/ReferencesSection";
 import type { Reference } from "../../../../../src/models/groundTruth";
 
@@ -41,7 +41,9 @@ describe("ReferencesSection", () => {
 		expect(onAddRefs).toHaveBeenCalled();
 
 		// Run search
-		fireEvent.click(screen.getAllByRole("button", { name: /Search/i })[1]);
+		await act(async () => {
+			fireEvent.click(screen.getAllByRole("button", { name: /Search/i })[1]);
+		});
 		expect(onRunSearch).toHaveBeenCalled();
 	});
 
@@ -139,6 +141,39 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
 		expect(screen.getByText(/Expected Tools/i)).toBeInTheDocument();
+	});
+
+	it("shows generic evidence for context-only items", () => {
+		const item = makeItem({
+			contextEntries: [
+				{ key: "customer_tier", value: "enterprise" },
+				{ key: "request", value: { region: "us" } },
+			],
+		});
+		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
+		expect(screen.getByText(/Evidence.*Trace/i)).toBeInTheDocument();
+		expect(screen.getByText(/Context Entries/i)).toBeInTheDocument();
+		expect(screen.getByText(/customer_tier:/i)).toBeInTheDocument();
+	});
+
+	it("shows generic plugin-owned details for plugin-only items", () => {
+		const item = makeItem({
+			plugins: {
+				"rag-compat": {
+					kind: "retrieval-review",
+					version: "1",
+					data: {
+						retrievalMode: "semantic",
+						latencyMs: 42,
+					},
+				},
+			},
+		});
+		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
+		expect(screen.getByText(/Evidence.*Trace/i)).toBeInTheDocument();
+		expect(screen.getByText(/Plugin Details/i)).toBeInTheDocument();
+		expect(screen.getByText("rag-compat")).toBeInTheDocument();
+		expect(screen.getByText(/retrievalMode:/i)).toBeInTheDocument();
 	});
 
 	it("shows both evidence and RAG compat when multi-turn item has references", () => {

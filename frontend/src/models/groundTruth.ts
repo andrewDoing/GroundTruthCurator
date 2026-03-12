@@ -213,10 +213,12 @@ export function getQueuePreview(item: GroundTruthItem): string {
  */
 export function hasEvidenceData(item: GroundTruthItem): boolean {
 	return (
+		(item.contextEntries?.length ?? 0) > 0 ||
 		(item.toolCalls?.length ?? 0) > 0 ||
 		item.expectedTools != null ||
 		item.traceIds != null ||
 		Object.keys(item.metadata ?? {}).length > 0 ||
+		Object.keys(item.plugins ?? {}).length > 0 ||
 		(item.feedback?.length ?? 0) > 0 ||
 		Object.keys(item.tracePayload ?? {}).length > 0
 	);

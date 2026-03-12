@@ -4,8 +4,10 @@
  * Displays generic agentic-schema data attached to a GroundTruthItem:
  *   - Expected tools review (expectedTools vs toolCalls)
  *   - Tool calls (toolCalls)
+ *   - Context entries (contextEntries)
  *   - Trace IDs (traceIds)
  *   - Metadata dictionary (metadata)
+ *   - Plugin-owned details (plugins)
  *   - Feedback entries (feedback)
  *   - Raw trace payload (tracePayload)
  *
@@ -15,8 +17,10 @@
 
 import { useState } from "react";
 import type {
+	ContextEntry,
 	FeedbackEntry,
 	GroundTruthItem,
+	PluginPayload,
 	ToolCallRecord,
 	ToolExpectation,
 } from "../../models/groundTruth";
@@ -272,6 +276,55 @@ function KVDict({ data }: { data: Record<string, unknown> }) {
 	);
 }
 
+// ── Context Entries ───────────────────────────────────────────────────────────
+
+function ContextEntryRow({ entry }: { entry: ContextEntry }) {
+	return (
+		<div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+			<div className="flex items-start gap-2 text-xs">
+				<span className="font-mono text-slate-500 shrink-0">{entry.key}:</span>
+				<span className="text-slate-700 break-all">
+					{typeof entry.value === "object"
+						? JSON.stringify(entry.value)
+						: String(entry.value)}
+				</span>
+			</div>
+		</div>
+	);
+}
+
+// ── Plugin Details ────────────────────────────────────────────────────────────
+
+function PluginPayloadCard({
+	slot,
+	payload,
+}: {
+	slot: string;
+	payload: PluginPayload;
+}) {
+	const hasData = Object.keys(payload.data ?? {}).length > 0;
+	return (
+		<div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+			<div className="flex items-center gap-2 flex-wrap">
+				<span className="text-sm font-medium text-slate-800">{slot}</span>
+				<span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-800">
+					{payload.kind}
+				</span>
+				<span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-600">
+					v{payload.version}
+				</span>
+			</div>
+			{hasData ? (
+				<KVDict data={payload.data ?? {}} />
+			) : (
+				<div className="text-xs italic text-slate-400">
+					No plugin-owned fields provided.
+				</div>
+			)}
+		</div>
+	);
+}
+
 // ---------------------------------------------------------------------------
 // Main TracePanel
 // ---------------------------------------------------------------------------
@@ -297,8 +350,10 @@ export default function TracePanel({
 	}
 
 	const toolCalls = item.toolCalls ?? [];
+	const contextEntries = item.contextEntries ?? [];
 	const traceIds = item.traceIds ?? {};
 	const metadata = item.metadata ?? {};
+	const plugins = item.plugins ?? {};
 	const feedback = item.feedback ?? [];
 	const tracePayload = item.tracePayload ?? {};
 
@@ -333,6 +388,24 @@ export default function TracePanel({
 				</CollapsibleSection>
 			)}
 
+			{/* Context Entries */}
+			{contextEntries.length > 0 && (
+				<CollapsibleSection
+					title="Context Entries"
+					badge={contextEntries.length}
+					defaultOpen
+				>
+					<div className="space-y-2">
+						{contextEntries.map((entry) => (
+							<ContextEntryRow
+								key={`${entry.key}-${JSON.stringify(entry.value)}`}
+								entry={entry}
+							/>
+						))}
+					</div>
+				</CollapsibleSection>
+			)}
+
 			{/* Feedback */}
 			{feedback.length > 0 && (
 				<CollapsibleSection
@@ -353,6 +426,21 @@ export default function TracePanel({
 			{Object.keys(metadata).length > 0 && (
 				<CollapsibleSection title="Metadata">
 					<KVDict data={metadata} />
+				</CollapsibleSection>
+			)}
+
+			{/* Plugin-owned Details */}
+			{Object.entries(plugins).length > 0 && (
+				<CollapsibleSection
+					title="Plugin Details"
+					badge={Object.keys(plugins).length}
+					defaultOpen
+				>
+					<div className="space-y-2">
+						{Object.entries(plugins).map(([slot, payload]) => (
+							<PluginPayloadCard key={slot} slot={slot} payload={payload} />
+						))}
+					</div>
 				</CollapsibleSection>
 			)}
 
