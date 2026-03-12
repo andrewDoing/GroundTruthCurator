@@ -150,3 +150,4 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Final counts: 394/394 backend tests, 297/297 frontend tests (39 files), 138 frontend files linted, smoke passed.
 - Known pre-existing non-blocking items: 5 GroundTruthItem field-shadowing warnings (backend pytest), 16 Biome non-null-assertion warnings (frontend lint), 1 Vite chunk-size warning (563 kB bundle).
 - Validation commands for full re-check: `cd backend && uv run ruff check app/ && uv run ty check app/ && uv run pytest tests/unit/ -v` and `cd frontend && npm run lint:check && npm run typecheck && npm run build && npm run test:run -- --pool=threads --poolOptions.threads.singleThread` and `make -f Makefile.harness smoke`.
+- Reviewer iteration 1 independently re-ran all 8 validation gates; all results matched implementor claims exactly. No new findings, no regressions. Phase 8 approved.
