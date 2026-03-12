@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import importlib.util
 import sys
 from argparse import Namespace
@@ -19,6 +20,20 @@ def load_ralph_module():
 
 
 ralph_wiggum_loop = load_ralph_module()
+
+
+class FakeTtyStream(io.StringIO):
+    def __init__(self, is_tty: bool) -> None:
+        super().__init__()
+        self._is_tty = is_tty
+        self.flushed = False
+
+    def isatty(self) -> bool:
+        return self._is_tty
+
+    def flush(self) -> None:
+        self.flushed = True
+        super().flush()
 
 
 def make_args(*, phase: int | None, max_iterations: int = 7, committer_agent: str = "task-implementor") -> Namespace:
@@ -103,6 +118,33 @@ def test_reviewer_prompt_references_learnings_handoff(tmp_path) -> None:
 def test_format_total_duration_rounds_to_nearest_second() -> None:
     assert ralph_wiggum_loop.format_total_duration(65.4) == "0:01:05"
     assert ralph_wiggum_loop.format_total_duration(65.5) == "0:01:06"
+
+
+def test_emit_terminal_bell_falls_back_to_stdout_when_stderr_is_not_a_tty(monkeypatch) -> None:
+    fake_stderr = FakeTtyStream(is_tty=False)
+    fake_stdout = FakeTtyStream(is_tty=True)
+
+    monkeypatch.setattr(ralph_wiggum_loop.sys, "stderr", fake_stderr)
+    monkeypatch.setattr(ralph_wiggum_loop.sys, "stdout", fake_stdout)
+
+    ralph_wiggum_loop.emit_terminal_bell()
+
+    assert fake_stderr.getvalue() == ""
+    assert fake_stdout.getvalue() == "\a"
+    assert fake_stdout.flushed is True
+
+
+def test_emit_terminal_bell_skips_non_tty_streams(monkeypatch) -> None:
+    fake_stderr = FakeTtyStream(is_tty=False)
+    fake_stdout = FakeTtyStream(is_tty=False)
+
+    monkeypatch.setattr(ralph_wiggum_loop.sys, "stderr", fake_stderr)
+    monkeypatch.setattr(ralph_wiggum_loop.sys, "stdout", fake_stdout)
+
+    ralph_wiggum_loop.emit_terminal_bell()
+
+    assert fake_stderr.getvalue() == ""
+    assert fake_stdout.getvalue() == ""
 
 
 def test_run_selected_phases_auto_advances_until_complete(monkeypatch, tmp_path, capsys) -> None:
@@ -199,12 +241,14 @@ def test_run_selected_phases_returns_blocked_when_review_items_remain(
     capsys,
 ) -> None:
     clock = iter([300.0, 309.0])
+    bells: list[str] = []
 
     def fake_run_phase_loop(**kwargs):
         return False, [{"id": "R-001", "status": "open"}], 7
 
     monkeypatch.setattr(ralph_wiggum_loop, "run_phase_loop", fake_run_phase_loop)
     monkeypatch.setattr(ralph_wiggum_loop, "perf_counter", lambda: next(clock))
+    monkeypatch.setattr(ralph_wiggum_loop, "emit_terminal_bell", lambda: bells.append("bell"))
 
     plan_path = tmp_path / "demo-plan.instructions.md"
     plan_path.write_text("", encoding="utf-8")
@@ -227,3 +271,4 @@ def test_run_selected_phases_returns_blocked_when_review_items_remain(
     output = capsys.readouterr().out
     assert "hit the max iteration limit" in output
     assert "Total duration: 0:00:09" in output
+    assert bells == ["bell"]

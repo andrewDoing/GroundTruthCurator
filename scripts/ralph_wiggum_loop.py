@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -50,6 +51,14 @@ def utc_now_iso() -> str:
 def format_total_duration(elapsed_seconds: float) -> str:
     rounded_seconds = max(0, int(round(elapsed_seconds)))
     return str(timedelta(seconds=rounded_seconds))
+
+
+def emit_terminal_bell() -> None:
+    for stream in (sys.stderr, sys.stdout):
+        if stream.isatty():
+            stream.write("\a")
+            stream.flush()
+            return
 
 
 def parse_args() -> argparse.Namespace:
@@ -731,6 +740,7 @@ def run_selected_phases(
             f"Total duration: {format_total_duration(perf_counter() - start_time)}",
             flush=True,
         )
+        emit_terminal_bell()
 
 
 def main() -> None:
