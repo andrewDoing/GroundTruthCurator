@@ -67,6 +67,11 @@ async def lifespan(app: FastAPI):
             # Wire repository and services based on configured backend
             if config.settings.REPO_BACKEND.lower() == "cosmos":
                 await container.startup_cosmos()
+            elif (
+                config.settings.REPO_BACKEND.lower() == "memory"
+                and getattr(container, "repo", None) is None
+            ):
+                container.init_memory_repo(enable_demo_data=config.settings.DEMO_MODE)
             # Seed built-in tags into global tag registry (idempotent add)
             try:
                 defaults = sorted(

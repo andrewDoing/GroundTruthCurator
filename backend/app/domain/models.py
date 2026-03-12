@@ -81,6 +81,7 @@ class ToolCallRecord(BaseModel):
     id: str = ""
     name: str
     call_type: Literal["tool", "subagent"] = Field("tool", alias="callType")
+    arguments: dict[str, Any] | None = None
     agent: str | None = None
     step_number: int | None = Field(None, alias="stepNumber")
     parallel_group: str | None = Field(None, alias="parallelGroup")

@@ -79,6 +79,14 @@ The UI includes a demo flow. You can toggle via env at startup:
 
 The build injects `import.meta.env.DEMO_MODE` to match `VITE_DEMO_MODE` for client code.
 
+For the full local demo stack from the repository root, use:
+
+```bash
+VITE_DEMO_MODE=true VITE_DEV_USER_ID=demo-user make dev-up
+```
+
+`VITE_DEMO_MODE=true` enables the demo UI behavior, while `VITE_DEV_USER_ID=demo-user` gives the backend a stable dev/demo identity for assignment-backed flows.
+
 ## Telemetry (optional)
 
 Client telemetry is initialized early and can be configured via Vite env vars:

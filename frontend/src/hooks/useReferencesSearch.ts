@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import DEMO_MODE from "../config/demo";
+import { shouldUseDemoProvider } from "../config/demo";
 import type { Reference } from "../models/groundTruth";
 import { mockAiSearch, searchReferences } from "../services/search";
 
@@ -28,7 +28,7 @@ export function useReferencesSearch(options: {
 		}
 		setSearching(true);
 		try {
-			const results = DEMO_MODE
+			const results = shouldUseDemoProvider()
 				? await mockAiSearch(q)
 				: await searchReferences(q, 10);
 			setSearchResults(results);

@@ -28,9 +28,32 @@ from app.exports.storage.blob import BlobExportStorage
 from app.exports.storage.local import LocalExportStorage
 from app.plugins.pack_registry import get_default_pack_registry
 from app.plugins.base import PluginPackRegistry
+from app.adapters.repos.memory_repo import InMemoryGroundTruthRepo
+from app.adapters.search.demo_search import DemoSearchAdapter
+from app.demo_seed import DEMO_CURATION_INSTRUCTIONS, build_demo_items
 
 
 logger = logging.getLogger("gtc.container")
+
+
+class InMemoryTagsRepo:
+    def __init__(self) -> None:
+        self.tags: list[str] = []
+
+    async def get_global_tags(self) -> list[str]:
+        return list(self.tags)
+
+    async def save_global_tags(self, tags: list[str]) -> list[str]:
+        self.tags = sorted(set(tags))
+        return list(self.tags)
+
+    async def upsert_add(self, tags_to_add: list[str]) -> list[str]:
+        return await self.save_global_tags([*self.tags, *tags_to_add])
+
+    async def upsert_remove(self, tags_to_remove: list[str]) -> list[str]:
+        remove = {str(tag) for tag in tags_to_remove}
+        self.tags = [tag for tag in self.tags if tag not in remove]
+        return list(self.tags)
 
 
 class Container:
@@ -207,6 +230,36 @@ class Container:
             credential=credential,
         )
 
+    def init_memory_repo(self, *, enable_demo_data: bool = False) -> None:
+        demo_items = build_demo_items(settings.DEMO_USER_ID) if enable_demo_data else []
+        demo_instructions = DEMO_CURATION_INSTRUCTIONS if enable_demo_data else []
+        self.repo = InMemoryGroundTruthRepo(
+            items=demo_items,
+            curation_instructions=demo_instructions,
+        )
+        self.assignment_service = AssignmentService(self.repo)
+        self.snapshot_service = SnapshotService(
+            self.repo,
+            export_pipeline=self.export_pipeline,
+            processor_registry=self.export_processor_registry,
+            formatter_registry=self.export_formatter_registry,
+            default_processor_order=self.export_default_processor_order,
+        )
+        self.curation_service = CurationService(self.repo)
+        self.tags_repo = cast(CosmosTagsRepo, InMemoryTagsRepo())
+        self.tag_registry_service = TagRegistryService(self.tags_repo)
+        self.tag_definitions_repo = cast(Any, None)
+        self.search_service = (
+            SearchService(DemoSearchAdapter(demo_items))
+            if enable_demo_data
+            else SearchService()
+        )
+        logger.info(
+            "Using InMemoryGroundTruthRepo (demo_mode=%s, items=%s)",
+            enable_demo_data,
+            len(demo_items),
+        )
+
     async def startup_cosmos(self, db_name: str | None = None) -> None:
         """Initialize and validate Cosmos repos and services.
 
@@ -257,6 +310,14 @@ class Container:
     def init_search(self) -> None:
         """Configure search adapter if Azure Search settings are present."""
         from app.adapters.search.azure_ai_search import AzureAISearchAdapter
+
+        if (
+            settings.REPO_BACKEND == "memory"
+            and settings.DEMO_MODE
+            and getattr(self.search_service, "adapter", None) is not None
+        ):
+            logger.info("Using demo search adapter for memory-backed demo mode")
+            return
 
         if settings.AZ_SEARCH_ENDPOINT and settings.AZ_SEARCH_INDEX:
             token_cred = None

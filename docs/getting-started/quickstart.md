@@ -34,6 +34,14 @@ This guide will help you create your first ground truth item.
 
     For agent-friendly background startup, use `make -f Makefile.harness dev-up` and later `make -f Makefile.harness dev-down`. Background logs and PID files are written to `.harness/dev/`.
 
+    To launch the demo experience with seeded data and a fixed local user, run:
+
+    ```bash
+    VITE_DEMO_MODE=true VITE_DEV_USER_ID=demo-user make dev-up
+    ```
+
+    This starts both services in the background, enables demo mode in the frontend, and sets the backend demo user identity to `demo-user`.
+
 ## Create Your First Ground Truth Item
 
 1. **Open the app**: Navigate to `http://localhost:5173` in your browser

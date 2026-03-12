@@ -31,6 +31,14 @@ class Settings(BaseSettings):
 
     # Repository backend selection
     REPO_BACKEND: str = "memory"  # memory|cosmos
+    DEMO_MODE: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("GTC_DEMO_MODE", "DEMO_MODE", "VITE_DEMO_MODE"),
+    )
+    DEMO_USER_ID: str = Field(
+        default="anonymous",
+        validation_alias=AliasChoices("GTC_DEMO_USER_ID", "DEMO_USER_ID", "VITE_DEV_USER_ID"),
+    )
 
     # Cosmos DB configuration (for cosmos backend)
     COSMOS_ENDPOINT: str | None = None

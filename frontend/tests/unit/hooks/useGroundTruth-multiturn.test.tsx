@@ -90,6 +90,9 @@ describe("useGroundTruth multi-turn flows", () => {
 	it("generateAgentTurn appends agent response with references", async () => {
 		const { result } = await setupHook();
 		await act(async () => {
+			result.current.updateHistory([]);
+		});
+		await act(async () => {
 			result.current.addTurn("user", "Need help with a CAD application");
 		});
 		callAgentChatMock.mockResolvedValue({
@@ -129,6 +132,9 @@ describe("useGroundTruth multi-turn flows", () => {
 
 	it("generateAgentTurn fails when no prior user turn exists", async () => {
 		const { result } = await setupHook();
+		await act(async () => {
+			result.current.updateHistory([]);
+		});
 		callAgentChatMock.mockResolvedValue({ content: "x", references: [] });
 		await act(async () => {
 			const res = await result.current.generateAgentTurn(-1);
