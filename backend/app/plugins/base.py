@@ -5,15 +5,82 @@ This module defines:
 - TagPluginRegistry: registry for computed-tag plugins
 - PluginPack: abstract base for broader plugin packs (validators, explorer contributions)
 - PluginPackRegistry: startup-validated registry for plugin packs
+- ExplorerFieldDefinition / ImportTransform / ExportTransform: supporting types
+  for the PluginPack extension surfaces added in Phase 1.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from app.domain.models import AgenticGroundTruthEntry, GroundTruthItem
+
+
+# ---------------------------------------------------------------------------
+# Supporting types for plugin-pack extension surfaces
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ExplorerFieldDefinition:
+    """Describes a plugin-contributed column or filter in the explorer view.
+
+    Attributes:
+        key: Stable identifier for the field (e.g. "rag-compat:refCount").
+        label: Human-readable column header.
+        field_type: One of "string", "number", "boolean", "date".
+        sortable: Whether the explorer should allow sorting on this field.
+        filterable: Whether the explorer should allow filtering on this field.
+        pack_name: Owning plugin pack name (auto-populated by registry).
+    """
+
+    key: str
+    label: str
+    field_type: str = "string"
+    sortable: bool = False
+    filterable: bool = False
+    pack_name: str = ""
+
+
+@dataclass(frozen=True)
+class ImportTransform:
+    """A named transformation applied to a record during import.
+
+    Attributes:
+        name: Unique identifier for this transform (e.g. "rag-compat:legacy-refs").
+        description: Human-readable explanation of what the transform does.
+        transform: Callable that receives a raw dict and returns a transformed dict.
+        pack_name: Owning plugin pack name (auto-populated by registry).
+    """
+
+    name: str
+    description: str = ""
+    transform: Callable[[dict[str, Any]], dict[str, Any]] = field(
+        default_factory=lambda: (lambda d: d)
+    )
+    pack_name: str = ""
+
+
+@dataclass(frozen=True)
+class ExportTransform:
+    """A named transformation applied to a record during export.
+
+    Attributes:
+        name: Unique identifier for this transform (e.g. "rag-compat:flatten-refs").
+        description: Human-readable explanation of what the transform does.
+        transform: Callable that receives a record dict and returns a transformed dict.
+        pack_name: Owning plugin pack name (auto-populated by registry).
+    """
+
+    name: str
+    description: str = ""
+    transform: Callable[[dict[str, Any]], dict[str, Any]] = field(
+        default_factory=lambda: (lambda d: d)
+    )
+    pack_name: str = ""
 
 
 class ComputedTagPlugin(ABC):
@@ -296,6 +363,61 @@ class PluginPack(ABC):
         """
         return []
 
+    # ------------------------------------------------------------------
+    # Extension surfaces (Phase 1 contract — default no-ops)
+    # ------------------------------------------------------------------
+
+    def get_stats_contribution(self, base_stats: dict[str, Any]) -> dict[str, Any]:
+        """Return plugin-specific stats to merge into the stats response.
+
+        Called by the stats endpoint to let each pack contribute domain-
+        specific aggregations alongside the generic core counts.
+
+        Args:
+            base_stats: The core stats dict already computed by the host.
+
+        Returns:
+            A dict of additional stats entries.  Keys must be namespaced
+            with the pack name (e.g. ``"rag-compat:refCount"``).
+        """
+        return {}
+
+    def get_explorer_fields(self) -> list[ExplorerFieldDefinition]:
+        """Return field definitions for plugin-contributed explorer columns/filters.
+
+        The host merges these into its own explorer column set so that
+        plugin-specific data can be browsed without hardcoding column
+        definitions in the core explorer.
+
+        Returns:
+            A list of field definitions.
+        """
+        return []
+
+    def get_import_transforms(self) -> list[ImportTransform]:
+        """Return transforms applied during record import.
+
+        Each transform receives the raw dict read from the import source
+        and must return a (possibly mutated) dict.  Transforms execute in
+        list order.
+
+        Returns:
+            A list of import transforms contributed by this pack.
+        """
+        return []
+
+    def get_export_transforms(self) -> list[ExportTransform]:
+        """Return transforms applied during record export.
+
+        Each transform receives the normalised record dict and must return
+        a (possibly mutated) dict suitable for the target export format.
+        Transforms execute in list order.
+
+        Returns:
+            A list of export transforms contributed by this pack.
+        """
+        return []
+
 
 class PluginPackRegistry:
     """Registry for plugin packs with startup validation.
@@ -373,6 +495,81 @@ class PluginPackRegistry:
     def names(self) -> list[str]:
         """Return sorted list of registered pack names."""
         return sorted(self._packs.keys())
+
+    # ------------------------------------------------------------------
+    # Aggregation helpers for extension surfaces (Phase 1)
+    # ------------------------------------------------------------------
+
+    def collect_stats(self, base_stats: dict[str, Any]) -> dict[str, Any]:
+        """Aggregate stats contributions from all registered packs.
+
+        Args:
+            base_stats: Core stats dict already computed by the host.
+
+        Returns:
+            A merged dict containing base stats plus pack contributions.
+            Pack-contributed keys overwrite base keys on collision.
+        """
+        merged: dict[str, Any] = dict(base_stats)
+        for pack in self._packs.values():
+            merged.update(pack.get_stats_contribution(base_stats))
+        return merged
+
+    def collect_explorer_fields(self) -> list[ExplorerFieldDefinition]:
+        """Collect explorer field definitions from all registered packs.
+
+        Returns:
+            Combined list of field definitions with ``pack_name`` populated.
+        """
+        fields: list[ExplorerFieldDefinition] = []
+        for pack in self._packs.values():
+            for f in pack.get_explorer_fields():
+                populated = ExplorerFieldDefinition(
+                    key=f.key,
+                    label=f.label,
+                    field_type=f.field_type,
+                    sortable=f.sortable,
+                    filterable=f.filterable,
+                    pack_name=pack.name,
+                )
+                fields.append(populated)
+        return fields
+
+    def collect_import_transforms(self) -> list[ImportTransform]:
+        """Collect import transforms from all registered packs (ordered by pack name).
+
+        Returns:
+            Combined list of import transforms with ``pack_name`` populated.
+        """
+        transforms: list[ImportTransform] = []
+        for pack in self._packs.values():
+            for t in pack.get_import_transforms():
+                populated = ImportTransform(
+                    name=t.name,
+                    description=t.description,
+                    transform=t.transform,
+                    pack_name=pack.name,
+                )
+                transforms.append(populated)
+        return transforms
+
+    def collect_export_transforms(self) -> list[ExportTransform]:
+        """Collect export transforms from all registered packs (ordered by pack name).
+
+        Returns:
+            Combined list of export transforms with ``pack_name`` populated.
+        """
+        transforms: list[ExportTransform] = []
+        for pack in self._packs.values():
+            for t in pack.get_export_transforms():
+                populated = ExportTransform(
+                    name=t.name,
+                    description=t.description,
+                    transform=t.transform,
+                    pack_name=pack.name,
+                )
+                transforms.append(populated)
+        return transforms
 
     def __len__(self) -> int:
         """Return the number of registered packs."""

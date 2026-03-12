@@ -56,6 +56,16 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Current frontend gate after Phase 4 iteration 2: `267/267` tests passing, with the long-standing `QuestionsExplorer` `act(...)` warnings and the existing Vite chunk-size warning still emitted. The render-phase `ReferencesTabs` warning is gone.
 - Reviewer rerun on 2026-03-12 re-confirmed Phase 4 closeout: `ReferencesSection.test.tsx` and `ReferencesTabs.multiturn.test.tsx` still cover the fixed paths, `267/267` frontend tests pass, and only the long-standing `QuestionsExplorer` `act(...)` plus Vite chunk-size warnings remain.
 
+### Phase 1 contract stabilization (Phase 1)
+
+- `RetrievalCandidate` added to `backend/app/domain/models.py` (after `ExpectedTools`) and `frontend/src/models/groundTruth.ts` (after `PluginPayload`). Not yet used by any API endpoint — will appear in OpenAPI when Phase 5/6 wires it into responses.
+- Backend `PluginPack` now has four no-op extension methods: `get_stats_contribution`, `get_explorer_fields`, `get_import_transforms`, `get_export_transforms`. Existing `RagCompatPack` does not need overrides yet — backward compat confirmed.
+- `PluginPackRegistry` has matching aggregation helpers: `collect_stats`, `collect_explorer_fields`, `collect_import_transforms`, `collect_export_transforms`.
+- Supporting dataclasses `ExplorerFieldDefinition`, `ImportTransform`, `ExportTransform` live in `backend/app/plugins/base.py`. Each has a `pack_name` field auto-populated by the registry aggregation methods.
+- Frontend registry types live at `frontend/src/registry/types.ts` with barrel at `frontend/src/registry/index.ts`. Phase 2 will add the concrete `FieldComponentRegistry` implementation.
+- Biome enforces alphabetical named exports — keep barrel exports sorted.
+- Wireframe-to-schema field mapping at `.copilot-tracking/research/2026-03-12/wireframe-schema-field-mapping.md` — key difference is `toolCallDecisions` (wireframe per-ID map) vs `expectedTools` (schema categorized lists).
+
 ### Phase 5 full-stack validation (Phase 5)
 
 - All validation gates pass: `smoke`, `check`, `test` (340 backend unit + 267 frontend), `backend-integration-test` (138 passed, 9 skipped), `ci`, `verify`, `export_openapi.py`, `api:types:check`.

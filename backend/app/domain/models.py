@@ -170,6 +170,43 @@ class ExpectedTools(BaseModel):
         return self
 
 
+class RetrievalCandidate(BaseModel):
+    """A single retrieval result that can be associated with a specific tool call.
+
+    Supports per-tool-call ownership instead of flat top-level references,
+    and preserves the raw search payload alongside normalised fields.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    url: str
+    title: str | None = None
+    chunk: str | None = None
+    raw_payload: dict[str, Any] | None = Field(None, alias="rawPayload")
+    relevance: str | None = None
+    tool_call_id: str | None = Field(None, alias="toolCallId")
+
+    @field_validator("url")
+    @classmethod
+    def validate_url_not_empty(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("RetrievalCandidate.url cannot be empty")
+        return cleaned
+
+    @field_validator("relevance")
+    @classmethod
+    def validate_relevance(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        allowed = {"relevant", "partially_relevant", "not_relevant"}
+        if value not in allowed:
+            raise ValueError(
+                f"relevance must be one of {sorted(allowed)}, got '{value}'"
+            )
+        return value
+
+
 class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
     """Generic agentic-first host model.
 

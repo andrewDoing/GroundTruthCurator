@@ -51,6 +51,20 @@ export type PluginPayload = {
 	data?: Record<string, unknown>;
 };
 
+/**
+ * A single retrieval result that can be associated with a specific tool call.
+ * Supports per-tool-call ownership instead of flat top-level references,
+ * and preserves the raw search payload alongside normalised fields.
+ */
+export type RetrievalCandidate = {
+	url: string;
+	title?: string;
+	chunk?: string;
+	rawPayload?: Record<string, unknown>;
+	relevance?: "relevant" | "partially_relevant" | "not_relevant";
+	toolCallId?: string;
+};
+
 // ---------------------------------------------------------------------------
 // Existing types kept for backward compat
 // ---------------------------------------------------------------------------
