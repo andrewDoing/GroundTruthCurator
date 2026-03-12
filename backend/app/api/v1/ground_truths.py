@@ -626,6 +626,9 @@ async def update_ground_truth(
                 status_code=400,
                 detail=f"Invalid status value: {payload.status}. Must be one of: draft, approved, skipped, deleted"
             )
+        if it.status == GroundTruthStatus.approved:
+            it.reviewed_at = datetime.now(timezone.utc)
+            it.updatedBy = user.user_id
 
     if "comment" in provided_fields:
         it.comment = payload.comment or ""

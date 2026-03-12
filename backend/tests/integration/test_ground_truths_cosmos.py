@@ -70,6 +70,38 @@ async def test_update_with_etag(async_client: AsyncClient, user_headers):
 
 
 @pytest.mark.anyio
+async def test_update_to_approved_sets_review_metadata(async_client: AsyncClient, user_headers):
+    dataset = "test-ds-approve-metadata"
+    item = make_item(dataset)
+    item["history"] = [
+        {"role": "user", "msg": "What is the capital of France?"},
+        {"role": "assistant", "msg": "Paris."},
+    ]
+
+    r = await async_client.post("/v1/ground-truths", json=[item], headers=user_headers)
+    assert r.status_code == 200
+
+    r = await async_client.get(f"/v1/ground-truths/{dataset}", headers=user_headers)
+    assert r.status_code == 200
+    data = r.json()
+    etag = data[0]["_etag"]
+    bucket = data[0]["bucket"]
+
+    headers = dict(user_headers)
+    headers.update({"If-Match": etag})
+    r = await async_client.put(
+        f"/v1/ground-truths/{dataset}/{bucket}/{item['id']}",
+        json={"status": "approved"},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == GroundTruthStatus.approved.value
+    assert body["reviewedAt"] is not None
+    assert body["updatedBy"] == "tester@example.com"
+
+
+@pytest.mark.anyio
 async def test_delete_item_and_dataset(async_client: AsyncClient, user_headers):
     dataset = "test-ds-delete"
     items = [make_item(dataset) for _ in range(3)]
