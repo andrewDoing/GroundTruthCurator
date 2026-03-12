@@ -81,21 +81,44 @@ class RagCompatPack(PluginPack):
     def collect_approval_errors(self, item: AgenticGroundTruthEntry) -> list[str]:
         """Return RAG-specific approval errors for an item.
 
-        Currently the generic core tolerates missing assistant messages when
-        ``totalReferences > 0`` (the RAG waiver).  This pack records that
-        invariant explicitly so the ownership is clear: if the waiver is ever
-        tightened, the change belongs here rather than in the core.
-
         Items that have no RAG compat data receive no additional errors.
         """
         compat = self.rag_compat_data(item)
         if not compat:
-            # Non-RAG item — no additional pack-level approval gates.
             return []
         # RAG items: future validation hooks go here.
         # e.g. per-retrieval-call selection completeness could be enforced once
         # FR-029/FR-030 retrieval tool-call per-call state is implemented.
         return []
+
+    def collect_approval_waivers(
+        self, item: AgenticGroundTruthEntry, core_errors: list[str]
+    ) -> list[str]:
+        """Waive core errors that do not apply to RAG retrieval-only items.
+
+        When an item has ``totalReferences > 0`` (indicating it is a
+        retrieval-based item), the following core checks are waived:
+        - "history must include at least one assistant message" — retrieval-only
+          items may not produce an assistant reply.
+        - "expectedTools.required must include at least one tool…" — retrieval
+          items may use reference attachment instead of classified tool calls.
+        """
+        if item.totalReferences == 0:
+            return []
+
+        waivers: list[str] = []
+        assistant_error = "history must include at least one assistant message"
+        if assistant_error in core_errors:
+            waivers.append(assistant_error)
+
+        required_tools_error = (
+            "expectedTools.required must include at least one tool "
+            "before approval when toolCalls are present"
+        )
+        if required_tools_error in core_errors:
+            waivers.append(required_tools_error)
+
+        return waivers
 
     # ------------------------------------------------------------------
     # Accessor helpers — owned by this pack so callers don't embed the

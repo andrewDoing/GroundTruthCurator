@@ -363,6 +363,24 @@ class PluginPack(ABC):
         """
         return []
 
+    def collect_approval_waivers(
+        self, item: AgenticGroundTruthEntry, core_errors: list[str]
+    ) -> list[str]:
+        """Return core error messages that this pack waives for the given item.
+
+        Called after generic core approval checks produce ``core_errors``.
+        Return exact error strings from ``core_errors`` that this pack's
+        domain logic determines should be suppressed.
+
+        Args:
+            item: The item being evaluated for approval.
+            core_errors: Error messages produced by the generic core checks.
+
+        Returns:
+            A list of error strings to remove from core_errors, or empty list.
+        """
+        return []
+
     # ------------------------------------------------------------------
     # Extension surfaces (Phase 1 contract — default no-ops)
     # ------------------------------------------------------------------
@@ -487,6 +505,38 @@ class PluginPackRegistry:
         for pack in self._packs.values():
             errors.extend(pack.collect_approval_errors(item))
         return errors
+
+    def collect_approval_waivers(
+        self, item: AgenticGroundTruthEntry, core_errors: list[str]
+    ) -> list[str]:
+        """Gather core-error waivers from all registered packs.
+
+        Args:
+            item: The item being evaluated for approval.
+            core_errors: Error messages produced by the generic core checks.
+
+        Returns:
+            Combined list of core error strings that packs want suppressed.
+        """
+        waivers: list[str] = []
+        for pack in self._packs.values():
+            waivers.extend(pack.collect_approval_waivers(item, core_errors))
+        return waivers
+
+    def filter_core_errors(
+        self, item: AgenticGroundTruthEntry, core_errors: list[str]
+    ) -> list[str]:
+        """Apply pack waivers to core errors and return the filtered list.
+
+        Args:
+            item: The item being evaluated for approval.
+            core_errors: Error messages produced by the generic core checks.
+
+        Returns:
+            Core errors with waived entries removed.
+        """
+        waivers = set(self.collect_approval_waivers(item, core_errors))
+        return [e for e in core_errors if e not in waivers]
 
     def get(self, name: str) -> PluginPack | None:
         """Return the pack with the given name, or None if not registered."""

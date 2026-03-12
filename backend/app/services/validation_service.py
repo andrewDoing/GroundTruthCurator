@@ -69,7 +69,7 @@ def collect_approval_validation_errors(item: AgenticGroundTruthEntry) -> list[st
         ]
         if not user_messages:
             errors.append("history must include at least one user message")
-        if not assistant_messages and item.totalReferences == 0:
+        if not assistant_messages:
             errors.append("history must include at least one assistant message")
 
     tool_call_names = {tool.name for tool in item.tool_calls if tool.name}
@@ -92,6 +92,9 @@ def collect_approval_validation_errors(item: AgenticGroundTruthEntry) -> list[st
 
 def validate_item_for_approval(item: AgenticGroundTruthEntry) -> None:
     errors = collect_approval_validation_errors(item)
+    # Let plugin packs waive specific core errors (e.g. RagCompatPack waives
+    # the assistant-message requirement for retrieval-only items).
+    errors = container.plugin_pack_registry.filter_core_errors(item, errors)
     # Run plugin-pack approval hooks after the generic core checks.
     # Each registered pack may contribute additional domain-specific errors
     # (e.g. RagCompatPack enforcing per-retrieval-call selection completeness).

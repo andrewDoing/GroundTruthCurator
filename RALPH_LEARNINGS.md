@@ -67,6 +67,7 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Phase 4 validation: `cd frontend && npm run typecheck && npm run lint:check && npm run test:run -- --pool=threads --poolOptions.threads.singleThread`. Current gate: 297/297 tests (39 test files), tsc/Biome clean.
 - Backend test for required-tools enforcement (`test_validation_required_tools.py`) deferred to Phase 5 when the backend side is implemented.
 - Test updates: `gtHelpers.expectedBehavior.test.ts` base item now includes `expectedTools: { required: [...] }` + `toolCalls` to satisfy the new gate. Two new test cases: plugin bypass and strictness when no required tools defined.
+- Reviewer iteration 1 confirmed Phase 4 tool-call decision editing approved: 297/297 tests, tsc/Biome clean (137 files). All 6 steps verified — ToolCallDetailView, ToolNecessityEditor, approval strictness, arguments field, tests, and validation gates. No open review items. Backend tests correctly deferred to Phase 5 per DD-04.
 
 ### Phase 3 workspace layout (reviewer-confirmed)
 - The curate workspace now uses `react-resizable-panels` v4.7.2 (Group/Panel/Separator API, NOT PanelGroup/PanelResizeHandle). The library API is: `orientation` (not `direction`), `Group` (not `PanelGroup`), `Separator` (not `PanelResizeHandle`). No `autoSaveId` prop — use `onLayoutChanged` + `defaultLayout` with manual localStorage.
@@ -104,11 +105,14 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Wireframe-to-schema field mapping at `.copilot-tracking/research/2026-03-12/wireframe-schema-field-mapping.md` — key difference is `toolCallDecisions` (wireframe per-ID map) vs `expectedTools` (schema categorized lists).
 - Phase 1 reviewer validation (iteration 1): all gates pass — `ruff check`, `ty check`, `tsc`, Biome lint, 343 backend unit tests. No review items opened. `RetrievalCandidate` backend model uses `extra="forbid"` and validators for `url` (non-empty) and `relevance` (enum constraint) — later phases wiring this into APIs should preserve those guards.
 
-### Phase 5 full-stack validation (Phase 5)
+### Phase 5 Backend Compatibility Migration (implementation)
 
-- All validation gates pass: `smoke`, `check`, `test` (340 backend unit + 267 frontend), `backend-integration-test` (138 passed, 9 skipped), `ci`, `verify`, `export_openapi.py`, `api:types:check`.
-- One minor fix required: the committed `frontend/src/api/openapi.json` and `frontend/src/api/generated.ts` had a stale `HistoryEntryPatch` schema reference. The OpenAPI exporter now resolves it from `assignments.py` (new canonical location after Phase 1) instead of the duplicate `ground_truths.py` definition. Refreshing and committing the two API artifacts resolved the `api:types:check` failure.
-- Remaining noise: `GroundTruthItem` field-shadowing `UserWarning` entries in `export_openapi.py` output are pre-existing deferred items tracked as `WI-08`. `QuestionsExplorer` `act(...)` warnings and Vite chunk-size warning remain from prior phases.
-- Duplicate `HistoryEntryPatch` in `ground_truths.py` vs `assignments.py` is tracked as `WI-09`/`WI-23` for future cleanup — do not remove the `ground_truths.py` copy without verifying no consumers import it directly.
-- Phase 5 reviewer rerun on 2026-03-12 re-confirmed the artifact fix: `frontend/src/api/openapi.json` and `frontend/src/api/generated.ts` now reference `app__api__v1__assignments__HistoryEntryPatch` everywhere, and no stale `app__api__v1__ground_truths__HistoryEntryPatch` refs remain.
-- If validation totals drift from the Phase 5 changes log in a dirty worktree, check for unrelated local test edits before treating it as a redesign regression; the current rerun still passed with unrelated local changes outside the reviewed phase.
+- RAG approval waiver migrated from `validation_service.py` line 72 (`and item.totalReferences == 0`) into `RagCompatPack.collect_approval_waivers()`.
+- Waiver mechanism: `PluginPack.collect_approval_waivers(item, core_errors) -> list[str]` returns exact error strings to suppress. `PluginPackRegistry.filter_core_errors(item, errors)` applies set-difference. Called in `validate_item_for_approval()` between core checks and pack errors.
+- `SearchResult` TypedDict now has `raw_payload: dict[str, Any]`. The value is `dict(r)` — a shallow copy of the provider hit to prevent mutation.
+- Stats endpoint uses `container.repo.stats().model_dump()` before `collect_stats()` because `Stats` is a Pydantic model, not a plain dict.
+- Step 5.2 (expand PluginPack extension surfaces) was already done in Phase 1. Dataclasses live in `base.py`, not `domain/models.py` — documented as deviation.
+- `test_phase1_rework.py` mock registry needed `filter_core_errors = lambda _item, errors: errors` added alongside the existing `collect_approval_errors` lambda.
+- Phase 5 validation: `cd backend && uv run ruff check app/ && uv run ty check app/ && uv run pytest tests/unit/ -v` — 380 tests passing. Frontend: `npm run api:types && npm run typecheck` clean.
+- New test files: `test_rag_compat_approval.py` (10), `test_plugin_pack_extension.py` (13), `test_search_raw_payload.py` (6), `test_validation_required_tools.py` (8) — 37 new tests total.
+- Prior Phase 5 validation notes (stale `HistoryEntryPatch` fix, `WI-08`/`WI-09` noise) still apply from earlier iterations.

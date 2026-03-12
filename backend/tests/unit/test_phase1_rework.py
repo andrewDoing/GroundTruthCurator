@@ -171,6 +171,7 @@ class TestBulkImportApprovalValidation:
         mock_registry.collect_approval_errors = lambda _item: [
             "plugin-pack: retrieval reference is incomplete"
         ]
+        mock_registry.filter_core_errors = lambda _item, errors: errors
         container.plugin_pack_registry = mock_registry
 
         try:

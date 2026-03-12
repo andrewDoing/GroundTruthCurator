@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, TypedDict, cast
+from typing import Any, Optional, TypedDict, cast
 import logging
 
 from app.adapters.search.base import SearchAdapter
@@ -13,6 +13,7 @@ class SearchResult(TypedDict):
     url: Optional[str]
     title: Optional[str]
     chunk: Optional[str]
+    raw_payload: dict[str, Any]
 
 
 class SearchService:
@@ -50,7 +51,7 @@ class SearchService:
             url = cast(Optional[str], r.get(self.url_field))
             title = cast(Optional[str], r.get(self.title_field))
             chunk = cast(Optional[str], r.get(self.chunk_field))
-            normalized.append({"url": url, "title": title, "chunk": chunk})
+            normalized.append({"url": url, "title": title, "chunk": chunk, "raw_payload": dict(r)})
 
         logger.debug("search_service.normalized_results", extra={"count": len(normalized)})
         return normalized
