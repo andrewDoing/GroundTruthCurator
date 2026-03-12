@@ -12,6 +12,8 @@ Phase 2 implements the frontend field component registry: a discriminator-based 
 
 Phase 3 implements workspace UX parity: the CSS grid layout is replaced with a resizable split-pane (react-resizable-panels) with a draggable gutter and localStorage persistence; mobile viewports get a slide-in evidence drawer; and context entries in TracePanel become editable with add/edit/remove operations wired through useGroundTruth.
 
+Phase 8 runs final full-stack validation: all lint, type-check, build, test, and smoke gates pass with no fixes required.
+
 ## Changes
 
 ### Added
@@ -123,6 +125,22 @@ Phase 3 implements workspace UX parity: the CSS grid layout is replaced with a r
 
 * frontend/src/models/groundTruth.ts - `references: Reference[]` field removed from GroundTruthItem type
 
+#### Phase 7: Legacy Retirement
+
+### Modified
+
+* backend/app/domain/models.py - Removed 7 informational-only property accessors from AgenticGroundTruthEntry (contextUsedForGeneration, contextSource, modelUsedForGeneration, semanticClusterNumber, weight, samplingBucket, questionLength) — no callers; GroundTruthItem still has explicit fields. Added documentation comments to retained legacy compatibility layer.
+* backend/app/api/v1/_legacy_compat.py - Added module-level documentation explaining why retained (still used by bulk import and PATCH handlers for legacy field coercion).
+* frontend/src/components/app/pages/CuratePane.tsx - Removed dead single-turn editor code: editorMode state, commented-out auto-switching logic (~65 lines), commented mode toggle UI (~27 lines), single-turn Q/A textareas, single-turn TagsEditor conditional, single-turn approval issue display. Removed vestigial onEditorModeChange/onUpdateQuestion/onUpdateAnswer props. Removed dead shouldStealFocus/moveCaretToEnd helpers and questionRef. Simplified approval issues to always show multi-turn validation.
+* frontend/src/demo.tsx - Removed onUpdateQuestion/onUpdateAnswer prop passes to CuratePane (2 call sites).
+* frontend/src/components/app/pages/ReferencesSection.tsx - Removed "compatibility surface" label from RAG references panel.
+* frontend/tests/unit/components/app/pages/CuratePane.test.tsx - Removed onUpdateQuestion/onUpdateAnswer from 3 test renders.
+* frontend/tests/unit/components/app/CurateLayout.integration.test.tsx - Removed onUpdateQuestion/onUpdateAnswer from test render; removed unused setItems/setUnsaved logic for question updates.
+* frontend/tests/unit/components/app/pages/ReferencesSection.test.tsx - Updated assertion from "RAG References" label text to "Selected" tab text (label removed).
+* frontend/src/components/app/QuestionsExplorer.tsx - Auto-formatted (pre-existing Biome format error fixed).
+* frontend/src/models/groundTruth.ts - Auto-formatted (pre-existing Biome format error fixed).
+* frontend/src/registry/index.ts - Auto-formatted (pre-existing Biome import sort error fixed).
+
 ## Additional or Deviating Changes
 
 * No deviations from the implementation details.
@@ -141,6 +159,9 @@ Phase 3 implements workspace UX parity: the CSS grid layout is replaced with a r
 * Phase 6: ExplorerExtensions.ts is a module-level singleton with self-registering built-in RAG compat extension, rather than a class-based registry. The RAG "Refs" column and "Has References" filter are auto-registered on import.
 * Phase 6: Per-call retrieval state stores additional candidate fields (keyParagraph, bonus, visitedAt) beyond the minimal url/title/chunk — preserves full fidelity during legacy migration.
 * Phase 6: `withUpdatedReferences()` re-organizes references into per-call buckets by toolCallId, with unassociated refs going to the `_unassociated` bucket.
+* Phase 7: Most backend legacy code retained — `_legacy_compat.py`, `GroundTruthItem` subclass, core property accessors, Cosmos SELECT clause, and the `translate_legacy_payload_for_core_model` validator are all still actively used by services, API endpoints, tests, and stored Cosmos documents. Only the 7 informational-only property accessors on `AgenticGroundTruthEntry` were removed (no callers). Documentation comments added to retained compat code explaining why it remains.
+* Phase 7: Frontend `onUpdateQuestion`/`onUpdateAnswer` props removed from CuratePane along with single-turn editor code — all editing now flows through `onUpdateHistory` via MultiTurnEditor. The `shouldStealFocus`/`moveCaretToEnd` helper functions and `questionRef` removed as dead code.
+* Phase 7: Fixed 3 pre-existing Biome formatting errors in QuestionsExplorer.tsx, groundTruth.ts, and registry/index.ts that were blocking `make -f Makefile.harness ci`.
 
 ## Release Summary
 
@@ -155,3 +176,16 @@ Phase 4 (Tool-Call Decision Editing) complete. 3 files created, 7 files modified
 Phase 5 (Backend Compatibility Migration) complete. 4 files created, 6 files modified. All validation gates pass: ruff, ty, 380/380 backend tests passing, tsc, api:types regeneration confirmed clean. RAG approval waiver migrated from core validation_service into RagCompatPack via collect_approval_waivers(). Search results now include raw_payload. Stats endpoint is plugin-extensible. 37 new backend unit tests added across 4 test files.
 
 Phase 6 (Retrieval Normalization) complete. 2 files created, ~25 files modified. Removed top-level `references` from GroundTruthItem; all reference I/O now flows through per-tool-call plugin state in `plugins["rag-compat"].data.retrievals`. Added getItemReferences()/withUpdatedReferences() helpers; updated all 10+ consumer files. Backend RagCompatPack gained per-call CRUD and migration methods (14 new tests). Frontend ExplorerExtensions registry added with RAG "Refs" column and "Has References" filter. All validation gates pass: ruff, ty, 394/394 backend tests, tsc, Biome (138 files), 297/297 frontend tests.
+
+Phase 7 (Legacy Retirement) complete. 0 files created, 10 files modified. Backend: removed 7 unused informational property accessors from AgenticGroundTruthEntry; added documentation to retained compat code (translator, GroundTruthItem, _legacy_compat.py, Cosmos SELECT clause kept for stored documents). Frontend: removed all dead single-turn editor code from CuratePane (~160 lines of commented/dead code), removed vestigial onUpdateQuestion/onUpdateAnswer/onEditorModeChange props + dead helpers, removed "compatibility surface" label from RAG references panel, fixed 3 pre-existing Biome formatting errors. All validation gates pass: `make -f Makefile.harness ci` green — ruff, ty, tsc, Biome (138 files, 0 errors), 394/394 backend tests, 297/297 frontend tests.
+
+Phase 8 (Final Validation) complete. Full-stack validation run with all gates green:
+- Backend lint: `ruff check app/` — All checks passed
+- Backend types: `ty check app/` — All checks passed
+- Frontend lint: `npm run lint:check` — 138 files checked, 0 errors (16 warnings, all pre-existing non-null assertions)
+- Frontend types: `npm run typecheck` — Clean exit
+- Frontend build: `npm run build` — Success (1 pre-existing chunk-size warning, 563 kB)
+- Backend tests: `uv run pytest tests/unit/ -v` — 394/394 passed (5 known GroundTruthItem field-shadowing warnings)
+- Frontend tests: `npm run test:run` — 297/297 passed (39 test files)
+- Smoke: `make -f Makefile.harness smoke` — Passed ✅ (healthz, openapi.json, frontend build, telemetry)
+No fixes required. No blocking issues found.

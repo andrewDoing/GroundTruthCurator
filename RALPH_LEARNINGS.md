@@ -142,3 +142,11 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - "compatibility surface" label removed from `ReferencesSection.tsx` — RAG references panel still renders when `references.length > 0`.
 - Fixed 3 pre-existing Biome formatting errors in QuestionsExplorer.tsx, groundTruth.ts, registry/index.ts — `make -f Makefile.harness ci` now fully green.
 - Phase 7 validation: `make -f Makefile.harness ci` passes — ruff, ty, tsc, Biome (138 files, 0 errors, 16 warnings), 394/394 backend tests (5 field-shadowing warnings pre-existing), 297/297 frontend tests (39 test files).
+- **Reviewer iteration 1 (2026-03-12)**: Phase 7 approved with 0 findings. All 4 steps verified: backend removed 7 unused accessors + documented retained compat, frontend removed ~160 lines dead single-turn code + vestigial props + dead helpers, parity verified via full test suites, CI gate green. Retained compat code (apiMapper legacy synthesis, question/answer model fields, _legacy_compat.py, translator, GroundTruthItem, Cosmos SELECT) all confirmed actively used with 30+ frontend consumers and backend service/test callers.
+
+### Phase 8 Final Validation
+
+- Full-stack validation run (2026-03-12): all gates green with no fixes needed.
+- Final counts: 394/394 backend tests, 297/297 frontend tests (39 files), 138 frontend files linted, smoke passed.
+- Known pre-existing non-blocking items: 5 GroundTruthItem field-shadowing warnings (backend pytest), 16 Biome non-null-assertion warnings (frontend lint), 1 Vite chunk-size warning (563 kB bundle).
+- Validation commands for full re-check: `cd backend && uv run ruff check app/ && uv run ty check app/ && uv run pytest tests/unit/ -v` and `cd frontend && npm run lint:check && npm run typecheck && npm run build && npm run test:run -- --pool=threads --poolOptions.threads.singleThread` and `make -f Makefile.harness smoke`.
