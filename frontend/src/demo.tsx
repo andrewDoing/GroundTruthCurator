@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AppHeader from "./components/app/AppHeader";
 import InstructionsPane from "./components/app/InstructionsPane";
+import EvidenceDrawer from "./components/app/layout/EvidenceDrawer";
+import SplitPaneLayout from "./components/app/layout/SplitPaneLayout";
 import CuratePane from "./components/app/pages/CuratePane";
 import ReferencesSection from "./components/app/pages/ReferencesSection";
 import StatsPage from "./components/app/pages/StatsPage";
@@ -16,7 +18,7 @@ import useGlobalHotkeys from "./hooks/useGlobalHotkeys";
 import useGroundTruth from "./hooks/useGroundTruth";
 import { useToasts } from "./hooks/useToasts";
 import type { Reference } from "./models/groundTruth";
-import { cn, normalizeUrl } from "./models/utils";
+import { normalizeUrl } from "./models/utils";
 import {
 	assignItem,
 	requestAssignmentsSelfServe,
@@ -41,6 +43,8 @@ export default function GTAppDemo() {
 		"curate",
 	);
 	const [selfServeBusy, setSelfServeBusy] = useState(false);
+	const [drawerOpen, setDrawerOpen] = useState(false);
+	const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
 	// Feature hook
 	const gt = useGroundTruth();
@@ -275,11 +279,11 @@ export default function GTAppDemo() {
 				)}
 
 				{viewMode === "curate" && (
-					<div className="grid grid-cols-1 md:grid-cols-12 gap-4 flex-1 min-h-0">
+					<div className="flex flex-1 gap-4 min-h-0">
 						{/* Left: Queue */}
 						{sidebarOpen && (
 							<QueueSidebar
-								className="hidden md:block col-span-1 md:col-span-4 lg:col-span-3"
+								className="hidden md:block flex-none w-64 lg:w-72"
 								items={gt.items}
 								selectedId={gt.selectedId}
 								onSelect={(id) => {
@@ -322,81 +326,188 @@ export default function GTAppDemo() {
 							/>
 						)}
 
-						{/* Center: Editor */}
-						<CuratePane
-							className={cn(
-								"col-span-1", // Mobile: full width
-								// With the right pane always visible on large screens,
-								// the editor takes the remaining columns
-								sidebarOpen
-									? "md:col-span-8 lg:col-span-5"
-									: "md:col-span-12 lg:col-span-7",
-							)}
-							current={gt.current}
-							canApprove={gt.canApprove}
-							saving={gt.saving}
-							onUpdateQuestion={(v) => gt.updateQuestion(v)}
-							onUpdateAnswer={(v) => gt.updateAnswer(v)}
-							onUpdateComment={(v) => gt.updateComment(v)}
-							onUpdateTags={(tags) => gt.updateTags(tags)}
-							onUpdateHistory={(history) => gt.updateHistory(history)}
-							onDeleteTurn={(messageIndex) => gt.deleteTurn(messageIndex)}
-							onGenerateAgentTurn={onGenerateAgentTurn}
-							onSaveDraft={() => onSave("draft")}
-							onApprove={() => onSave("approved")}
-							onUpdateReference={(refId, partial) =>
-								gt.updateReference(refId, partial)
-							}
-							onRemoveReference={(refId) => {
-								// In multi-turn mode, the TurnReferencesModal shows its own toasts
-								// for per-turn reference removal; this path covers the compatibility
-								// right-pane removal (single-turn RAG compat surface).
-								gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
-									toast("info", "Reference removed.", {
-										duration: timeoutMs,
-										actionLabel: "Undo",
-										onAction: undo,
-									});
-								});
-							}}
-							onOpenReference={onOpenRef}
-							onAddReferences={(refs) => {
-								gt.addReferences(refs);
-								// Toast is shown in the modal for multi-turn context
-							}}
-							onDuplicate={async () => {
-								const res = await gt.duplicateCurrent();
-								if (res.ok) {
-									toast(
-										"success",
-										`Created rephrase ${res.created.id} and opened it.`,
-									);
-								} else {
-									toast("error", res.error || "Duplicate failed");
-								}
-							}}
-							onSkip={async () => {
-								if (!gt.current) return;
-								const r = await gt.save("skipped");
-								if (!r.ok) return;
-								const idx = gt.items.findIndex((i) => i.id === r.saved.id);
-								const next =
-									idx >= 0 && idx < gt.items.length - 1
-										? gt.items[idx + 1]
-										: gt.items[0];
-								if (next) void gt.selectItem(next.id, { force: true });
-							}}
-							onDelete={() => toggleDeletedFlag(true)}
-							onRestore={() => toggleDeletedFlag(false)}
-						/>
+						{/* Center + Right: Split-pane (large screens) or stacked (small screens) */}
+						<div className="flex-1 min-w-0 min-h-0">
+							{/* Mobile: evidence drawer toggle */}
+							<div className="lg:hidden mb-2 flex justify-end">
+								<button
+									type="button"
+									onClick={() => setDrawerOpen(true)}
+									className="inline-flex items-center gap-1.5 rounded-xl border bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-violet-50 hover:text-violet-700 shadow-sm"
+								>
+									📋 Evidence
+								</button>
+							</div>
 
-						{/* Right: Generic evidence + RAG compatibility panel (always visible on large screens) */}
-						<div
-							className={cn(
-								"hidden lg:block col-span-1",
-								sidebarOpen ? "lg:col-span-4" : "lg:col-span-5",
-							)}
-						>
+							{/* Large screens: resizable split-pane */}
+							<div className="hidden lg:flex h-full">
+								<SplitPaneLayout
+									className="h-full w-full"
+									left={
+										<CuratePane
+											className="h-full overflow-y-auto"
+											current={gt.current}
+											canApprove={gt.canApprove}
+											saving={gt.saving}
+											onUpdateQuestion={(v) => gt.updateQuestion(v)}
+											onUpdateAnswer={(v) => gt.updateAnswer(v)}
+											onUpdateComment={(v) => gt.updateComment(v)}
+											onUpdateTags={(tags) => gt.updateTags(tags)}
+											onUpdateHistory={(history) => gt.updateHistory(history)}
+											onDeleteTurn={(messageIndex) =>
+												gt.deleteTurn(messageIndex)
+											}
+											onGenerateAgentTurn={onGenerateAgentTurn}
+											onSaveDraft={() => onSave("draft")}
+											onApprove={() => onSave("approved")}
+											onUpdateReference={(refId, partial) =>
+												gt.updateReference(refId, partial)
+											}
+											onRemoveReference={(refId) => {
+												gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
+													toast("info", "Reference removed.", {
+														duration: timeoutMs,
+														actionLabel: "Undo",
+														onAction: undo,
+													});
+												});
+											}}
+											onOpenReference={onOpenRef}
+											onAddReferences={(refs) => {
+												gt.addReferences(refs);
+											}}
+											onDuplicate={async () => {
+												const res = await gt.duplicateCurrent();
+												if (res.ok) {
+													toast(
+														"success",
+														`Created rephrase ${res.created.id} and opened it.`,
+													);
+												} else {
+													toast("error", res.error || "Duplicate failed");
+												}
+											}}
+											onSkip={async () => {
+												if (!gt.current) return;
+												const r = await gt.save("skipped");
+												if (!r.ok) return;
+												const idx = gt.items.findIndex(
+													(i) => i.id === r.saved.id,
+												);
+												const next =
+													idx >= 0 && idx < gt.items.length - 1
+														? gt.items[idx + 1]
+														: gt.items[0];
+												if (next) void gt.selectItem(next.id, { force: true });
+											}}
+											onDelete={() => toggleDeletedFlag(true)}
+											onRestore={() => toggleDeletedFlag(false)}
+										/>
+									}
+									right={
+										<div className="h-full overflow-y-auto">
+											<ReferencesSection
+												item={gt.current}
+												query={gt.query}
+												setQuery={gt.setQuery}
+												searching={gt.searching}
+												searchResults={gt.searchResults}
+												onRunSearch={gt.runSearch}
+												onAddRefs={(refs) => {
+													gt.addReferences(refs);
+													toast("success", `Added ${refs.length} reference(s)`);
+												}}
+												references={gt.current?.references || []}
+												onUpdateReference={(id, partial) =>
+													gt.updateReference(id, partial)
+												}
+												onRemoveReference={(refId) =>
+													gt.removeReferenceWithUndo(
+														refId,
+														(undo, timeoutMs) => {
+															toast("info", "Reference removed.", {
+																duration: timeoutMs,
+																actionLabel: "Undo",
+																onAction: undo,
+															});
+														},
+													)
+												}
+												onOpenReference={onOpenRef}
+												isMultiTurn={
+													!!(
+														gt.current?.history && gt.current.history.length > 0
+													)
+												}
+												onUpdateContextEntries={gt.updateContextEntries}
+											/>
+										</div>
+									}
+								/>
+							</div>
+
+							{/* Small screens: editor only (evidence in drawer) */}
+							<div className="lg:hidden min-h-0">
+								<CuratePane
+									className="min-h-0"
+									current={gt.current}
+									canApprove={gt.canApprove}
+									saving={gt.saving}
+									onUpdateQuestion={(v) => gt.updateQuestion(v)}
+									onUpdateAnswer={(v) => gt.updateAnswer(v)}
+									onUpdateComment={(v) => gt.updateComment(v)}
+									onUpdateTags={(tags) => gt.updateTags(tags)}
+									onUpdateHistory={(history) => gt.updateHistory(history)}
+									onDeleteTurn={(messageIndex) => gt.deleteTurn(messageIndex)}
+									onGenerateAgentTurn={onGenerateAgentTurn}
+									onSaveDraft={() => onSave("draft")}
+									onApprove={() => onSave("approved")}
+									onUpdateReference={(refId, partial) =>
+										gt.updateReference(refId, partial)
+									}
+									onRemoveReference={(refId) => {
+										gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
+											toast("info", "Reference removed.", {
+												duration: timeoutMs,
+												actionLabel: "Undo",
+												onAction: undo,
+											});
+										});
+									}}
+									onOpenReference={onOpenRef}
+									onAddReferences={(refs) => {
+										gt.addReferences(refs);
+									}}
+									onDuplicate={async () => {
+										const res = await gt.duplicateCurrent();
+										if (res.ok) {
+											toast(
+												"success",
+												`Created rephrase ${res.created.id} and opened it.`,
+											);
+										} else {
+											toast("error", res.error || "Duplicate failed");
+										}
+									}}
+									onSkip={async () => {
+										if (!gt.current) return;
+										const r = await gt.save("skipped");
+										if (!r.ok) return;
+										const idx = gt.items.findIndex((i) => i.id === r.saved.id);
+										const next =
+											idx >= 0 && idx < gt.items.length - 1
+												? gt.items[idx + 1]
+												: gt.items[0];
+										if (next) void gt.selectItem(next.id, { force: true });
+									}}
+									onDelete={() => toggleDeletedFlag(true)}
+									onRestore={() => toggleDeletedFlag(false)}
+								/>
+							</div>
+						</div>
+
+						{/* Mobile evidence drawer */}
+						<EvidenceDrawer open={drawerOpen} onClose={closeDrawer}>
 							<ReferencesSection
 								item={gt.current}
 								query={gt.query}
@@ -425,8 +536,9 @@ export default function GTAppDemo() {
 								isMultiTurn={
 									!!(gt.current?.history && gt.current.history.length > 0)
 								}
+								onUpdateContextEntries={gt.updateContextEntries}
 							/>
-						</div>
+						</EvidenceDrawer>
 					</div>
 				)}
 			</main>

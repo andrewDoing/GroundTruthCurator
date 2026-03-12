@@ -17,7 +17,11 @@
  */
 
 import { useRef, useState } from "react";
-import type { GroundTruthItem, Reference } from "../../../models/groundTruth";
+import type {
+	ContextEntry,
+	GroundTruthItem,
+	Reference,
+} from "../../../models/groundTruth";
 import { hasEvidenceData } from "../../../models/groundTruth";
 import { cn, urlToTitle } from "../../../models/utils";
 import ReferencesTabs from "../../app/ReferencesPanel/ReferencesTabs";
@@ -36,6 +40,7 @@ export default function ReferencesSection({
 	onRemoveReference,
 	onOpenReference,
 	isMultiTurn,
+	onUpdateContextEntries,
 }: {
 	/** Optional: current ground truth item.  When present the evidence panel
 	 *  is rendered at the top of the right pane. */
@@ -51,6 +56,7 @@ export default function ReferencesSection({
 	onRemoveReference: (id: string) => void;
 	onOpenReference: (ref: Reference) => void;
 	isMultiTurn?: boolean;
+	onUpdateContextEntries?: (entries: ContextEntry[]) => void;
 }) {
 	const [rightTab, setRightTab] = useState<"search" | "selected">("search");
 	const [searchSelected, setSearchSelected] = useState<Set<string>>(new Set());
@@ -121,7 +127,10 @@ export default function ReferencesSection({
 			{/* Evidence & Trace panel (generic agentic data) */}
 			{showEvidence && item && (
 				<div className="flex-none overflow-y-auto border-b p-3 max-h-[50%]">
-					<TracePanel item={item} />
+					<TracePanel
+						item={item}
+						onUpdateContextEntries={onUpdateContextEntries}
+					/>
 				</div>
 			)}
 

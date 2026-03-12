@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiProvider } from "../adapters/apiProvider";
 import { isDemoModeIgnored, shouldUseDemoProvider } from "../config/demo";
 import type {
+	ContextEntry,
 	ConversationTurn,
 	GroundTruthItem,
 	Reference,
@@ -85,6 +86,9 @@ type UseGroundTruth = {
 	regenerateAgentTurn: (messageIndex: number) => Promise<AgentGenerationResult>;
 	generateAgentTurn: (messageIndex: number) => Promise<AgentGenerationResult>;
 	runAgentTurn: (messageIndex: number) => Promise<AgentGenerationResult>;
+
+	// Context entries
+	updateContextEntries: (entries: ContextEntry[]) => void;
 
 	// Save + status
 	saving: boolean;
@@ -604,6 +608,10 @@ function useGroundTruth(): UseGroundTruth {
 		});
 	}, []);
 
+	const updateContextEntries = useCallback((entries: ContextEntry[]) => {
+		setCurrent((prev) => (prev ? { ...prev, contextEntries: entries } : prev));
+	}, []);
+
 	const appendAgentTurn =
 		useCallback(async (): Promise<AgentGenerationResult> => {
 			const item = current;
@@ -865,6 +873,7 @@ function useGroundTruth(): UseGroundTruth {
 		updateHistory,
 		addTurn,
 		deleteTurn,
+		updateContextEntries,
 		regenerateAgentTurn,
 		generateAgentTurn,
 		runAgentTurn,

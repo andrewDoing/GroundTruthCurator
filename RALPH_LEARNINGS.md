@@ -56,6 +56,16 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Current frontend gate after Phase 4 iteration 2: `267/267` tests passing, with the long-standing `QuestionsExplorer` `act(...)` warnings and the existing Vite chunk-size warning still emitted. The render-phase `ReferencesTabs` warning is gone.
 - Reviewer rerun on 2026-03-12 re-confirmed Phase 4 closeout: `ReferencesSection.test.tsx` and `ReferencesTabs.multiturn.test.tsx` still cover the fixed paths, `267/267` frontend tests pass, and only the long-standing `QuestionsExplorer` `act(...)` plus Vite chunk-size warnings remain.
 
+### Phase 6 workspace layout (Phase 3 → Phase 6)
+- The curate workspace now uses `react-resizable-panels` v1.x (Group/Panel/Separator API, NOT PanelGroup/PanelResizeHandle). The library API is: `orientation` (not `direction`), `Group` (not `PanelGroup`), `Separator` (not `PanelResizeHandle`). No `autoSaveId` prop — use `onLayoutChanged` + `defaultLayout` with manual localStorage.
+- `SplitPaneLayout.tsx` lives at `frontend/src/components/app/layout/SplitPaneLayout.tsx`. The left panel id is `"editor"`, right is `"evidence"`, stored under `gtc-split-pane-sizes`.
+- Mobile evidence drawer lives at `frontend/src/components/app/layout/EvidenceDrawer.tsx`. Toggle state (`drawerOpen`) is in `demo.tsx`.
+- `ContextEntryEditor.tsx` at `frontend/src/components/app/editors/ContextEntryEditor.tsx` (note: `editors/` plural, distinct from existing `editor/` singular directory).
+- `useGroundTruth` now exposes `updateContextEntries(entries: ContextEntry[])`. The prop is threaded through `demo.tsx` → `ReferencesSection` → `TracePanel` → `ContextEntryEditor`.
+- `demo.tsx` no longer uses CSS grid for the curate layout. The grid was `md:grid-cols-12` with `col-span` classes; it's now flexbox + SplitPaneLayout. The `cn` import was removed from demo.tsx since it's unused post-grid-removal.
+- Phase 3 validation: `cd frontend && npm run typecheck && npm run lint:check && npm run test:run -- --pool=threads --poolOptions.threads.singleThread` — expect 288+ tests, 38+ files, 134 files linted.
+- Biome flags `autoFocus` as unsafe (`noAutofocus`); use `useRef` + `useEffect` focus pattern instead.
+
 ### Frontend component registry (Phase 2 — registry implementation)
 - Registry files live at `frontend/src/registry/`: `FieldComponentRegistry.ts` (singleton), `RegistryRenderer.tsx` (wrapper), `PluginErrorBoundary.tsx`, and `fallbacks/` directory.
 - Barrel at `frontend/src/registry/index.ts` re-exports everything — Biome enforces alphabetical named exports.
@@ -65,6 +75,9 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Tests are in `frontend/tests/unit/registry/` (NOT `frontend/src/registry/__tests__/`) — vitest includes `tests/unit/**/*.{test,spec}.{ts,tsx}`.
 - Phase 2 validation: `cd frontend && npm run typecheck && npm run lint:check && npm run test:run -- --pool=threads --poolOptions.threads.singleThread` — expect 288+ tests, 38+ test files.
 - `reset()` exists on the class for testing — use fresh `new FieldComponentRegistry()` instances in tests rather than the module singleton.
+- Reviewer iteration 1 confirmed Phase 2 approved: 288/288 tests, tsc/Biome clean. No open items.
+- `types.ts:64` comment says "Throws on duplicate" but implementation warns — matches Phase 2 spec; consider fixing the comment in a future pass.
+- TracePanel KVDict extraction was suggested in details but deferred — fits Phase 3 or Phase 6 integration.
 
 ### Phase 1 contract stabilization (Phase 1)
 

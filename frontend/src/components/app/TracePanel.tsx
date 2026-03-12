@@ -1,10 +1,10 @@
 /**
- * TracePanel — read-only right-pane evidence panel.
+ * TracePanel — evidence panel with editable context entries.
  *
  * Displays generic agentic-schema data attached to a GroundTruthItem:
  *   - Expected tools review (expectedTools vs toolCalls)
  *   - Tool calls (toolCalls)
- *   - Context entries (contextEntries)
+ *   - Context entries (contextEntries) — editable when onUpdateContextEntries is provided
  *   - Trace IDs (traceIds)
  *   - Metadata dictionary (metadata)
  *   - Plugin-owned details (plugins)
@@ -26,6 +26,7 @@ import type {
 } from "../../models/groundTruth";
 import { hasEvidenceData } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
+import ContextEntryEditor from "./editors/ContextEntryEditor";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -332,9 +333,11 @@ function PluginPayloadCard({
 export default function TracePanel({
 	item,
 	className,
+	onUpdateContextEntries,
 }: {
 	item: GroundTruthItem;
 	className?: string;
+	onUpdateContextEntries?: (entries: ContextEntry[]) => void;
 }) {
 	if (!hasEvidenceData(item)) {
 		return (
@@ -388,21 +391,28 @@ export default function TracePanel({
 				</CollapsibleSection>
 			)}
 
-			{/* Context Entries */}
-			{contextEntries.length > 0 && (
+			{/* Context Entries — editable when handler is provided */}
+			{(contextEntries.length > 0 || onUpdateContextEntries) && (
 				<CollapsibleSection
 					title="Context Entries"
 					badge={contextEntries.length}
 					defaultOpen
 				>
-					<div className="space-y-2">
-						{contextEntries.map((entry) => (
-							<ContextEntryRow
-								key={`${entry.key}-${JSON.stringify(entry.value)}`}
-								entry={entry}
-							/>
-						))}
-					</div>
+					{onUpdateContextEntries ? (
+						<ContextEntryEditor
+							entries={contextEntries}
+							onUpdate={onUpdateContextEntries}
+						/>
+					) : (
+						<div className="space-y-2">
+							{contextEntries.map((entry) => (
+								<ContextEntryRow
+									key={`${entry.key}-${JSON.stringify(entry.value)}`}
+									entry={entry}
+								/>
+							))}
+						</div>
+					)}
 				</CollapsibleSection>
 			)}
 
