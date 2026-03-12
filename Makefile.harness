@@ -1,4 +1,4 @@
-.PHONY: setup backend frontend dev dev-up dev-down format smoke test backend-integration-test lint typecheck check ci verify observe
+.PHONY: setup backend frontend dev dev-up dev-up-demo dev-down format smoke test backend-integration-test lint typecheck check ci verify observe
 
 setup:
 	@./scripts/harness/setup.sh
@@ -31,6 +31,9 @@ dev:
 
 dev-up:
 	@./scripts/harness/dev_up.sh
+
+dev-up-demo:
+	@DEMO_MODE=true VITE_DEMO_MODE=true ./scripts/harness/dev_up.sh
 
 dev-down:
 	@./scripts/harness/dev_down.sh
