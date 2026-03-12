@@ -65,9 +65,9 @@ export default function ReferencesSection({
 	const [searchSelected, setSearchSelected] = useState<Set<string>>(new Set());
 	const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-	// RAG compat surface: show ReferencesTabs when not in multi-turn mode OR
-	// when the item still carries references (legacy/compat items).
-	const showRagCompat = !isMultiTurn || references.length > 0;
+	// RAG compat surface: only show ReferencesTabs in single-turn mode.
+	// Multi-turn items manage references per-turn via the conversation editor.
+	const showRagCompat = !isMultiTurn;
 
 	// Evidence panel: show TracePanel when item has generic agentic data.
 	const showEvidence = !!item && hasEvidenceData(item);
@@ -124,12 +124,22 @@ export default function ReferencesSection({
 	return (
 		<aside
 			className={cn(
-				"self-start h-[calc(100vh-5.5rem)] rounded-2xl border bg-white shadow-sm flex flex-col overflow-hidden",
+				"self-start rounded-2xl border bg-white shadow-sm flex flex-col overflow-hidden",
+				showRagCompat
+					? "h-[calc(100vh-5.5rem)]"
+					: "max-h-[calc(100vh-5.5rem)]",
 			)}
 		>
 			{/* Evidence & Trace panel (generic agentic data) */}
 			{showEvidence && item && (
-				<div className="flex-none overflow-y-auto border-b p-3 max-h-[50%]">
+				<div
+					className={cn(
+						"overflow-y-auto p-3",
+						showRagCompat
+							? "flex-none border-b max-h-[50%]"
+							: "flex-1",
+					)}
+				>
 					<TracePanel
 						item={item}
 						onUpdateContextEntries={onUpdateContextEntries}

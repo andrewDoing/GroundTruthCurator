@@ -176,7 +176,7 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 		expect(screen.getByText(/retrievalMode:/i)).toBeInTheDocument();
 	});
 
-	it("shows both evidence and RAG compat when multi-turn item has references", () => {
+	it("shows only evidence panel when multi-turn item has references", () => {
 		const item = makeItem({
 			toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
 			plugins: {
@@ -202,7 +202,7 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			/>,
 		);
 		expect(screen.getByText(/Evidence.*Trace/i)).toBeInTheDocument();
-		// RAG references panel is rendered (label removed in Phase 7 legacy retirement)
-		expect(screen.getByText(/Selected/i)).toBeInTheDocument();
+		// RAG references panel is hidden in multi-turn mode
+		expect(screen.queryByText(/Selected/i)).not.toBeInTheDocument();
 	});
 });

@@ -12,18 +12,15 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type {
 	ConversationTurn,
-	ExpectedBehavior,
 } from "../../../models/groundTruth";
 import { cn } from "../../../models/utils";
 import MarkdownRenderer from "../../common/MarkdownRenderer";
-import ExpectedBehaviorSelector from "./ExpectedBehaviorSelector";
 
 type Props = {
 	turn: ConversationTurn;
 	index: number;
 	isLast: boolean;
 	onUpdate: (content: string) => void;
-	onUpdateExpectedBehavior?: (behaviors: ExpectedBehavior[]) => void; // only for agent turns
 	onDelete: () => void;
 	onRegenerate?: () => void; // only for agent turns - regenerates with full agent (tools + search)
 	canEdit?: boolean;
@@ -37,7 +34,6 @@ export default function ConversationTurnComponent({
 	index,
 	isLast,
 	onUpdate,
-	onUpdateExpectedBehavior,
 	onDelete,
 	onRegenerate,
 	canEdit = true,
@@ -240,24 +236,6 @@ export default function ConversationTurnComponent({
 
 			{!isCollapsed && (
 				<>
-					{/* Expected behavior selector for agent turns - moved to top */}
-					{isAgent && onUpdateExpectedBehavior && (
-						<div
-							className={cn(
-								"mb-3 rounded-lg border p-3",
-								!turn.expectedBehavior || turn.expectedBehavior.length === 0
-									? "border-rose-200 bg-rose-50/50"
-									: "border-violet-100 bg-violet-50/50",
-							)}
-						>
-							<ExpectedBehaviorSelector
-								selectedBehaviors={turn.expectedBehavior || []}
-								onChange={onUpdateExpectedBehavior}
-								disabled={!controlsEnabled || isGenerating}
-							/>
-						</div>
-					)}
-
 					{isEditing ? (
 						<textarea
 							className="w-full rounded-lg border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"

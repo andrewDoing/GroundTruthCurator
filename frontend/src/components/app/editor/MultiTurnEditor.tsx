@@ -10,7 +10,6 @@ import { useReferencesSearch } from "../../../hooks/useReferencesSearch";
 import useTags from "../../../hooks/useTags";
 import type {
 	ConversationTurn,
-	ExpectedBehavior,
 	GroundTruthItem,
 	Reference,
 } from "../../../models/groundTruth";
@@ -121,15 +120,6 @@ export default function MultiTurnEditor({
 	const handleUpdateTurn = (index: number, content: string) => {
 		const newHistory = [...history];
 		newHistory[index] = { ...newHistory[index], content };
-		onUpdateHistory(newHistory);
-	};
-
-	const handleUpdateExpectedBehavior = (
-		index: number,
-		expectedBehavior: ExpectedBehavior[],
-	) => {
-		const newHistory = [...history];
-		newHistory[index] = { ...newHistory[index], expectedBehavior };
 		onUpdateHistory(newHistory);
 	};
 
@@ -257,12 +247,6 @@ export default function MultiTurnEditor({
 									index={idx}
 									isLast={idx === history.length - 1}
 									onUpdate={(content) => handleUpdateTurn(idx, content)}
-									onUpdateExpectedBehavior={
-										isAgentTurn
-											? (behaviors) =>
-													handleUpdateExpectedBehavior(idx, behaviors)
-											: undefined
-									}
 									onDelete={() => handleRemoveTurn(idx)}
 									onRegenerate={
 										isAgentTurn
