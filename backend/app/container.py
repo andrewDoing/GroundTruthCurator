@@ -11,9 +11,6 @@ from app.services.snapshot_service import SnapshotService
 from app.services.curation_service import CurationService
 from app.adapters.repos.tags_repo import CosmosTagsRepo
 from app.services.tag_registry_service import TagRegistryService
-from app.adapters.gtc_inference_adapter import GTCInferenceAdapter
-from app.services.chat_service import ChatService
-from app.adapters.agent_steps_store import AgentStepsStore
 from app.exports.formatters.json_items import JsonItemsFormatter
 from app.exports.formatters.json_snapshot_payload import JsonSnapshotPayloadFormatter
 from app.exports.pipeline import ExportPipeline
@@ -66,9 +63,6 @@ class Container:
     tag_registry_service: TagRegistryService
     tags_repo: CosmosTagsRepo
     tag_definitions_repo: Any  # CosmosTagDefinitionsRepo
-    inference_service: GTCInferenceAdapter | None
-    chat_service: ChatService
-    agent_steps_store: AgentStepsStore | None
     export_pipeline: ExportPipeline
     export_processor_registry: ExportProcessorRegistry
     export_formatter_registry: ExportFormatterRegistry
@@ -88,18 +82,11 @@ class Container:
         self.tags_repo = cast(CosmosTagsRepo, None)
         self.tag_definitions_repo = cast(Any, None)
         self.tag_registry_service = cast(TagRegistryService, None)
-        self.inference_service = None  # Lazily initialized by init_chat()
-        self.agent_steps_store = cast(AgentStepsStore | None, None)
         self.export_storage = self._build_export_storage()
         self.export_processor_registry = self._build_export_processor_registry()
         self.export_formatter_registry = self._build_export_formatter_registry()
         self.export_pipeline = ExportPipeline(self.export_storage)
         self.export_default_processor_order = parse_processor_order(settings.EXPORT_PROCESSOR_ORDER)
-        self.chat_service = ChatService(
-            inference_service=None,
-            steps_store=self.agent_steps_store,
-            store_steps=settings.STORE_AGENT_STEPS,
-        )
         # Plugin-pack registry — lazily populated on first use (startup_cosmos
         # calls validate_all() to ensure all packs pass their startup checks).
         self.plugin_pack_registry = get_default_pack_registry()
@@ -344,72 +331,5 @@ class Container:
             # Keep default no-op search service to satisfy consumers and typing
             self.search_service = self.search_service or SearchService()
             logger.info("Search adapter not configured; using no-op SearchService")
-
-    def _build_sync_default_credential(self) -> Any:
-        """Create a sync DefaultAzureCredential for runtime use.
-        Used for GTCInferenceAdapter which requires sync credentials.
-        """
-        try:
-            from azure.identity import DefaultAzureCredential
-        except Exception as e:
-            raise RuntimeError(f"azure-identity not installed: {e}")
-        # Exclude shared cache for server scenarios to keep minimal surface
-        return DefaultAzureCredential(exclude_shared_token_cache_credential=True)
-
-    def init_chat(self) -> None:
-        """Configure chat inference service and chat service.
-
-        Validates that retrieval configuration is present when agent is configured.
-        Uses managed identity for both agent auth and retrieval token minting.
-        """
-        project_endpoint = settings.AZURE_AI_PROJECT_ENDPOINT
-        agent_id = settings.AZURE_AI_AGENT_ID
-        retrieval_url = settings.RETRIEVAL_URL
-        permissions_scope = settings.RETRIEVAL_PERMISSIONS_SCOPE
-
-        # Only build the inference service when fully configured.
-        if not project_endpoint or not agent_id:
-            self.inference_service = None
-        elif not retrieval_url or not permissions_scope:
-            logger.error(
-                "Agent is configured but retrieval settings missing. "
-                "Set GTC_RETRIEVAL_URL and GTC_RETRIEVAL_PERMISSIONS_SCOPE."
-            )
-            # Mark as not configured so we fail at runtime with 502
-            self.inference_service = None
-        else:
-            # Use sync DefaultAzureCredential for GTCInferenceAdapter
-            # (reused for both agent auth and retrieval token minting)
-            credential = self._build_sync_default_credential()
-
-            self.inference_service = GTCInferenceAdapter(
-                project_endpoint=project_endpoint,
-                agent_id=agent_id,
-                retrieval_url=retrieval_url,
-                permissions_scope=permissions_scope,
-                timeout_seconds=settings.RETRIEVAL_TIMEOUT_SECONDS,
-                credential=credential,
-            )
-
-        # Reuse any existing steps store instance (may be configured elsewhere)
-        store = getattr(self, "agent_steps_store", None)
-        self.chat_service = ChatService(
-            inference_service=self.inference_service,
-            steps_store=store,
-            store_steps=settings.STORE_AGENT_STEPS and bool(store),
-        )
-
-        if not settings.CHAT_ENABLED:
-            self.chat_service.set_store_steps(False)
-            logger.info("Chat service disabled via settings")
-        elif not self.inference_service:
-            logger.info("Chat service running in mock mode (agent not configured)")
-        else:
-            logger.info(
-                "Chat service configured with Azure AI Project (endpoint=%s, agent=%s)",
-                settings.AZURE_AI_PROJECT_ENDPOINT,
-                settings.AZURE_AI_AGENT_ID,
-            )
-
 
 container = Container()

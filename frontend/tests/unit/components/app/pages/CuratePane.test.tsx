@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
 import CuratePane from "../../../../../src/components/app/pages/CuratePane";
-import type { AgentGenerationResult } from "../../../../../src/hooks/useGroundTruth";
 import type { GroundTruthItem } from "../../../../../src/models/groundTruth";
 
 const item: GroundTruthItem = {
@@ -24,18 +23,11 @@ describe("CuratePane", () => {
 				onUpdateTags={vi.fn()}
 				onUpdateHistory={vi.fn()}
 				onDeleteTurn={vi.fn()}
-				onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
-					ok: true as const,
-					messageIndex: 0,
-				})}
 				onSaveDraft={vi.fn()}
 				onApprove={vi.fn()}
 				onSkip={vi.fn()}
 				onDelete={vi.fn()}
 				onRestore={vi.fn()}
-				onUpdateReference={vi.fn()}
-				onRemoveReference={vi.fn()}
-				onOpenReference={vi.fn()}
 			/>,
 		);
 
@@ -61,18 +53,11 @@ describe("CuratePane", () => {
 				onUpdateTags={vi.fn()}
 				onUpdateHistory={vi.fn()}
 				onDeleteTurn={vi.fn()}
-				onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
-					ok: true as const,
-					messageIndex: 0,
-				})}
 				onSaveDraft={vi.fn()}
 				onApprove={vi.fn()}
 				onSkip={vi.fn()}
 				onDelete={vi.fn()}
 				onRestore={vi.fn()}
-				onUpdateReference={vi.fn()}
-				onRemoveReference={vi.fn()}
-				onOpenReference={vi.fn()}
 			/>,
 		);
 
@@ -102,18 +87,11 @@ describe("CuratePane", () => {
 				onUpdateTags={vi.fn()}
 				onUpdateHistory={vi.fn()}
 				onDeleteTurn={vi.fn()}
-				onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
-					ok: true as const,
-					messageIndex: 0,
-				})}
 				onSaveDraft={vi.fn()}
 				onApprove={vi.fn()}
 				onSkip={vi.fn()}
 				onDelete={vi.fn()}
 				onRestore={vi.fn()}
-				onUpdateReference={vi.fn()}
-				onRemoveReference={vi.fn()}
-				onOpenReference={vi.fn()}
 			/>,
 		);
 

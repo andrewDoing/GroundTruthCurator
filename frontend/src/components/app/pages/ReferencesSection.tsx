@@ -144,6 +144,10 @@ export default function ReferencesSection({
 						item={item}
 						onUpdateContextEntries={onUpdateContextEntries}
 						onUpdateExpectedTools={onUpdateExpectedTools}
+						onAddReferences={onAddRefs}
+						onOpenReference={onOpenReference}
+						onUpdateReference={onUpdateReference}
+						onRemoveReference={onRemoveReference}
 					/>
 				</div>
 			)}

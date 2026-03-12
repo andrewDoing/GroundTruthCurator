@@ -8,7 +8,6 @@ from app.api.v1 import (
     tags,
     datasets,
     search,
-    chat,
 )
 from app.api.v1 import config
 
@@ -22,4 +21,3 @@ api_router.include_router(schemas.router, prefix="", tags=["schemas"])  # /schem
 api_router.include_router(tags.router, prefix="", tags=["tags"])  # /tags endpoints
 api_router.include_router(datasets.router, prefix="", tags=["datasets"])  # /datasets endpoints
 api_router.include_router(search.router, prefix="", tags=["search"])  # /search endpoint
-api_router.include_router(chat.router, prefix="", tags=["chat"])  # /chat endpoint

@@ -4,8 +4,6 @@ import { useGroundTruthCache } from "../../hooks/useGroundTruthCache";
 import useModalKeys from "../../hooks/useModalKeys";
 import type { GroundTruthItem } from "../../models/groundTruth";
 import { getGroundTruth } from "../../services/groundTruths";
-import { getRuntimeConfig } from "../../services/runtimeConfig";
-import { validateReferenceUrl } from "../../utils/urlValidation";
 import MultiTurnEditor from "../app/editor/MultiTurnEditor";
 import type { QuestionsExplorerItem } from "../app/QuestionsExplorer";
 import TagChip from "../common/TagChip";
@@ -22,9 +20,6 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 	);
 	const [isLoading, setIsLoading] = useState(false);
 	const [loadError, setLoadError] = useState<string | null>(null);
-	const [trustedReferenceDomains, setTrustedReferenceDomains] = useState<
-		string[]
-	>([]);
 
 	const cache = useGroundTruthCache();
 
@@ -42,15 +37,6 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 			setLoadError(null);
 			return;
 		}
-
-		// Load trusted domains for reference opening
-		getRuntimeConfig()
-			.then((cfg) => {
-				setTrustedReferenceDomains(cfg.trustedReferenceDomains ?? []);
-			})
-			.catch(() => {
-				setTrustedReferenceDomains([]);
-			});
 
 		// Validate required fields before proceeding
 		if (!item.datasetName || !item.bucket || !item.id) {
@@ -219,44 +205,6 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 										canEdit={false}
 										onUpdateHistory={() => {}}
 										onDeleteTurn={() => {}}
-										onGenerate={() =>
-											Promise.resolve({ ok: false, error: "Read-only mode" })
-										}
-										onUpdateReference={() => {}}
-										onRemoveReference={() => {}}
-										// Secure reference opening with validation and user confirmation
-										onOpenReference={(ref) => {
-											if (!validateReferenceUrl(ref.url)) {
-												alert(
-													"This reference contains an unsafe URL and cannot be opened.",
-												);
-												return;
-											}
-
-											// For external or untrusted URLs, show user confirmation
-											const parsedUrl = new URL(ref.url);
-											const hostname = parsedUrl.hostname.toLowerCase();
-											const sameOrigin = hostname === window.location.hostname;
-											const isTrusted =
-												trustedReferenceDomains.includes(hostname);
-											const isExternal = !sameOrigin && !isTrusted;
-
-											if (isExternal) {
-												const confirmed = confirm(
-													`You are about to visit an external website:\n\n${parsedUrl.hostname}\n\nDo you want to continue?`,
-												);
-												if (!confirmed) {
-													return;
-												}
-											}
-
-											// Open with security attributes
-											window.open(
-												ref.url,
-												"_blank",
-												"noopener,noreferrer,nofollow",
-											);
-										}}
 										onUpdateTags={() => {}}
 									/>
 								)}

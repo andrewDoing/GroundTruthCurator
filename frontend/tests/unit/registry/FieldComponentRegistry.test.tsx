@@ -1,97 +1,100 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { FieldComponentRegistry } from "../../../src/registry/FieldComponentRegistry";
-import type { EditorProps, ViewerProps } from "../../../src/registry/types";
+import type { ToolCallRecord } from "../../../src/models/groundTruth";
+import {
+	ToolCallExtensions,
+	toolCallDiscriminator,
+} from "../../../src/registry/FieldComponentRegistry";
+import type {
+	ToolCallActionProps,
+	ToolCallExtensionRegistration,
+} from "../../../src/registry/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function StubViewer({ data }: ViewerProps) {
-	return <div>{JSON.stringify(data)}</div>;
+function StubAction(_props: ToolCallActionProps) {
+	return <div>stub</div>;
 }
 
-function StubEditor({ data, onChange }: EditorProps) {
-	return (
-		<div>
-			{JSON.stringify(data)}
-			<button type="button" onClick={() => onChange(null)}>
-				edit
-			</button>
-		</div>
-	);
+function makeTc(
+	name: string,
+	overrides?: Partial<ToolCallRecord>,
+): ToolCallRecord {
+	return { id: "tc-1", name, callType: "tool", ...overrides };
 }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("FieldComponentRegistry", () => {
-	let registry: FieldComponentRegistry;
+describe("ToolCallExtensions", () => {
+	let registry: ToolCallExtensions;
 
 	beforeEach(() => {
-		registry = new FieldComponentRegistry();
+		registry = new ToolCallExtensions();
 	});
 
-	// ── register / resolve ──────────────────────────────────────────────────
+	// ── register / resolveAll ───────────────────────────────────────────────
 
-	it("registers and resolves viewer by exact discriminator", () => {
+	it("registers and resolves by exact discriminator", () => {
 		registry.register({
-			discriminator: "toolCall",
-			viewer: StubViewer,
-			displayName: "Tool Call",
+			discriminator: "toolCall:search",
+			component: StubAction,
+			displayName: "Search",
 		});
 
-		expect(registry.resolve("toolCall", "viewer")).toBe(StubViewer);
-	});
-
-	it("registers and resolves editor by exact discriminator", () => {
-		registry.register({
-			discriminator: "toolCall",
-			viewer: StubViewer,
-			editor: StubEditor,
-			displayName: "Tool Call",
-		});
-
-		expect(registry.resolve("toolCall", "editor")).toBe(StubEditor);
-	});
-
-	it("falls back to viewer when editor is requested but not registered", () => {
-		registry.register({
-			discriminator: "toolCall",
-			viewer: StubViewer,
-			displayName: "Tool Call",
-		});
-
-		expect(registry.resolve("toolCall", "editor")).toBe(StubViewer);
+		const matches = registry.resolveAll(makeTc("search"));
+		expect(matches).toHaveLength(1);
+		expect(matches[0].component).toBe(StubAction);
 	});
 
 	// ── prefix matching ─────────────────────────────────────────────────────
 
-	it("resolves via prefix fallback (toolCall → toolCall:retrieval)", () => {
+	it("resolves via prefix fallback (toolCall matches toolCall:retrieval)", () => {
 		registry.register({
 			discriminator: "toolCall",
-			viewer: StubViewer,
-			displayName: "Tool Call",
+			component: StubAction,
+			displayName: "Catch-all",
 		});
 
-		expect(registry.resolve("toolCall:retrieval", "viewer")).toBe(StubViewer);
+		const matches = registry.resolveAll(makeTc("retrieval"));
+		expect(matches).toHaveLength(1);
+		expect(matches[0].displayName).toBe("Catch-all");
 	});
 
 	it("does not prefix-match without colon separator", () => {
 		registry.register({
 			discriminator: "tool",
-			viewer: StubViewer,
+			component: StubAction,
 			displayName: "Tool",
 		});
 
-		// "toolCall" starts with "tool" but has no ":" after the prefix
-		expect(registry.resolve("toolCall", "viewer")).toBeUndefined();
+		// "toolCall:foo" starts with "tool" but "tool" is not followed by ":"
+		const matches = registry.resolveAll(makeTc("foo"));
+		expect(matches).toHaveLength(0);
 	});
 
-	// ── unknown discriminator ───────────────────────────────────────────────
+	// ── matches predicate ───────────────────────────────────────────────────
 
-	it("returns undefined for unknown discriminator", () => {
-		expect(registry.resolve("unknown", "viewer")).toBeUndefined();
+	it("filters by matches predicate when provided", () => {
+		registry.register({
+			discriminator: "toolCall:search",
+			component: StubAction,
+			displayName: "Search with args",
+			matches: (tc) => tc.arguments?.query !== undefined,
+		});
+
+		expect(registry.resolveAll(makeTc("search"))).toHaveLength(0);
+		expect(
+			registry.resolveAll(makeTc("search", { arguments: { query: "hello" } })),
+		).toHaveLength(1);
+	});
+
+	// ── no match ────────────────────────────────────────────────────────────
+
+	it("returns empty for unknown discriminator", () => {
+		expect(registry.resolveAll(makeTc("unknown"))).toHaveLength(0);
 	});
 
 	// ── duplicate registration warning ──────────────────────────────────────
@@ -101,59 +104,59 @@ describe("FieldComponentRegistry", () => {
 
 		registry.register({
 			discriminator: "dup",
-			viewer: StubViewer,
+			component: StubAction,
 			displayName: "First",
 		});
 		registry.register({
 			discriminator: "dup",
-			viewer: StubViewer,
+			component: StubAction,
 			displayName: "Second",
 		});
 
 		expect(spy).toHaveBeenCalledWith(
-			"[FieldComponentRegistry] Duplicate registration for discriminator: dup",
+			"[ToolCallExtensions] Replacing registration for discriminator: dup",
 		);
 
 		spy.mockRestore();
 	});
 
-	// ── has() ───────────────────────────────────────────────────────────────
+	// ── hasMatch() ──────────────────────────────────────────────────────────
 
-	it("has() returns true for exact match", () => {
+	it("hasMatch() returns true for matching tool call", () => {
 		registry.register({
-			discriminator: "toolCall",
-			viewer: StubViewer,
-			displayName: "Tool Call",
+			discriminator: "toolCall:search",
+			component: StubAction,
+			displayName: "Search",
 		});
 
-		expect(registry.has("toolCall")).toBe(true);
+		expect(registry.hasMatch(makeTc("search"))).toBe(true);
 	});
 
-	it("has() returns true for prefix match", () => {
+	it("hasMatch() returns true for prefix match", () => {
 		registry.register({
 			discriminator: "toolCall",
-			viewer: StubViewer,
-			displayName: "Tool Call",
+			component: StubAction,
+			displayName: "Catch-all",
 		});
 
-		expect(registry.has("toolCall:retrieval")).toBe(true);
+		expect(registry.hasMatch(makeTc("retrieval"))).toBe(true);
 	});
 
-	it("has() returns false for unknown discriminator", () => {
-		expect(registry.has("nope")).toBe(false);
+	it("hasMatch() returns false for unknown tool call", () => {
+		expect(registry.hasMatch(makeTc("nope"))).toBe(false);
 	});
 
 	// ── registrations() ─────────────────────────────────────────────────────
 
 	it("registrations() returns all registered items", () => {
-		const regA = {
-			discriminator: "a",
-			viewer: StubViewer,
+		const regA: ToolCallExtensionRegistration = {
+			discriminator: "toolCall:a",
+			component: StubAction,
 			displayName: "A",
 		};
-		const regB = {
-			discriminator: "b",
-			viewer: StubViewer,
+		const regB: ToolCallExtensionRegistration = {
+			discriminator: "toolCall:b",
+			component: StubAction,
 			displayName: "B",
 		};
 
@@ -170,14 +173,23 @@ describe("FieldComponentRegistry", () => {
 
 	it("reset() clears all registrations", () => {
 		registry.register({
-			discriminator: "toolCall",
-			viewer: StubViewer,
-			displayName: "Tool Call",
+			discriminator: "toolCall:search",
+			component: StubAction,
+			displayName: "Search",
 		});
 
 		registry.reset();
 
 		expect(registry.registrations()).toHaveLength(0);
-		expect(registry.has("toolCall")).toBe(false);
+		expect(registry.hasMatch(makeTc("search"))).toBe(false);
+	});
+
+	// ── toolCallDiscriminator ───────────────────────────────────────────────
+
+	it("toolCallDiscriminator builds correct string", () => {
+		expect(toolCallDiscriminator(makeTc("search"))).toBe("toolCall:search");
+		expect(toolCallDiscriminator(makeTc("retrieval"))).toBe(
+			"toolCall:retrieval",
+		);
 	});
 });

@@ -1,77 +1,82 @@
-// Plugin component registry type definitions
+// Tool call extension registry type definitions
 //
-// Discriminator-based component lookup for plugin-contributed renderers and
-// editors.  Discriminators follow the pattern "category:kind"
-// (e.g., "toolCall:retrieval", "plugin:rag-compat", "feedback:sentiment").
+// Discriminator-based component lookup for plugin-contributed tool call
+// action components.  Discriminators follow the pattern "category:kind"
+// (e.g., "toolCall:retrieval", "toolCall:search").
 
 import type { ComponentType } from "react";
+import type {
+	GroundTruthItem,
+	Reference,
+	ToolCallRecord,
+} from "../models/groundTruth";
 
 // ---------------------------------------------------------------------------
-// Render context
+// Tool call action context & props
 // ---------------------------------------------------------------------------
 
-/** Ambient context passed to every viewer and editor component. */
-export type RenderContext = {
-	/** Ground-truth item id that owns the data being rendered. */
-	itemId: string;
-	/** Dot-path to the field within the item (e.g. "plugins.rag-compat"). */
-	fieldPath: string;
-	/** Optional plugin kind when the component was contributed by a plugin. */
-	pluginKind?: string;
+/** Context passed to every tool call action component. */
+export type ToolCallActionContext = {
+	/** The ground-truth item that owns this tool call. */
+	item: GroundTruthItem;
 	/** When true the component must not allow edits. */
 	readOnly: boolean;
 };
 
-// ---------------------------------------------------------------------------
-// Component props
-// ---------------------------------------------------------------------------
-
-/** Props for read-only viewer components. */
-export type ViewerProps = {
-	data: unknown;
-	context: RenderContext;
-};
-
-/** Props for editable components. Extends viewer props with mutation hooks. */
-export type EditorProps = ViewerProps & {
-	onChange: (data: unknown) => void;
-	onValidate?: (data: unknown) => string[];
+/** Props for tool call action components rendered inside ToolCallDetailView. */
+export type ToolCallActionProps = {
+	/** The tool call record this action applies to. */
+	toolCall: ToolCallRecord;
+	/** Ambient context (item, read-only flag). */
+	context: ToolCallActionContext;
+	/** Existing references associated with this tool call. */
+	references: Reference[];
+	/** Callback to add new references for this tool call. */
+	onAddReferences?: (refs: Reference[]) => void;
+	/** Callback to open a reference (e.g. navigate to URL). */
+	onOpenReference?: (ref: Reference) => void;
+	/** Callback to update a reference. */
+	onUpdateReference?: (refId: string, partial: Partial<Reference>) => void;
+	/** Callback to remove a reference. */
+	onRemoveReference?: (refId: string) => void;
 };
 
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
-/** A single component registration bound to a discriminator string. */
-export type ComponentRegistration = {
-	/** Lookup key following "category:kind" convention. */
+/** A single tool call extension registration bound to a discriminator. */
+export type ToolCallExtensionRegistration = {
+	/** Lookup key following "category:kind" convention (e.g. "toolCall:retrieval"). */
 	discriminator: string;
-	/** Read-only renderer for the data. */
-	viewer: ComponentType<ViewerProps>;
-	/** Optional editing component.  When absent the data is view-only. */
-	editor?: ComponentType<EditorProps>;
+	/** Component rendered inside the expanded tool call detail view. */
+	component: ComponentType<ToolCallActionProps>;
 	/** Human-readable label shown in registry listings / debug surfaces. */
 	displayName: string;
+	/**
+	 * Optional predicate for fine-grained matching beyond the discriminator.
+	 * When provided, the component is only rendered if this returns true.
+	 */
+	matches?: (toolCall: ToolCallRecord) => boolean;
 };
 
 // ---------------------------------------------------------------------------
 // Registry interface
 // ---------------------------------------------------------------------------
 
-/** Public contract for the field component registry. */
-export type FieldComponentRegistryAPI = {
-	/** Register a component for a discriminator.  Throws on duplicate. */
-	register(registration: ComponentRegistration): void;
+/** Public contract for the tool call extension registry. */
+export type ToolCallExtensionRegistryAPI = {
+	/** Register an extension for a discriminator. Replaces existing in dev. */
+	register(registration: ToolCallExtensionRegistration): void;
 	/**
-	 * Look up the viewer or editor for a discriminator string.
-	 * Returns `undefined` when no registration exists (caller should use fallback).
+	 * Find all extensions that match a given tool call.
+	 * Uses discriminator prefix matching and optional predicate.
 	 */
-	resolve(
-		discriminator: string,
-		mode: "viewer" | "editor",
-	): ComponentType<ViewerProps> | ComponentType<EditorProps> | undefined;
+	resolveAll(
+		toolCall: ToolCallRecord,
+	): ReadonlyArray<ToolCallExtensionRegistration>;
 	/** Return all current registrations (useful for debug / startup validation). */
-	registrations(): ReadonlyArray<ComponentRegistration>;
-	/** Check whether a discriminator has a registration. */
-	has(discriminator: string): boolean;
+	registrations(): ReadonlyArray<ToolCallExtensionRegistration>;
+	/** Check whether any extension matches a tool call. */
+	hasMatch(toolCall: ToolCallRecord): boolean;
 };

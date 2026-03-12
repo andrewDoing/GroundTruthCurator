@@ -95,14 +95,6 @@ export default function GTAppDemo() {
 		}
 	}
 
-	async function onGenerateAgentTurn(messageIndex: number) {
-		const result = await gt.generateAgentTurn(messageIndex);
-		if (!result.ok) {
-			toast("error", result.error);
-		}
-		return result;
-	}
-
 	async function onSave(nextStatus?: "draft" | "approved") {
 		const res = await gt.save(nextStatus);
 		if (!res.ok) {
@@ -356,25 +348,8 @@ export default function GTAppDemo() {
 											onDeleteTurn={(messageIndex) =>
 												gt.deleteTurn(messageIndex)
 											}
-											onGenerateAgentTurn={onGenerateAgentTurn}
 											onSaveDraft={() => onSave("draft")}
 											onApprove={() => onSave("approved")}
-											onUpdateReference={(refId, partial) =>
-												gt.updateReference(refId, partial)
-											}
-											onRemoveReference={(refId) => {
-												gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
-													toast("info", "Reference removed.", {
-														duration: timeoutMs,
-														actionLabel: "Undo",
-														onAction: undo,
-													});
-												});
-											}}
-											onOpenReference={onOpenRef}
-											onAddReferences={(refs) => {
-												gt.addReferences(refs);
-											}}
 											onDuplicate={async () => {
 												const res = await gt.duplicateCurrent();
 												if (res.ok) {
@@ -459,25 +434,8 @@ export default function GTAppDemo() {
 									onUpdateTags={(tags) => gt.updateTags(tags)}
 									onUpdateHistory={(history) => gt.updateHistory(history)}
 									onDeleteTurn={(messageIndex) => gt.deleteTurn(messageIndex)}
-									onGenerateAgentTurn={onGenerateAgentTurn}
 									onSaveDraft={() => onSave("draft")}
 									onApprove={() => onSave("approved")}
-									onUpdateReference={(refId, partial) =>
-										gt.updateReference(refId, partial)
-									}
-									onRemoveReference={(refId) => {
-										gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
-											toast("info", "Reference removed.", {
-												duration: timeoutMs,
-												actionLabel: "Undo",
-												onAction: undo,
-											});
-										});
-									}}
-									onOpenReference={onOpenRef}
-									onAddReferences={(refs) => {
-										gt.addReferences(refs);
-									}}
 									onDuplicate={async () => {
 										const res = await gt.duplicateCurrent();
 										if (res.ok) {

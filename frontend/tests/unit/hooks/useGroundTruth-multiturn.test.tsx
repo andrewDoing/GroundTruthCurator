@@ -1,9 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import type {
-	ConversationTurn,
-	GroundTruthItem,
-	Reference,
-} from "../../../src/models/groundTruth";
+import type { ConversationTurn } from "../../../src/models/groundTruth";
 import { getItemReferences } from "../../../src/models/groundTruth";
 
 vi.mock("../../../src/config/demo", () => ({
@@ -12,18 +8,6 @@ vi.mock("../../../src/config/demo", () => ({
 	shouldUseDemoProvider: () => true,
 	isDemoModeIgnored: () => false,
 }));
-
-const callAgentChatMock = vi.fn();
-
-vi.mock("../../../src/services/chatService", async () => {
-	const actual = await vi.importActual<
-		typeof import("../../../src/services/chatService")
-	>("../../../src/services/chatService");
-	return {
-		...actual,
-		callAgentChat: callAgentChatMock,
-	};
-});
 
 vi.mock("../../../src/services/telemetry", () => ({
 	logEvent: vi.fn(),
@@ -38,10 +22,6 @@ beforeAll(async () => {
 	({ default: useGroundTruth } = await import(
 		"../../../src/hooks/useGroundTruth"
 	));
-});
-
-afterEach(() => {
-	callAgentChatMock.mockReset();
 });
 
 async function setupHook() {
@@ -85,179 +65,6 @@ describe("useGroundTruth multi-turn flows", () => {
 			content: "Agent reply",
 		});
 		expect(result.current.current?.answer).toBe("Agent reply");
-	});
-
-	it("generateAgentTurn appends agent response with references", async () => {
-		const { result } = await setupHook();
-		await act(async () => {
-			result.current.updateHistory([]);
-		});
-		await act(async () => {
-			result.current.addTurn("user", "Need help with a CAD application");
-		});
-		callAgentChatMock.mockResolvedValue({
-			content: " Generated agent guidance ",
-			references: [
-				{
-					id: "chat-ref-1",
-					title: "Doc",
-					url: "https://docs.example.com/agent",
-					snippet: "Snippet",
-					keyParagraph: "Key",
-				},
-			],
-		});
-		await act(async () => {
-			const res = await result.current.generateAgentTurn(-1);
-			expect(res.ok).toBe(true);
-			expect(res).toMatchObject({ messageIndex: 1 });
-		});
-		expect(callAgentChatMock).toHaveBeenCalledTimes(1);
-		const current = result.current.current as GroundTruthItem;
-		expect(current.history?.length).toBe(2);
-		expect(current.history?.[1]).toMatchObject({
-			role: "agent",
-			content: "Generated agent guidance",
-		});
-		const refsForTurn = getItemReferences(current).filter(
-			(r) => r.messageIndex === 1,
-		);
-		expect(refsForTurn).toHaveLength(1);
-		expect(refsForTurn[0]).toMatchObject({
-			url: "https://docs.example.com/agent",
-			snippet: "Snippet",
-			keyParagraph: "Key",
-		});
-	});
-
-	it("generateAgentTurn fails when no prior user turn exists", async () => {
-		const { result } = await setupHook();
-		await act(async () => {
-			result.current.updateHistory([]);
-		});
-		callAgentChatMock.mockResolvedValue({ content: "x", references: [] });
-		await act(async () => {
-			const res = await result.current.generateAgentTurn(-1);
-			expect(res.ok).toBe(false);
-			if (!res.ok) {
-				expect(res.error).toMatch(/user turn/i);
-			}
-		});
-		expect(callAgentChatMock).not.toHaveBeenCalled();
-	});
-
-	it("regenerateAgentTurn updates only targeted agent turn and references", async () => {
-		const { result } = await setupHook();
-		const seedHistory: ConversationTurn[] = [
-			{ role: "user", content: "Original Q" },
-			{ role: "agent", content: "Outdated A" },
-			{ role: "user", content: "Second Q" },
-		];
-		await act(async () => {
-			result.current.updateHistory(seedHistory);
-			result.current.addReferences([
-				{
-					id: "turn-ref",
-					title: "Old",
-					url: "https://ref.example.com/old",
-					snippet: "Old snippet",
-					messageIndex: 1,
-				},
-			] as Reference[]);
-		});
-		callAgentChatMock.mockResolvedValue({
-			content: "Updated agent answer",
-			references: [
-				{
-					id: "chat-ref-2",
-					url: "https://ref.example.com/new",
-					snippet: "New snippet",
-					keyParagraph: "New key",
-				},
-			],
-		});
-		await act(async () => {
-			const res = await result.current.regenerateAgentTurn(1);
-			expect(res.ok).toBe(true);
-		});
-		const history = result.current.current?.history ?? [];
-		expect(history[1]).toMatchObject({ content: "Updated agent answer" });
-		expect(history[0]).toMatchObject({ content: "Original Q" });
-		expect(history[2]).toMatchObject({ content: "Second Q" });
-		const refs = getItemReferences(result.current.current!);
-		const refsForTurn = refs.filter((r) => r.messageIndex === 1);
-		expect(refsForTurn).toHaveLength(1);
-		expect(refsForTurn[0].url).toBe("https://ref.example.com/new");
-	});
-
-	it("regenerateAgentTurn rejects non-agent turns", async () => {
-		const { result } = await setupHook();
-		const seedHistory: ConversationTurn[] = [
-			{ role: "user", content: "Q" },
-			{ role: "user", content: "Another" },
-		];
-		await act(async () => {
-			result.current.updateHistory(seedHistory);
-		});
-		await act(async () => {
-			const res = await result.current.regenerateAgentTurn(1);
-			expect(res.ok).toBe(false);
-			if (!res.ok) {
-				expect(res.error).toMatch(/only non-user turns/i);
-			}
-		});
-	});
-
-	it("regenerateAgentTurn accepts preserved non-user roles and keeps answer in sync", async () => {
-		const { result } = await setupHook();
-		const seedHistory: ConversationTurn[] = [
-			{ role: "user", content: "Original Q" },
-			{ role: "output-agent", content: "Outdated A" },
-			{ role: "user", content: "Second Q" },
-		];
-
-		await act(async () => {
-			result.current.updateHistory(seedHistory);
-			result.current.addReferences([
-				{
-					id: "turn-ref",
-					title: "Old",
-					url: "https://ref.example.com/old",
-					snippet: "Old snippet",
-					messageIndex: 1,
-				},
-			] as Reference[]);
-		});
-
-		callAgentChatMock.mockResolvedValue({
-			content: "Updated output answer",
-			references: [
-				{
-					id: "chat-ref-2",
-					url: "https://ref.example.com/new",
-					snippet: "New snippet",
-					keyParagraph: "New key",
-				},
-			],
-		});
-
-		await act(async () => {
-			const res = await result.current.regenerateAgentTurn(1);
-			expect(res.ok).toBe(true);
-			expect(res).toMatchObject({ messageIndex: 1 });
-		});
-
-		const history = result.current.current?.history ?? [];
-		expect(history[1]).toMatchObject({
-			role: "output-agent",
-			content: "Updated output answer",
-		});
-		expect(result.current.current?.answer).toBe("Updated output answer");
-		const refsForTurn = getItemReferences(result.current.current!).filter(
-			(ref) => ref.messageIndex === 1,
-		);
-		expect(refsForTurn).toHaveLength(1);
-		expect(refsForTurn[0].url).toBe("https://ref.example.com/new");
 	});
 
 	it("stateSignature ignores visitedAt mutations for hasUnsaved", async () => {

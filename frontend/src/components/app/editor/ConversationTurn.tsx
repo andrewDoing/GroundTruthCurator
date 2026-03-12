@@ -1,11 +1,8 @@
 import {
-	Bot,
 	Check,
 	ChevronDown,
 	ChevronRight,
 	Edit2,
-	Loader2,
-	Paperclip,
 	Trash2,
 	X,
 } from "lucide-react";
@@ -20,11 +17,7 @@ type Props = {
 	isLast: boolean;
 	onUpdate: (content: string) => void;
 	onDelete: () => void;
-	onRegenerate?: () => void; // only for agent turns - regenerates with full agent (tools + search)
 	canEdit?: boolean;
-	isGenerating?: boolean;
-	referenceCount?: number;
-	onViewReferences?: () => void;
 };
 
 export default function ConversationTurnComponent({
@@ -33,22 +26,17 @@ export default function ConversationTurnComponent({
 	isLast,
 	onUpdate,
 	onDelete,
-	onRegenerate,
 	canEdit = true,
-	isGenerating = false,
-	referenceCount = 0,
-	onViewReferences,
 }: Props) {
 	const [isEditing, setIsEditing] = useState(false);
 	const [isCollapsed, setIsCollapsed] = useState(false);
 	const [editContent, setEditContent] = useState(turn.content);
-	const controlsEnabled = canEdit && !isGenerating;
 
 	// Calculate pair-based turn number (each user+agent pair is one turn)
 	const turnNumber = Math.floor(index / 2) + 1;
 
 	const toggleEditMode = () => {
-		if (!controlsEnabled) return;
+		if (!canEdit) return;
 		if (isEditing) {
 			setEditContent(turn.content); // reset on cancel
 		}
@@ -58,13 +46,13 @@ export default function ConversationTurnComponent({
 	};
 
 	const handleSave = () => {
-		if (!controlsEnabled) return;
+		if (!canEdit) return;
 		onUpdate(editContent);
 		setIsEditing(false);
 	};
 
 	const handleCancel = () => {
-		if (!controlsEnabled) return;
+		if (!canEdit) return;
 		setEditContent(turn.content);
 		setIsEditing(false);
 	};
@@ -106,7 +94,6 @@ export default function ConversationTurnComponent({
 				isUser && "border-blue-200 bg-blue-50",
 				isAgent && "border-violet-200 bg-violet-50",
 			)}
-			aria-busy={isGenerating ? "true" : undefined}
 		>
 			<div className="mb-2 flex items-center justify-between">
 				<div className="flex items-center gap-2">
@@ -126,7 +113,7 @@ export default function ConversationTurnComponent({
 						title={isCollapsed ? "Expand turn" : "Collapse turn"}
 						aria-expanded={!isCollapsed}
 						className="ml-1 flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-						disabled={!controlsEnabled || isEditing}
+						disabled={!canEdit || isEditing}
 					>
 						{isCollapsed ? (
 							<ChevronRight className="h-4 w-4" />
@@ -135,62 +122,15 @@ export default function ConversationTurnComponent({
 						)}
 						<span>{isCollapsed ? "Open" : "Close"}</span>
 					</button>
-					{isAgent &&
-						typeof referenceCount === "number" &&
-						referenceCount > 0 && (
-							<button
-								type="button"
-								onClick={onViewReferences}
-								className="flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-200"
-								title={`View ${referenceCount} reference${referenceCount !== 1 ? "s" : ""} for this turn`}
-							>
-								<Paperclip className="h-3 w-3" />
-								{referenceCount} reference{referenceCount !== 1 ? "s" : ""}
-							</button>
-						)}
-					{isAgent &&
-						typeof referenceCount === "number" &&
-						referenceCount === 0 && (
-							<button
-								type="button"
-								onClick={onViewReferences}
-								className="flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-200"
-								title="Add references for this turn"
-							>
-								<Paperclip className="h-3 w-3" />
-								Add reference
-							</button>
-						)}
-					{/** Inline spinner appears while generating */}
-					{isAgent && isGenerating && (
-						<span className="ml-1 flex items-center gap-1 rounded-lg border border-violet-200 px-2 py-1 text-xs font-medium text-violet-700">
-							<Loader2 className="h-3 w-3 animate-spin" />
-							<span>Running…</span>
-						</span>
-					)}
-					{/* Removed inline tag badges to avoid overflow */}
 				</div>
 				<div className="flex items-center gap-1">
-					{controlsEnabled && !isEditing && (
+					{canEdit && !isEditing && (
 						<>
-							{isAgent && onRegenerate && (
-								<button
-									type="button"
-									onClick={onRegenerate}
-									title="Run Agent - Performs full agent workflow with tools and search. Updates both answer and references."
-									className="flex items-center gap-1 rounded-lg border border-violet-200 px-2 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
-									disabled={isGenerating}
-								>
-									<Bot className="h-4 w-4" />
-									<span>Agent</span>
-								</button>
-							)}
 							<button
 								type="button"
 								onClick={toggleEditMode}
 								title="Edit turn"
 								className="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-								disabled={isGenerating}
 							>
 								<Edit2 className="h-4 w-4" />
 								<span>Edit</span>
@@ -200,7 +140,6 @@ export default function ConversationTurnComponent({
 								onClick={onDelete}
 								title="Delete turn"
 								className="flex items-center gap-1 rounded-lg border border-rose-200 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-								disabled={isGenerating}
 							>
 								<Trash2 className="h-4 w-4" />
 								<span>Delete</span>
@@ -239,7 +178,6 @@ export default function ConversationTurnComponent({
 						value={editContent}
 						onChange={(e) => setEditContent(e.target.value)}
 						rows={6}
-						disabled={isGenerating}
 						placeholder={
 							isUser
 								? "Enter user message..."

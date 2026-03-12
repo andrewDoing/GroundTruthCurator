@@ -1,5 +1,8 @@
 // Public API for the plugin component registry.
 
+// Side-effect imports: self-registering extensions
+import "./ragCompatToolCallExtension";
+
 export type {
 	ExplorerCellProps,
 	ExplorerColumnExtension,
@@ -12,20 +15,15 @@ export {
 	resetExplorerExtensions,
 } from "./ExplorerExtensions";
 export {
-	FieldComponentRegistry,
-	fieldComponentRegistry,
+	ToolCallExtensions,
+	toolCallDiscriminator,
+	toolCallExtensions,
 } from "./FieldComponentRegistry";
-export {
-	CodeBlockFallback,
-	JsonFallback,
-	KVDictFallback,
-} from "./fallbacks";
 export { PluginErrorBoundary } from "./PluginErrorBoundary";
-export { RegistryRenderer } from "./RegistryRenderer";
+export { ToolCallExtensionRenderer } from "./RegistryRenderer";
 export type {
-	ComponentRegistration,
-	EditorProps,
-	FieldComponentRegistryAPI,
-	RenderContext,
-	ViewerProps,
+	ToolCallActionContext,
+	ToolCallActionProps,
+	ToolCallExtensionRegistration,
+	ToolCallExtensionRegistryAPI,
 } from "./types";

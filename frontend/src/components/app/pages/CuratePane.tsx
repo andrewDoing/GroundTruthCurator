@@ -1,11 +1,9 @@
 import { Check, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import useCurationInstructions from "../../../hooks/useCurationInstructions";
-import type { AgentGenerationResult } from "../../../hooks/useGroundTruth";
 import type {
 	ConversationTurn,
 	GroundTruthItem,
-	Reference,
 } from "../../../models/groundTruth";
 import { cn } from "../../../models/utils";
 import {
@@ -24,17 +22,12 @@ export default function CuratePane({
 	onUpdateTags,
 	onUpdateHistory,
 	onDeleteTurn,
-	onGenerateAgentTurn,
 	onSaveDraft,
 	onApprove,
 	onSkip,
 	onDelete,
 	onRestore,
 	onDuplicate,
-	onUpdateReference,
-	onRemoveReference,
-	onOpenReference,
-	onAddReferences,
 	className,
 }: {
 	current: GroundTruthItem | null | undefined;
@@ -44,17 +37,12 @@ export default function CuratePane({
 	onUpdateTags: (tags: string[]) => void;
 	onUpdateHistory: (history: ConversationTurn[]) => void;
 	onDeleteTurn: (messageIndex: number) => void;
-	onGenerateAgentTurn: (messageIndex: number) => Promise<AgentGenerationResult>;
 	onSaveDraft: () => void;
 	onApprove: () => void;
 	onSkip: () => void;
 	onDelete: () => void;
 	onRestore: () => void;
 	onDuplicate: () => void;
-	onUpdateReference: (refId: string, partial: Partial<Reference>) => void;
-	onRemoveReference: (refId: string) => void;
-	onOpenReference: (ref: Reference) => void;
-	onAddReferences?: (refs: Reference[]) => void;
 	className?: string;
 }) {
 	// Dataset-specific curation instructions (fallback to per-item or local default)
@@ -93,12 +81,7 @@ export default function CuratePane({
 						current={current || null}
 						onUpdateHistory={onUpdateHistory}
 						onDeleteTurn={onDeleteTurn}
-						onGenerate={onGenerateAgentTurn}
 						canEdit={!current?.deleted}
-						onUpdateReference={onUpdateReference}
-						onRemoveReference={onRemoveReference}
-						onOpenReference={onOpenReference}
-						onAddReferences={onAddReferences}
 						onUpdateTags={onUpdateTags}
 					/>
 				</div>

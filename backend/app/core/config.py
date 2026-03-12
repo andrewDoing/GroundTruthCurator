@@ -76,18 +76,6 @@ class Settings(BaseSettings):
     SEARCH_FIELD_TITLE: str = "title"
     SEARCH_FIELD_CHUNK: str = "chunk"
 
-    # Agent chat settings (Azure AI Foundry Agent Service)
-    CHAT_ENABLED: bool = True
-    AZURE_AI_PROJECT_ENDPOINT: str | None = None
-    AZURE_AI_AGENT_ID: str | None = None
-    AGENT_TIMEOUT_SECONDS: int = 30
-    STORE_AGENT_STEPS: bool = False
-
-    # Retrieval service settings (for FunctionTool-based agent retrieval)
-    RETRIEVAL_URL: str | None = None
-    RETRIEVAL_PERMISSIONS_SCOPE: str | None = None
-    RETRIEVAL_TIMEOUT_SECONDS: int = 30
-
     # Optional static frontend serving
     FRONTEND_DIR: str | None = None  # Absolute path inside container (e.g., /app/frontend)
     FRONTEND_INDEX: str = "index.html"

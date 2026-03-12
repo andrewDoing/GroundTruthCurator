@@ -14,11 +14,14 @@
  *   - Arguments + Result in dark code blocks
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
 	ExpectedTools,
+	GroundTruthItem,
+	Reference,
 	ToolCallRecord,
 } from "../../../models/groundTruth";
+import { ToolCallExtensionRenderer } from "../../../registry";
 import { getExecTime } from "../TracePanel";
 
 // ---------------------------------------------------------------------------
@@ -109,14 +112,25 @@ function setToolNecessity(
 export default function ToolCallDetailView({
 	tc,
 	index,
+	item,
 	expectedTools,
 	onUpdateExpectedTools,
+	references,
+	onAddReferences,
+	onOpenReference,
+	onUpdateReference,
+	onRemoveReference,
 }: {
 	tc: ToolCallRecord;
 	index: number;
-	itemId: string;
+	item: GroundTruthItem;
 	expectedTools?: ExpectedTools;
 	onUpdateExpectedTools?: (tools: ExpectedTools) => void;
+	references?: Reference[];
+	onAddReferences?: (refs: Reference[]) => void;
+	onOpenReference?: (ref: Reference) => void;
+	onUpdateReference?: (refId: string, partial: Partial<Reference>) => void;
+	onRemoveReference?: (refId: string) => void;
 }) {
 	const [expanded, setExpanded] = useState(false);
 
@@ -127,6 +141,15 @@ export default function ToolCallDetailView({
 	const decision = getToolState(tc.name, expectedTools);
 	const seg =
 		DECISION_SEGMENTS.find((s) => s.value === decision) ?? DECISION_SEGMENTS[1];
+
+	// Build extension context once
+	const extensionContext = useMemo(
+		() => ({
+			item,
+			readOnly: !onUpdateExpectedTools,
+		}),
+		[item, onUpdateExpectedTools],
+	);
 
 	return (
 		<div className="mt-2 rounded-xl border border-slate-200 bg-white">
@@ -245,6 +268,17 @@ export default function ToolCallDetailView({
 							</>
 						)}
 					</div>
+
+					{/* Plugin-contributed tool call actions */}
+					<ToolCallExtensionRenderer
+						toolCall={tc}
+						context={extensionContext}
+						references={references ?? []}
+						onAddReferences={onAddReferences}
+						onOpenReference={onOpenReference}
+						onUpdateReference={onUpdateReference}
+						onRemoveReference={onRemoveReference}
+					/>
 				</>
 			)}
 		</div>

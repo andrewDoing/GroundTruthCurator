@@ -16,8 +16,9 @@ import type {
 	FeedbackEntry,
 	GroundTruthItem,
 	PluginPayload,
+	Reference,
 } from "../../models/groundTruth";
-import { hasEvidenceData } from "../../models/groundTruth";
+import { getItemReferences, hasEvidenceData } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
 import ContextEntryEditor from "./editors/ContextEntryEditor";
 import ToolCallDetailView from "./editors/ToolCallDetailView";
@@ -263,11 +264,19 @@ export default function TracePanel({
 	className,
 	onUpdateContextEntries,
 	onUpdateExpectedTools,
+	onAddReferences,
+	onOpenReference,
+	onUpdateReference,
+	onRemoveReference,
 }: {
 	item: GroundTruthItem;
 	className?: string;
 	onUpdateContextEntries?: (entries: ContextEntry[]) => void;
 	onUpdateExpectedTools?: (tools: ExpectedTools) => void;
+	onAddReferences?: (refs: Reference[]) => void;
+	onOpenReference?: (ref: Reference) => void;
+	onUpdateReference?: (refId: string, partial: Partial<Reference>) => void;
+	onRemoveReference?: (refId: string) => void;
 }) {
 	const [expanded, setExpanded] = useState(true);
 
@@ -285,6 +294,7 @@ export default function TracePanel({
 	}
 
 	const toolCalls = item.toolCalls ?? [];
+	const references = getItemReferences(item);
 	const contextEntries = item.contextEntries ?? [];
 	const metadata = item.metadata ?? {};
 	const plugins = item.plugins ?? {};
@@ -354,9 +364,14 @@ export default function TracePanel({
 									key={tc.id || String(i)}
 									tc={tc}
 									index={i}
-									itemId={item.id}
+									item={item}
 									expectedTools={item.expectedTools}
 									onUpdateExpectedTools={onUpdateExpectedTools}
+									references={references}
+									onAddReferences={onAddReferences}
+									onOpenReference={onOpenReference}
+									onUpdateReference={onUpdateReference}
+									onRemoveReference={onRemoveReference}
 								/>
 							))}
 						</>

@@ -14,14 +14,7 @@ import {
 } from "../models/groundTruth";
 import { canApproveCandidate } from "../models/gtHelpers";
 import type { Provider } from "../models/provider";
-import { randId } from "../models/utils";
-import {
-	type ChatReference,
-	callAgentChat,
-	formatConversationForAgent,
-	formatExpectedBehaviorForChat,
-} from "../services/chatService";
-import { mapApiErrorToMessage } from "../services/http";
+
 import { addTags } from "../services/tags";
 import { logEvent } from "../services/telemetry";
 import { invalidateGroundTruthCache } from "./useGroundTruthCache";
@@ -33,11 +26,6 @@ type SaveResult =
 	| { ok: false; error: string };
 
 type ExportResult = { ok: true; json: string } | { ok: false; error: string };
-
-export type AgentGenerationResult =
-	| { ok: false; error: string }
-	| { ok: true; messageIndex: number }
-	| { ok: true };
 
 type UseGroundTruth = {
 	// Provider (exposed for ExportModal convenience)
@@ -88,10 +76,6 @@ type UseGroundTruth = {
 	updateHistory: (history: ConversationTurn[]) => void;
 	addTurn: (role: string, content: string) => void;
 	deleteTurn: (messageIndex: number) => void;
-	regenerateAgentTurn: (messageIndex: number) => Promise<AgentGenerationResult>;
-	generateAgentTurn: (messageIndex: number) => Promise<AgentGenerationResult>;
-	runAgentTurn: (messageIndex: number) => Promise<AgentGenerationResult>;
-
 	// Context entries
 	updateContextEntries: (entries: ContextEntry[]) => void;
 
@@ -150,21 +134,6 @@ function stateSignature(it: GroundTruthItem): string {
 		status: it.status,
 		deleted: !!it.deleted,
 	});
-}
-
-function chatReferencesToGroundTruth(
-	chatRefs: ChatReference[],
-	messageIndex: number,
-): Reference[] {
-	if (!chatRefs?.length) return [];
-	return chatRefs.map((ref) => ({
-		id: ref.id?.trim() || randId("ref"),
-		title: ref.title?.trim() || undefined,
-		url: ref.url?.trim() || "",
-		snippet: ref.snippet?.trim() || undefined,
-		keyParagraph: ref.keyParagraph?.trim() || undefined,
-		messageIndex,
-	}));
 }
 
 function useGroundTruth(): UseGroundTruth {
@@ -638,223 +607,6 @@ function useGroundTruth(): UseGroundTruth {
 		setCurrent((prev) => (prev ? { ...prev, expectedTools: tools } : prev));
 	}, []);
 
-	const appendAgentTurn =
-		useCallback(async (): Promise<AgentGenerationResult> => {
-			const item = current;
-			if (!item)
-				return { ok: false, error: "Select a ground truth item first." };
-			const history = item.history || [];
-			if (!history.length)
-				return {
-					ok: false,
-					error: "Add a user turn before requesting an agent response.",
-				};
-			const lastTurn = history[history.length - 1];
-			if (lastTurn.role !== "user")
-				return {
-					ok: false,
-					error: "Add a user message before requesting an agent response.",
-				};
-			const transcript = formatConversationForAgent(history);
-			if (!transcript)
-				return {
-					ok: false,
-					error: "Conversation history is empty.",
-				};
-			const targetId = item.id;
-			const started = Date.now();
-			try {
-				const { content, references } = await callAgentChat(transcript);
-				const trimmed = content.trim();
-				if (!trimmed)
-					return {
-						ok: false,
-						error: "Agent returned an empty response.",
-					};
-				const newMessageIndex = history.length;
-				setCurrent((prev) => {
-					if (!prev || prev.id !== targetId) return prev;
-					const prevHistory = prev.history
-						? [...prev.history]
-						: ([] as ConversationTurn[]);
-					const nextHistory: ConversationTurn[] = [
-						...prevHistory,
-						{ role: "agent", content: trimmed },
-					];
-					const lastUser = [...nextHistory]
-						.reverse()
-						.find((turn) => turn.role === "user");
-					const mappedRefs = chatReferencesToGroundTruth(
-						references,
-						newMessageIndex,
-					);
-					const currentRefs = getItemReferences(prev);
-					const filteredRefs = currentRefs.filter(
-						(ref) => ref.messageIndex !== newMessageIndex,
-					);
-					return withUpdatedReferences(
-						{
-							...prev,
-							history: nextHistory,
-							question: lastUser?.content || prev.question,
-							answer: trimmed,
-						},
-						[...filteredRefs, ...mappedRefs],
-					);
-				});
-				try {
-					logEvent("gtc.agent_turn_add", {
-						referenceCount: references.length,
-						messageIndex: newMessageIndex,
-						durationMs: Date.now() - started,
-					});
-				} catch {}
-				return { ok: true as const, messageIndex: newMessageIndex };
-			} catch (err) {
-				const message = mapApiErrorToMessage(err);
-				try {
-					logEvent("gtc.agent_turn_error", {
-						stage: "add",
-						error: message,
-					});
-				} catch {}
-				return { ok: false as const, error: message };
-			}
-		}, [current]);
-
-	const regenerateAgentTurn = useCallback(
-		async (messageIndex: number): Promise<AgentGenerationResult> => {
-			const item = current;
-			if (!item)
-				return { ok: false, error: "Select a ground truth item first." };
-
-			const history = item.history || [];
-			if (messageIndex < 0 || messageIndex >= history.length)
-				return { ok: false, error: "Turn index is out of range." };
-
-			const targetTurn = history[messageIndex];
-			if (targetTurn.role === "user")
-				return { ok: false, error: "Only non-user turns can be regenerated." };
-
-			// Format conversation history up to this turn
-			const transcript = formatConversationForAgent(history, messageIndex);
-			if (!transcript)
-				return { ok: false, error: "Conversation history is empty." };
-
-			// Append expected behavior if present
-			const expectedBehaviorStr = formatExpectedBehaviorForChat(
-				targetTurn.expectedBehavior,
-			);
-			const messageWithBehavior = expectedBehaviorStr
-				? `${transcript}\n\n${expectedBehaviorStr}`
-				: transcript;
-
-			const targetId = item.id;
-			const started = Date.now();
-
-			try {
-				const { content, references } =
-					await callAgentChat(messageWithBehavior);
-				const trimmed = content.trim();
-				if (!trimmed)
-					return {
-						ok: false,
-						error: "Agent returned an empty response.",
-					};
-
-				// Single state update with all changes (React 18 auto-batches)
-				setCurrent((prev) => {
-					if (!prev || prev.id !== targetId) return prev;
-
-					// Optimize: only copy/update what changed
-					const updatedHistory = prev.history
-						? [...prev.history] // Still need to copy for immutability
-						: [];
-
-					// Direct index update instead of map (O(1) vs O(n))
-					if (messageIndex < updatedHistory.length) {
-						updatedHistory[messageIndex] = {
-							...updatedHistory[messageIndex],
-							content: trimmed,
-						};
-					}
-
-					// Filter refs for this turn only
-					const currentRefs = getItemReferences(prev);
-					const refsToKeep = currentRefs.filter(
-						(ref) => ref.messageIndex !== messageIndex,
-					);
-
-					const mappedRefs = chatReferencesToGroundTruth(
-						references,
-						messageIndex,
-					);
-
-					// Find last non-user turn efficiently (reverse search, early exit)
-					let lastAgentContent = prev.answer;
-					for (let i = updatedHistory.length - 1; i >= 0; i--) {
-						if (updatedHistory[i].role !== "user") {
-							lastAgentContent = updatedHistory[i].content;
-							break;
-						}
-					}
-
-					// Single state update with all changes
-					return withUpdatedReferences(
-						{
-							...prev,
-							history: updatedHistory,
-							answer: lastAgentContent,
-						},
-						[...refsToKeep, ...mappedRefs],
-					);
-				});
-
-				// Fire-and-forget logging (non-blocking)
-				try {
-					logEvent("gtc.agent_turn_regenerate", {
-						referenceCount: references.length,
-						messageIndex,
-						hasExpectedBehavior: !!expectedBehaviorStr,
-						durationMs: Date.now() - started,
-					});
-				} catch {}
-
-				return { ok: true as const, messageIndex };
-			} catch (err) {
-				const message = mapApiErrorToMessage(err);
-				try {
-					logEvent("gtc.agent_turn_error", {
-						stage: "regenerate",
-						error: message,
-					});
-				} catch {}
-				return { ok: false as const, error: message };
-			}
-		},
-		[current],
-	);
-
-	const generateAgentTurn = useCallback(
-		async (messageIndex: number): Promise<AgentGenerationResult> => {
-			if (messageIndex < 0) return appendAgentTurn();
-			return regenerateAgentTurn(messageIndex);
-		},
-		[appendAgentTurn, regenerateAgentTurn],
-	);
-
-	/**
-	 * Run full agent with tools (searches + retrieval) to regenerate an agent turn.
-	 * Updates both the answer and references for the turn.
-	 * This is the same as regenerateAgentTurn.
-	 */
-	const runAgentTurn = useCallback(
-		async (messageIndex: number): Promise<AgentGenerationResult> => {
-			return regenerateAgentTurn(messageIndex);
-		},
-		[regenerateAgentTurn],
-	);
-
 	const duplicateCurrent = useCallback(async () => {
 		const p = providerRef.current;
 		if (!current || !p) return { ok: false as const, error: "No current" };
@@ -906,9 +658,6 @@ function useGroundTruth(): UseGroundTruth {
 		deleteTurn,
 		updateContextEntries,
 		updateExpectedTools,
-		regenerateAgentTurn,
-		generateAgentTurn,
-		runAgentTurn,
 		saving,
 		save,
 		canApprove,

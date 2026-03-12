@@ -180,12 +180,6 @@ def create_app() -> FastAPI:
     except Exception:
         # Don't block app creation if search isn't configured
         pass
-    try:
-        container.init_chat()
-    except Exception:
-        # Chat wiring is optional and should not block startup
-        pass
-
     # Convenience aliases at the root for Swagger UI
     # Root convenience redirects for docs should also enforce auth (same as /v1/docs)
     @app.get("/docs", include_in_schema=False, dependencies=[Depends(require_user)])
