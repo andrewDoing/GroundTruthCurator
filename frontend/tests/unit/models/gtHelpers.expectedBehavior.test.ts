@@ -23,6 +23,8 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 		answer: "Test answer",
 		status: "draft",
 		references: [],
+		expectedTools: { required: [{ name: "search" }] },
+		toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
 		history: [
 			{
 				role: "user",
@@ -194,12 +196,12 @@ describe("canApproveMultiTurn - expectedTools gating", () => {
 		{ role: "agent", content: "a" },
 	];
 
-	it("approves when no expectedTools are defined", () => {
+	it("blocks approval when no expectedTools are defined (≥1 required tool gate)", () => {
 		const item: GroundTruthItem = {
 			...localBaseItem,
 			history: validHistory,
 		};
-		expect(canApproveMultiTurn(item)).toBe(true);
+		expect(canApproveMultiTurn(item)).toBe(false);
 	});
 
 	it("approves when all required tools are present in toolCalls", () => {
@@ -222,7 +224,7 @@ describe("canApproveMultiTurn - expectedTools gating", () => {
 		expect(canApproveMultiTurn(item)).toBe(false);
 	});
 
-	it("does not block approval for optional or notNeeded tools", () => {
+	it("blocks approval when only optional or notNeeded tools exist (no required)", () => {
 		const item: GroundTruthItem = {
 			...localBaseItem,
 			history: validHistory,
@@ -232,6 +234,40 @@ describe("canApproveMultiTurn - expectedTools gating", () => {
 			},
 			toolCalls: [],
 		};
+		expect(canApproveMultiTurn(item)).toBe(false);
+	});
+
+	it("allows plugin bypass of required-tools gate", () => {
+		const item: GroundTruthItem = {
+			...localBaseItem,
+			history: validHistory,
+			plugins: {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1",
+					data: { canBypassRequiredTools: true },
+				},
+			},
+		};
 		expect(canApproveMultiTurn(item)).toBe(true);
+	});
+
+	it("plugin bypass does not skip validation of required tools actually defined", () => {
+		const item: GroundTruthItem = {
+			...localBaseItem,
+			history: validHistory,
+			expectedTools: { required: [{ name: "search" }] },
+			toolCalls: [],
+			plugins: {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1",
+					data: { canBypassRequiredTools: true },
+				},
+			},
+		};
+		// Bypass allows the "≥1 required" gate, but validateExpectedTools still blocks
+		// because the required "search" tool is missing from toolCalls
+		expect(canApproveMultiTurn(item)).toBe(false);
 	});
 });

@@ -15,6 +15,7 @@ export type ToolCallRecord = {
 	id: string;
 	name: string;
 	callType: "tool" | "subagent";
+	arguments?: Record<string, unknown>;
 	agent?: string | null;
 	stepNumber?: number | null;
 	parallelGroup?: string | null;

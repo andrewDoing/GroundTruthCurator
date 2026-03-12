@@ -4,6 +4,7 @@ import { isDemoModeIgnored, shouldUseDemoProvider } from "../config/demo";
 import type {
 	ContextEntry,
 	ConversationTurn,
+	ExpectedTools,
 	GroundTruthItem,
 	Reference,
 } from "../models/groundTruth";
@@ -89,6 +90,9 @@ type UseGroundTruth = {
 
 	// Context entries
 	updateContextEntries: (entries: ContextEntry[]) => void;
+
+	// Expected tools
+	updateExpectedTools: (tools: ExpectedTools) => void;
 
 	// Save + status
 	saving: boolean;
@@ -612,6 +616,10 @@ function useGroundTruth(): UseGroundTruth {
 		setCurrent((prev) => (prev ? { ...prev, contextEntries: entries } : prev));
 	}, []);
 
+	const updateExpectedTools = useCallback((tools: ExpectedTools) => {
+		setCurrent((prev) => (prev ? { ...prev, expectedTools: tools } : prev));
+	}, []);
+
 	const appendAgentTurn =
 		useCallback(async (): Promise<AgentGenerationResult> => {
 			const item = current;
@@ -874,6 +882,7 @@ function useGroundTruth(): UseGroundTruth {
 		addTurn,
 		deleteTurn,
 		updateContextEntries,
+		updateExpectedTools,
 		regenerateAgentTurn,
 		generateAgentTurn,
 		runAgentTurn,

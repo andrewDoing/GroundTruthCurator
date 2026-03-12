@@ -5,6 +5,18 @@ import {
 	validateExpectedTools,
 } from "./validators";
 
+/**
+ * Check whether a plugin declares exemption from the required-tools check.
+ * A plugin payload with `data.canBypassRequiredTools: true` opts the item
+ * out of the ≥1 required tool gate.
+ */
+export function canBypassRequiredToolsCheck(item: GroundTruthItem): boolean {
+	if (!item.plugins) return false;
+	return Object.values(item.plugins).some(
+		(p) => p.data?.canBypassRequiredTools === true,
+	);
+}
+
 // Dedupe references by URL and messageIndex combination
 // In multi-turn contexts, the same URL can exist for different turns
 // In single-turn contexts (no messageIndex), dedupe by URL only
@@ -46,9 +58,8 @@ export function canApproveCandidate(
 
 // Determine if a multi-turn / generic item can be approved.
 // Generic approval gate: valid conversation pattern + not deleted +
+// ≥1 required expected tool (unless plugin bypass) +
 // all required expected tools present in toolCalls (when specified).
-// Retrieval-specific reference gating stays on the single-turn compatibility path
-// until the later compatibility-pack work lands.
 export function canApproveMultiTurn(
 	item: GroundTruthItem | null | undefined,
 ): boolean {
@@ -58,6 +69,10 @@ export function canApproveMultiTurn(
 	// Validate conversation pattern (starts with user, pairs complete)
 	const patternValidation = validateConversationPattern(item.history);
 	if (!patternValidation.valid) return false;
+
+	// Require at least one required tool unless a plugin overrides this gate
+	const hasRequired = (item.expectedTools?.required?.length ?? 0) > 0;
+	if (!hasRequired && !canBypassRequiredToolsCheck(item)) return false;
 
 	// Validate expected tools when the item defines required tools
 	const toolValidation = validateExpectedTools(item);

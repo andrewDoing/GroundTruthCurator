@@ -440,6 +440,7 @@ export default function GTAppDemo() {
 													)
 												}
 												onUpdateContextEntries={gt.updateContextEntries}
+												onUpdateExpectedTools={gt.updateExpectedTools}
 											/>
 										</div>
 									}
@@ -537,6 +538,7 @@ export default function GTAppDemo() {
 									!!(gt.current?.history && gt.current.history.length > 0)
 								}
 								onUpdateContextEntries={gt.updateContextEntries}
+								onUpdateExpectedTools={gt.updateExpectedTools}
 							/>
 						</EvidenceDrawer>
 					</div>

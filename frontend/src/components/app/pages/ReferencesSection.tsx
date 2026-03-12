@@ -19,6 +19,7 @@
 import { useRef, useState } from "react";
 import type {
 	ContextEntry,
+	ExpectedTools,
 	GroundTruthItem,
 	Reference,
 } from "../../../models/groundTruth";
@@ -41,6 +42,7 @@ export default function ReferencesSection({
 	onOpenReference,
 	isMultiTurn,
 	onUpdateContextEntries,
+	onUpdateExpectedTools,
 }: {
 	/** Optional: current ground truth item.  When present the evidence panel
 	 *  is rendered at the top of the right pane. */
@@ -57,6 +59,7 @@ export default function ReferencesSection({
 	onOpenReference: (ref: Reference) => void;
 	isMultiTurn?: boolean;
 	onUpdateContextEntries?: (entries: ContextEntry[]) => void;
+	onUpdateExpectedTools?: (tools: ExpectedTools) => void;
 }) {
 	const [rightTab, setRightTab] = useState<"search" | "selected">("search");
 	const [searchSelected, setSearchSelected] = useState<Set<string>>(new Set());
@@ -130,6 +133,7 @@ export default function ReferencesSection({
 					<TracePanel
 						item={item}
 						onUpdateContextEntries={onUpdateContextEntries}
+						onUpdateExpectedTools={onUpdateExpectedTools}
 					/>
 				</div>
 			)}

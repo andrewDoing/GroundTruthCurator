@@ -1,9 +1,9 @@
 /**
- * TracePanel — evidence panel with editable context entries.
+ * TracePanel — evidence panel with editable context entries and tool decisions.
  *
  * Displays generic agentic-schema data attached to a GroundTruthItem:
- *   - Expected tools review (expectedTools vs toolCalls)
- *   - Tool calls (toolCalls)
+ *   - Expected tools review (expectedTools vs toolCalls) — editable when onUpdateExpectedTools is provided
+ *   - Tool calls (toolCalls) with expandable arguments and response
  *   - Context entries (contextEntries) — editable when onUpdateContextEntries is provided
  *   - Trace IDs (traceIds)
  *   - Metadata dictionary (metadata)
@@ -18,15 +18,17 @@
 import { useState } from "react";
 import type {
 	ContextEntry,
+	ExpectedTools,
 	FeedbackEntry,
 	GroundTruthItem,
 	PluginPayload,
-	ToolCallRecord,
 	ToolExpectation,
 } from "../../models/groundTruth";
 import { hasEvidenceData } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
 import ContextEntryEditor from "./editors/ContextEntryEditor";
+import ToolCallDetailView from "./editors/ToolCallDetailView";
+import ToolNecessityEditor from "./editors/ToolNecessityEditor";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -74,14 +76,52 @@ type ToolExpectationStatus = {
 	called: boolean;
 };
 
-function ExpectedToolsSection({ item }: { item: GroundTruthItem }) {
+function ExpectedToolsSection({
+	item,
+	onUpdateExpectedTools,
+}: {
+	item: GroundTruthItem;
+	onUpdateExpectedTools?: (tools: ExpectedTools) => void;
+}) {
 	const expected = item.expectedTools;
-	if (
-		!expected ||
-		(!expected.required?.length &&
-			!expected.optional?.length &&
-			!expected.notNeeded?.length)
-	) {
+	const toolCalls = item.toolCalls ?? [];
+	const hasAnyExpectedTools =
+		expected &&
+		(expected.required?.length ||
+			expected.optional?.length ||
+			expected.notNeeded?.length);
+
+	// Show the editor when handler is provided and there are tool calls to classify
+	if (onUpdateExpectedTools && toolCalls.length > 0) {
+		const calledNames = new Set(toolCalls.map((tc) => tc.name));
+		const requiredMissing = (expected?.required ?? []).filter(
+			(te) => !calledNames.has(te.name),
+		);
+		const allRequiredMet = requiredMissing.length === 0;
+
+		return (
+			<CollapsibleSection
+				title="Expected Tools"
+				badge={
+					!hasAnyExpectedTools
+						? "unclassified"
+						: allRequiredMet
+							? "✓"
+							: `${requiredMissing.length} missing`
+				}
+				defaultOpen={!allRequiredMet || !hasAnyExpectedTools}
+			>
+				<ToolNecessityEditor
+					toolCalls={toolCalls}
+					expectedTools={expected}
+					onUpdate={onUpdateExpectedTools}
+				/>
+			</CollapsibleSection>
+		);
+	}
+
+	// Read-only view when no update handler or no expectedTools
+	if (!hasAnyExpectedTools) {
 		return null;
 	}
 
@@ -184,51 +224,7 @@ function ExpectedToolsSection({ item }: { item: GroundTruthItem }) {
 }
 
 // ── Tool Calls ──────────────────────────────────────────────────────────────
-
-function ToolCallEntry({ tc, index }: { tc: ToolCallRecord; index: number }) {
-	const [expanded, setExpanded] = useState(false);
-	const hasResponse = tc.response !== undefined && tc.response !== null;
-	return (
-		<div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
-			<div className="flex items-start justify-between gap-2">
-				<div className="flex items-center gap-2 flex-wrap">
-					<span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">
-						{tc.callType}
-					</span>
-					<span className="text-sm font-mono text-slate-800">{tc.name}</span>
-					{tc.stepNumber != null && (
-						<span className="text-xs text-slate-500">step {tc.stepNumber}</span>
-					)}
-					{tc.agent && (
-						<span className="text-xs text-slate-500">agent: {tc.agent}</span>
-					)}
-				</div>
-				<span className="text-xs text-slate-400 flex-none">#{index + 1}</span>
-			</div>
-			{tc.id && (
-				<div className="text-xs font-mono text-slate-400 truncate">
-					id: {tc.id}
-				</div>
-			)}
-			{hasResponse && (
-				<button
-					type="button"
-					className="mt-1 text-xs text-violet-600 hover:underline"
-					onClick={() => setExpanded((v) => !v)}
-				>
-					{expanded ? "▾ Hide response" : "▸ Show response"}
-				</button>
-			)}
-			{expanded && hasResponse && (
-				<pre className="mt-1 overflow-auto rounded-md bg-slate-100 p-2 text-xs text-slate-700 max-h-48">
-					{typeof tc.response === "string"
-						? tc.response
-						: JSON.stringify(tc.response, null, 2)}
-				</pre>
-			)}
-		</div>
-	);
-}
+// ToolCallDetailView handles expand/collapse for arguments and response.
 
 // ── Feedback ───────────────────────────────────────────────────────────────
 
@@ -334,10 +330,12 @@ export default function TracePanel({
 	item,
 	className,
 	onUpdateContextEntries,
+	onUpdateExpectedTools,
 }: {
 	item: GroundTruthItem;
 	className?: string;
 	onUpdateContextEntries?: (entries: ContextEntry[]) => void;
+	onUpdateExpectedTools?: (tools: ExpectedTools) => void;
 }) {
 	if (!hasEvidenceData(item)) {
 		return (
@@ -366,8 +364,11 @@ export default function TracePanel({
 				Evidence &amp; Trace
 			</div>
 
-			{/* Expected Tools review – always show when present */}
-			<ExpectedToolsSection item={item} />
+			{/* Expected Tools review – editable when handler is provided */}
+			<ExpectedToolsSection
+				item={item}
+				onUpdateExpectedTools={onUpdateExpectedTools}
+			/>
 
 			{/* Trace IDs */}
 			{Object.keys(traceIds).length > 0 && (
@@ -385,7 +386,12 @@ export default function TracePanel({
 				>
 					<div className="space-y-2">
 						{toolCalls.map((tc, i) => (
-							<ToolCallEntry key={tc.id || String(i)} tc={tc} index={i} />
+							<ToolCallDetailView
+								key={tc.id || String(i)}
+								tc={tc}
+								index={i}
+								itemId={item.id}
+							/>
 						))}
 					</div>
 				</CollapsibleSection>

@@ -43,7 +43,7 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Phase 3 validation command: `cd backend && uv run ruff check app/ && uv run ty check app/ && uv run pytest tests/integration/ -v -k 'assignments or ground_truths or search or snapshot'`.
 - Phase 3 iteration 2 review closed `R-001`: `backend/app/api/v1/ground_truths.py` now routes bulk `approve=true` imports through `validate_item_for_approval()`, and the targeted regression + integration slice both pass (`18 passed` targeted unit slice, `90 passed / 2 skipped` integration slice). Treat remaining `GroundTruthItem` field-shadowing warnings as known deferred noise, not a fresh Phase 3 regression.
 
-### Frontend evidence shell (Phase 4)
+### Frontend evidence shell (Phase 4 — prior iterations)
 - Phase 4 reviewer finding `R-001`: `frontend/src/models/groundTruth.ts` `hasEvidenceData()` and `frontend/src/components/app/TracePanel.tsx` still omit `contextEntries` and plugin payload rendering, so items carrying only those fields do not surface in the right pane yet.
 - Phase 4 reviewer finding `R-002`: `frontend/src/components/app/ReferencesPanel/ReferencesTabs.tsx` still calls `setRightTab("selected")` during render for multi-turn mode, which now shows up as `Cannot update a component while rendering a different component` during `ReferencesSection.test.tsx`.
 - `frontend/src/components/app/pages/ReferencesSection.tsx` is now the generic right-pane host: render `TracePanel` first when `hasEvidenceData(item)` is true, then show `ReferencesTabs` only as a labeled RAG compatibility surface (`!isMultiTurn || references.length > 0`).
@@ -56,15 +56,29 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Current frontend gate after Phase 4 iteration 2: `267/267` tests passing, with the long-standing `QuestionsExplorer` `act(...)` warnings and the existing Vite chunk-size warning still emitted. The render-phase `ReferencesTabs` warning is gone.
 - Reviewer rerun on 2026-03-12 re-confirmed Phase 4 closeout: `ReferencesSection.test.tsx` and `ReferencesTabs.multiturn.test.tsx` still cover the fixed paths, `267/267` frontend tests pass, and only the long-standing `QuestionsExplorer` `act(...)` plus Vite chunk-size warnings remain.
 
-### Phase 6 workspace layout (Phase 3 → Phase 6)
-- The curate workspace now uses `react-resizable-panels` v1.x (Group/Panel/Separator API, NOT PanelGroup/PanelResizeHandle). The library API is: `orientation` (not `direction`), `Group` (not `PanelGroup`), `Separator` (not `PanelResizeHandle`). No `autoSaveId` prop — use `onLayoutChanged` + `defaultLayout` with manual localStorage.
-- `SplitPaneLayout.tsx` lives at `frontend/src/components/app/layout/SplitPaneLayout.tsx`. The left panel id is `"editor"`, right is `"evidence"`, stored under `gtc-split-pane-sizes`.
-- Mobile evidence drawer lives at `frontend/src/components/app/layout/EvidenceDrawer.tsx`. Toggle state (`drawerOpen`) is in `demo.tsx`.
+### Tool-Call Decision Editing (Phase 4 — current iteration)
+- `ToolCallRecord` now has `arguments?: Record<string, unknown>`. The apiMapper passes through the raw object — no special mapping needed since the spread already copies it.
+- `ToolCallDetailView` at `frontend/src/components/app/editors/ToolCallDetailView.tsx` replaces the inline `ToolCallEntry` in TracePanel. Uses `CodeBlockFallback` from registry with a minimal `RenderContext` stub for arguments and response rendering.
+- `ToolNecessityEditor` at `frontend/src/components/app/editors/ToolNecessityEditor.tsx` is a tri-state toggle (required/optional/not-needed) per tool name. Tool names are derived from the union of toolCalls + existing expectedTools entries. Default state for unclassified tools is `optional`.
+- `useGroundTruth` now exposes `updateExpectedTools(tools: ExpectedTools)`. Prop is threaded through `demo.tsx` → `ReferencesSection` → `TracePanel` → `ToolNecessityEditor` and also → `ExpectedToolsSection`.
+- `canApproveMultiTurn` now enforces ≥1 required tool in `expectedTools.required`. Items with no expectedTools or empty required array are blocked UNLESS a plugin declares `data.canBypassRequiredTools: true`.
+- `canBypassRequiredToolsCheck(item)` checks `item.plugins` for any payload with `data.canBypassRequiredTools === true`. RAG compat items should set this flag in their plugin payload.
+- The bypass only skips the "≥1 required tool" gate; it does NOT skip `validateExpectedTools` (required tools still must appear in toolCalls if defined).
+- Phase 4 validation: `cd frontend && npm run typecheck && npm run lint:check && npm run test:run -- --pool=threads --poolOptions.threads.singleThread`. Current gate: 297/297 tests (39 test files), tsc/Biome clean.
+- Backend test for required-tools enforcement (`test_validation_required_tools.py`) deferred to Phase 5 when the backend side is implemented.
+- Test updates: `gtHelpers.expectedBehavior.test.ts` base item now includes `expectedTools: { required: [...] }` + `toolCalls` to satisfy the new gate. Two new test cases: plugin bypass and strictness when no required tools defined.
+
+### Phase 3 workspace layout (reviewer-confirmed)
+- The curate workspace now uses `react-resizable-panels` v4.7.2 (Group/Panel/Separator API, NOT PanelGroup/PanelResizeHandle). The library API is: `orientation` (not `direction`), `Group` (not `PanelGroup`), `Separator` (not `PanelResizeHandle`). No `autoSaveId` prop — use `onLayoutChanged` + `defaultLayout` with manual localStorage.
+- `SplitPaneLayout.tsx` lives at `frontend/src/components/app/layout/SplitPaneLayout.tsx`. The left panel id is `"editor"`, right is `"evidence"`, stored under `gtc-split-pane-sizes`. Min size is 20% per panel (percentage-based, not pixel).
+- Mobile evidence drawer lives at `frontend/src/components/app/layout/EvidenceDrawer.tsx`. Toggle state (`drawerOpen`) is in `demo.tsx`. Drawer has `role="dialog"`, `aria-modal`, backdrop, outside-click dismiss, Escape key.
 - `ContextEntryEditor.tsx` at `frontend/src/components/app/editors/ContextEntryEditor.tsx` (note: `editors/` plural, distinct from existing `editor/` singular directory).
 - `useGroundTruth` now exposes `updateContextEntries(entries: ContextEntry[])`. The prop is threaded through `demo.tsx` → `ReferencesSection` → `TracePanel` → `ContextEntryEditor`.
 - `demo.tsx` no longer uses CSS grid for the curate layout. The grid was `md:grid-cols-12` with `col-span` classes; it's now flexbox + SplitPaneLayout. The `cn` import was removed from demo.tsx since it's unused post-grid-removal.
 - Phase 3 validation: `cd frontend && npm run typecheck && npm run lint:check && npm run test:run -- --pool=threads --poolOptions.threads.singleThread` — expect 288+ tests, 38+ files, 134 files linted.
 - Biome flags `autoFocus` as unsafe (`noAutofocus`); use `useRef` + `useEffect` focus pattern instead.
+- ContextEntryEditor does not yet integrate RegistryRenderer for plugin-contributed context entry editors — no plugins register such editors yet. Future phases wiring plugin context-entry renderers should add RegistryRenderer lookup here.
+- Phase 3 reviewer iteration 1: approved with 0 findings. All success criteria met, 288/288 tests, tsc/Biome clean.
 
 ### Frontend component registry (Phase 2 — registry implementation)
 - Registry files live at `frontend/src/registry/`: `FieldComponentRegistry.ts` (singleton), `RegistryRenderer.tsx` (wrapper), `PluginErrorBoundary.tsx`, and `fallbacks/` directory.
