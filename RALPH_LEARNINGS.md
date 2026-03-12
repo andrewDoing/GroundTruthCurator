@@ -116,3 +116,17 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - Phase 5 validation: `cd backend && uv run ruff check app/ && uv run ty check app/ && uv run pytest tests/unit/ -v` — 380 tests passing. Frontend: `npm run api:types && npm run typecheck` clean.
 - New test files: `test_rag_compat_approval.py` (10), `test_plugin_pack_extension.py` (13), `test_search_raw_payload.py` (6), `test_validation_required_tools.py` (8) — 37 new tests total.
 - Prior Phase 5 validation notes (stale `HistoryEntryPatch` fix, `WI-08`/`WI-09` noise) still apply from earlier iterations.
+- **Reviewer iteration 1 (2026-03-12)**: Phase 5 approved with 0 findings. All 6 steps verified: RAG waiver migration, extension surface reuse from Phase 1, raw_payload preservation, stats plugin-extensibility, 37 new tests, all gates pass (380/380 backend tests, ruff/ty/tsc clean). The `GroundTruthItem` field-shadowing warnings (12 in pytest output) are pre-existing known noise — not Phase 5 regressions.
+- Any future pack adding `collect_approval_waivers()` must return **exact** error string matches — the filter is string-equality based, not substring.
+
+### Phase 6 Retrieval Normalization
+
+- `GroundTruthItem.references` is **removed** from the frontend model. All access must go through `getItemReferences(item)` and `withUpdatedReferences(item, refs)` in `frontend/src/models/groundTruth.ts`.
+- Per-call state lives at `item.plugins?.["rag-compat"]?.data?.retrievals`, keyed by tool call ID or `"_unassociated"` for refs without a tool call association.
+- `RetrievalBucket` type includes `messageIndex`, `keyParagraph`, `bonus`, `visitedAt` — these must be preserved during migration and round-tripping.
+- `groundTruthFromApi()` in `apiMapper.ts` auto-migrates legacy `refs` → per-call plugin state. `groundTruthToPatch()` reads from per-call state and also sends `plugins` in the patch body.
+- Backend `RagCompatPack` (in `backend/app/plugins/packs/rag_compat.py`) has `get_retrievals()`, `set_retrievals()`, `get_all_candidates_flat()`, `migrate_refs_to_per_call()`. The `_UNASSOCIATED_KEY = "_unassociated"` matches the frontend constant.
+- `ExplorerExtensions.ts` at `frontend/src/registry/ExplorerExtensions.ts` is a module-level singleton with self-registering RAG "Refs" column. Import the module to trigger registration.
+- `QuestionsExplorer.tsx` renders plugin-contributed columns from `getExplorerExtensions()` in both header and row cells.
+- Phase 6 validation: backend `394/394` tests, frontend `297/297` tests, tsc clean, Biome `138 files` (3 pre-existing errors, 16 pre-existing warnings — all in test files, `noNonNullAssertion`).
+- The `GroundTruthItem` field-shadowing warnings (12 in pytest) are pre-existing noise from Phase 1.

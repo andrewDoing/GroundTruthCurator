@@ -7,7 +7,6 @@ const item: GroundTruthItem = {
 	id: "1",
 	question: "What is this software?",
 	answer: "",
-	references: [],
 	status: "draft",
 	providerId: "json",
 	tags: [],

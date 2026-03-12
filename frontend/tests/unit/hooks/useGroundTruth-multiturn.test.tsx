@@ -4,6 +4,7 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../../../src/models/groundTruth";
+import { getItemReferences } from "../../../src/models/groundTruth";
 
 vi.mock("../../../src/config/demo", () => ({
 	default: true,
@@ -115,7 +116,7 @@ describe("useGroundTruth multi-turn flows", () => {
 			role: "agent",
 			content: "Generated agent guidance",
 		});
-		const refsForTurn = (current.references || []).filter(
+		const refsForTurn = getItemReferences(current).filter(
 			(r) => r.messageIndex === 1,
 		);
 		expect(refsForTurn).toHaveLength(1);
@@ -177,7 +178,7 @@ describe("useGroundTruth multi-turn flows", () => {
 		expect(history[1]).toMatchObject({ content: "Updated agent answer" });
 		expect(history[0]).toMatchObject({ content: "Original Q" });
 		expect(history[2]).toMatchObject({ content: "Second Q" });
-		const refs = result.current.current?.references ?? [];
+		const refs = getItemReferences(result.current.current!);
 		const refsForTurn = refs.filter((r) => r.messageIndex === 1);
 		expect(refsForTurn).toHaveLength(1);
 		expect(refsForTurn[0].url).toBe("https://ref.example.com/new");
@@ -246,7 +247,7 @@ describe("useGroundTruth multi-turn flows", () => {
 			content: "Updated output answer",
 		});
 		expect(result.current.current?.answer).toBe("Updated output answer");
-		const refsForTurn = (result.current.current?.references ?? []).filter(
+		const refsForTurn = getItemReferences(result.current.current!).filter(
 			(ref) => ref.messageIndex === 1,
 		);
 		expect(refsForTurn).toHaveLength(1);
@@ -256,7 +257,7 @@ describe("useGroundTruth multi-turn flows", () => {
 	it("stateSignature ignores visitedAt mutations for hasUnsaved", async () => {
 		const { result } = await setupHook();
 		const before = result.current.hasUnsaved;
-		const firstRef = result.current.current?.references?.[0];
+		const firstRef = getItemReferences(result.current.current!)[0];
 		expect(firstRef).toBeTruthy();
 		await act(async () => {
 			if (firstRef) {
@@ -268,7 +269,7 @@ describe("useGroundTruth multi-turn flows", () => {
 
 	it("stateSignature changes when reference messageIndex updates", async () => {
 		const { result } = await setupHook();
-		const ref = result.current.current?.references?.[0];
+		const ref = getItemReferences(result.current.current!)[0];
 		expect(ref).toBeTruthy();
 		await act(async () => {
 			if (ref) {

@@ -34,6 +34,7 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../../../models/groundTruth";
+import { getItemReferences } from "../../../models/groundTruth";
 import { cn } from "../../../models/utils";
 import {
 	validateConversationPattern,
@@ -349,7 +350,7 @@ export default function CuratePane({
 								</>
 							) : (
 								<>
-									{current.references.length === 0 && (
+									{getItemReferences(current).length === 0 && (
 										<p className="flex items-start gap-2">
 											<span className="mt-0.5 flex-shrink-0">✗</span>
 											<span>
@@ -358,18 +359,18 @@ export default function CuratePane({
 											</span>
 										</p>
 									)}
-									{(current.references || []).filter((r) => !r.visitedAt)
+									{getItemReferences(current).filter((r) => !r.visitedAt)
 										.length > 0 && (
 										<p className="flex items-start gap-2">
 											<span className="mt-0.5 flex-shrink-0">✗</span>
 											<span>
 												<strong>Unvisited references:</strong>{" "}
 												{
-													(current.references || []).filter((r) => !r.visitedAt)
+													getItemReferences(current).filter((r) => !r.visitedAt)
 														.length
 												}{" "}
 												reference
-												{(current.references || []).filter((r) => !r.visitedAt)
+												{getItemReferences(current).filter((r) => !r.visitedAt)
 													.length !== 1
 													? "s"
 													: ""}{" "}

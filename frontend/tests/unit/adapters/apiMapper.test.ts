@@ -5,6 +5,7 @@ import {
 	groundTruthToPatch,
 } from "../../../src/adapters/apiMapper";
 import type { GroundTruthItem } from "../../../src/models/groundTruth";
+import { getItemReferences } from "../../../src/models/groundTruth";
 
 function makeApiItem(overrides: Partial<ApiGroundTruth> = {}): ApiGroundTruth {
 	return {
@@ -108,7 +109,8 @@ describe("groundTruthFromApi", () => {
 			const result = groundTruthFromApi(api);
 
 			// Refs from history[1] should have messageIndex 1
-			const refsAt1 = result.references.filter((r) => r.messageIndex === 1);
+			const allRefs = getItemReferences(result);
+			const refsAt1 = allRefs.filter((r) => r.messageIndex === 1);
 			expect(refsAt1).toHaveLength(2);
 			expect(refsAt1.map((r) => r.url)).toEqual([
 				"https://ref1.com",
@@ -116,7 +118,7 @@ describe("groundTruthFromApi", () => {
 			]);
 
 			// Refs from history[3] should have messageIndex 3
-			const refsAt3 = result.references.filter((r) => r.messageIndex === 3);
+			const refsAt3 = allRefs.filter((r) => r.messageIndex === 3);
 			expect(refsAt3).toHaveLength(1);
 			expect(refsAt3[0].url).toBe("https://ref3.com");
 		});
@@ -141,7 +143,7 @@ describe("groundTruthFromApi", () => {
 				],
 			});
 			const result = groundTruthFromApi(api);
-			const ref = result.references[0];
+			const ref = getItemReferences(result)[0];
 
 			expect(ref.url).toBe("https://example.com");
 			expect(ref.title).toBe("Example Title");
@@ -200,8 +202,8 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			expect(result.references).toHaveLength(1);
-			expect(result.references[0].messageIndex).toBe(1);
+			expect(getItemReferences(result)).toHaveLength(1);
+			expect(getItemReferences(result)[0].messageIndex).toBe(1);
 		});
 
 		it("creates empty agent turn when answer is empty", () => {
@@ -230,8 +232,8 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			expect(result.references).toHaveLength(1);
-			expect(result.references[0].messageIndex).toBeUndefined();
+			expect(getItemReferences(result)).toHaveLength(1);
+			expect(getItemReferences(result)[0].messageIndex).toBeUndefined();
 		});
 	});
 
@@ -318,7 +320,6 @@ describe("groundTruthToPatch", () => {
 			deleted: false,
 			tags: [],
 			manualTags: [],
-			references: [],
 			...overrides,
 		};
 	}
@@ -345,10 +346,22 @@ describe("groundTruthToPatch", () => {
 					{ role: "user", content: "Q" },
 					{ role: "agent", content: "A" },
 				],
-				references: [
-					{ id: "r1", url: "https://ref.com", messageIndex: 1 },
-					{ id: "r2", url: "https://user-ref.com", messageIndex: 0 }, // Should be ignored
-				],
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							retrievals: {
+								_unassociated: {
+									candidates: [
+										{ url: "https://ref.com", messageIndex: 1 },
+										{ url: "https://user-ref.com", messageIndex: 0 },
+									],
+								},
+							},
+						},
+					},
+				},
 			});
 			const patch = groundTruthToPatch({ item });
 
@@ -370,10 +383,22 @@ describe("groundTruthToPatch", () => {
 					{ role: "user", content: "Q" },
 					{ role: "agent", content: "A" },
 				],
-				references: [
-					{ id: "r1", url: "https://legacy.ref", messageIndex: 1 },
-					{ id: "r2", url: "https://new.ref", messageIndex: 1 },
-				],
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							retrievals: {
+								_unassociated: {
+									candidates: [
+										{ url: "https://legacy.ref", messageIndex: 1 },
+										{ url: "https://new.ref", messageIndex: 1 },
+									],
+								},
+							},
+						},
+					},
+				},
 			});
 			const patch = groundTruthToPatch({ item, originalApi });
 
@@ -400,7 +425,19 @@ describe("groundTruthToPatch", () => {
 					{ role: "user", content: "Q" },
 					{ role: "agent", content: "A" },
 				],
-				references: [{ id: "r1", url: "https://turn.ref", messageIndex: 1 }],
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							retrievals: {
+								_unassociated: {
+									candidates: [{ url: "https://turn.ref", messageIndex: 1 }],
+								},
+							},
+						},
+					},
+				},
 			});
 			const patch = groundTruthToPatch({ item, originalApi });
 
@@ -417,17 +454,28 @@ describe("groundTruthToPatch", () => {
 					{ role: "user", content: "Q" },
 					{ role: "agent", content: "A" },
 				],
-				references: [
-					{
-						id: "r1",
-						url: "https://example.com",
-						title: "Title",
-						snippet: "Snippet",
-						keyParagraph: "Key",
-						bonus: true,
-						messageIndex: 1,
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							retrievals: {
+								_unassociated: {
+									candidates: [
+										{
+											url: "https://example.com",
+											title: "Title",
+											chunk: "Snippet",
+											keyParagraph: "Key",
+											bonus: true,
+											messageIndex: 1,
+										},
+									],
+								},
+							},
+						},
 					},
-				],
+				},
 			});
 			const patch = groundTruthToPatch({ item });
 			const ref = patch.history?.[1].refs?.[0];

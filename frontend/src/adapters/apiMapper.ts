@@ -1,6 +1,27 @@
 import type { components } from "../api/generated";
-import type { GroundTruthItem, Reference } from "../models/groundTruth";
+import type {
+	GroundTruthItem,
+	PluginPayload,
+	Reference,
+} from "../models/groundTruth";
 import { urlToTitle } from "../models/utils";
+
+const _RAG_COMPAT_KEY = "rag-compat";
+const _UNASSOCIATED_KEY = "_unassociated";
+
+type RetrievalBucket = {
+	candidates: Array<{
+		url: string;
+		title?: string;
+		chunk?: string;
+		relevance?: string;
+		toolCallId?: string;
+		messageIndex?: number;
+		keyParagraph?: string;
+		bonus?: boolean;
+	}>;
+};
+type RetrievalsMap = Record<string, RetrievalBucket>;
 
 type ConversationTurn = NonNullable<GroundTruthItem["history"]>[number];
 export type ApiHistoryEntry = components["schemas"]["HistoryEntry"] & {
@@ -29,7 +50,7 @@ export function groundTruthFromApi(
 	providerId = "api",
 ): GroundTruthItem {
 	let history: GroundTruthItem["history"];
-	const refs: Reference[] = [];
+	const legacyRefs: Reference[] = [];
 	let refIndex = 0;
 
 	if (api.history && api.history.length > 0) {
@@ -50,7 +71,7 @@ export function groundTruthFromApi(
 
 			if (h.refs && h.refs.length > 0) {
 				for (const r of h.refs) {
-					refs.push({
+					legacyRefs.push({
 						id: `ref_${refIndex++}`,
 						title: r.title || (r.url ? urlToTitle(r.url) : undefined),
 						url: r.url,
@@ -80,7 +101,7 @@ export function groundTruthFromApi(
 		const messageIndex = wasLegacyConversion ? 1 : undefined;
 
 		for (const r of api.refs) {
-			refs.push({
+			legacyRefs.push({
 				id: `ref_${refIndex++}`,
 				title: r.title || (r.url ? urlToTitle(r.url) : undefined),
 				url: r.url,
@@ -93,6 +114,50 @@ export function groundTruthFromApi(
 		}
 	}
 
+	// Build plugin data — merge existing plugins with per-call retrieval state
+	const plugins: Record<string, PluginPayload> =
+		api.plugins && Object.keys(api.plugins).length
+			? (api.plugins as Record<string, PluginPayload>)
+			: {};
+
+	// Read per-call retrieval state from plugin data if it already exists
+	const existingRetrievals = (
+		plugins[_RAG_COMPAT_KEY]?.data as Record<string, unknown> | undefined
+	)?.retrievals;
+	const hasPerCallState =
+		existingRetrievals &&
+		typeof existingRetrievals === "object" &&
+		!Array.isArray(existingRetrievals) &&
+		Object.keys(existingRetrievals as Record<string, unknown>).length > 0;
+
+	// When no per-call state exists but legacy refs were extracted, migrate them
+	if (!hasPerCallState && legacyRefs.length > 0) {
+		const retrievals: RetrievalsMap = {};
+		for (const ref of legacyRefs) {
+			const key = ref.toolCallId || _UNASSOCIATED_KEY;
+			if (!retrievals[key]) {
+				retrievals[key] = { candidates: [] };
+			}
+			retrievals[key].candidates.push({
+				url: ref.url,
+				title: ref.title,
+				chunk: ref.snippet,
+				relevance: undefined,
+				toolCallId: ref.toolCallId,
+				messageIndex: ref.messageIndex,
+				keyParagraph: ref.keyParagraph,
+				bonus: ref.bonus,
+			});
+		}
+
+		const existingPlugin = plugins[_RAG_COMPAT_KEY];
+		plugins[_RAG_COMPAT_KEY] = {
+			kind: _RAG_COMPAT_KEY,
+			version: existingPlugin?.version || "1.0",
+			data: { ...(existingPlugin?.data || {}), retrievals },
+		};
+	}
+
 	const question = api.editedQuestion || api.synthQuestion || "";
 	const deleted = api.status === "deleted";
 
@@ -103,7 +168,6 @@ export function groundTruthFromApi(
 		answer: api.answer ?? "",
 		history,
 		comment: api.comment ?? undefined,
-		references: refs,
 		status:
 			(deleted ? "draft" : (api.status as GroundTruthItem["status"])) ||
 			("draft" as GroundTruthItem["status"]),
@@ -123,13 +187,7 @@ export function groundTruthFromApi(
 			api.metadata && Object.keys(api.metadata).length
 				? (api.metadata as Record<string, unknown>)
 				: undefined,
-		plugins:
-			api.plugins && Object.keys(api.plugins).length
-				? (api.plugins as Record<
-						string,
-						import("../models/groundTruth").PluginPayload
-					>)
-				: undefined,
+		plugins: Object.keys(plugins).length ? plugins : undefined,
 		traceIds: api.traceIds ?? undefined,
 		tracePayload:
 			api.tracePayload && Object.keys(api.tracePayload).length
@@ -149,6 +207,9 @@ export function groundTruthToPatch(args: {
 }): Partial<ApiGroundTruth> {
 	const { item, originalApi } = args;
 
+	// Extract references from per-call plugin state
+	const references = getItemReferencesFromPlugins(item);
+
 	const hadLegacyTopLevelRefs =
 		!!originalApi &&
 		!originalApi.history &&
@@ -156,7 +217,7 @@ export function groundTruthToPatch(args: {
 
 	let topLevelRefs: ApiReference[] = [];
 	if (hadLegacyTopLevelRefs) {
-		topLevelRefs = (item.references || [])
+		topLevelRefs = references
 			.filter((r) => r.messageIndex === 1 || r.messageIndex === undefined)
 			.map((r) => ({
 				url: r.url,
@@ -166,7 +227,7 @@ export function groundTruthToPatch(args: {
 				bonus: !!r.bonus,
 			}));
 	} else {
-		topLevelRefs = (item.references || [])
+		topLevelRefs = references
 			.filter((r) => r.messageIndex === undefined)
 			.map((r) => ({
 				url: r.url,
@@ -191,9 +252,7 @@ export function groundTruthToPatch(args: {
 		body.history = item.history.map((turn, idx) => {
 			let turnRefs: ApiReference[] | undefined;
 			if (turn.role !== "user") {
-				const refsForTurn = (item.references || []).filter(
-					(r) => r.messageIndex === idx,
-				);
+				const refsForTurn = references.filter((r) => r.messageIndex === idx);
 				if (refsForTurn.length > 0) {
 					turnRefs = refsForTurn.map((r) => ({
 						url: r.url,
@@ -237,6 +296,9 @@ export function groundTruthToPatch(args: {
 	if (item.metadata && Object.keys(item.metadata).length) {
 		(body as Record<string, unknown>).metadata = item.metadata;
 	}
+	if (item.plugins && Object.keys(item.plugins).length) {
+		(body as Record<string, unknown>).plugins = item.plugins;
+	}
 	if (item.traceIds) {
 		(body as Record<string, unknown>).traceIds = item.traceIds;
 	}
@@ -245,4 +307,49 @@ export function groundTruthToPatch(args: {
 	}
 
 	return body;
+}
+
+/**
+ * Extract references from per-call plugin state.
+ * Used internally by the patch mapper and externally by UI components.
+ */
+function getItemReferencesFromPlugins(item: GroundTruthItem): Reference[] {
+	const data = item.plugins?.[_RAG_COMPAT_KEY]?.data as
+		| Record<string, unknown>
+		| undefined;
+	if (!data) return [];
+
+	const retrievals = data.retrievals;
+	if (
+		!retrievals ||
+		typeof retrievals !== "object" ||
+		Array.isArray(retrievals)
+	) {
+		return [];
+	}
+
+	const refs: Reference[] = [];
+	let refIndex = 0;
+	for (const [toolCallId, bucket] of Object.entries(
+		retrievals as Record<
+			string,
+			{ candidates?: Array<Record<string, unknown>> }
+		>,
+	)) {
+		if (!bucket?.candidates) continue;
+		for (const c of bucket.candidates) {
+			refs.push({
+				id: `ref_${refIndex++}`,
+				title: (c.title as string) || undefined,
+				url: (c.url as string) || "",
+				snippet: (c.chunk as string) || undefined,
+				keyParagraph: (c.keyParagraph as string) || undefined,
+				visitedAt: (c.visitedAt as string) || null,
+				bonus: (c.bonus as boolean) || false,
+				messageIndex: c.messageIndex as number | undefined,
+				toolCallId: toolCallId !== _UNASSOCIATED_KEY ? toolCallId : undefined,
+			});
+		}
+	}
+	return refs;
 }

@@ -9,26 +9,32 @@ export const DEMO_JSON: GroundTruthItem[] = [
 		question: "How do I reset my password in the application?",
 		answer:
 			"To reset your password, navigate to User Settings > Security and click 'Reset Password'. You will receive an email with a link to create a new password.",
-		references: [
-			{
-				id: "r1",
-				title: "User Guide - Account Security",
-				url: "https://example.com/docs/account-security",
-				snippet:
-					"Click the Reset Password button in the Security tab to initiate the recovery flow.",
-				visitedAt: null,
-				keyParagraph: "",
+		plugins: {
+			"rag-compat": {
+				kind: "rag-compat",
+				version: "1.0",
+				data: {
+					retrievals: {
+						_unassociated: {
+							candidates: [
+								{
+									url: "https://example.com/docs/account-security",
+									title: "User Guide - Account Security",
+									chunk:
+										"Click the Reset Password button in the Security tab to initiate the recovery flow.",
+								},
+								{
+									url: "https://example.com/docs/troubleshooting-login",
+									title: "Troubleshooting Login Issues",
+									chunk:
+										"If you forgot your password, use the reset feature in User Settings.",
+								},
+							],
+						},
+					},
+				},
 			},
-			{
-				id: "r2",
-				title: "Troubleshooting Login Issues",
-				url: "https://example.com/docs/troubleshooting-login",
-				snippet:
-					"If you forgot your password, use the reset feature in User Settings.",
-				visitedAt: null,
-				keyParagraph: "",
-			},
-		],
+		},
 		status: "draft",
 		deleted: false,
 		tags: ["account", "security", "password"],
@@ -47,17 +53,26 @@ export const DEMO_JSON: GroundTruthItem[] = [
 		question: "What formats are supported for data export?",
 		answer:
 			"The application supports exporting data in CSV, JSON, and XML formats. You can select your preferred format from the Export dialog.",
-		references: [
-			{
-				id: "r3",
-				title: "Data Export Capabilities",
-				url: "https://example.com/docs/data-export",
-				snippet:
-					"Supported formats include CSV for spreadsheets, JSON for web apps, and XML for legacy systems.",
-				visitedAt: null,
-				keyParagraph: "",
+		plugins: {
+			"rag-compat": {
+				kind: "rag-compat",
+				version: "1.0",
+				data: {
+					retrievals: {
+						_unassociated: {
+							candidates: [
+								{
+									url: "https://example.com/docs/data-export",
+									title: "Data Export Capabilities",
+									chunk:
+										"Supported formats include CSV for spreadsheets, JSON for web apps, and XML for legacy systems.",
+								},
+							],
+						},
+					},
+				},
 			},
-		],
+		},
 		status: "draft",
 		deleted: false,
 		tags: ["export", "data", "formats"],

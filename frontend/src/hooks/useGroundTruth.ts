@@ -8,6 +8,10 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../models/groundTruth";
+import {
+	getItemReferences,
+	withUpdatedReferences,
+} from "../models/groundTruth";
 import { canApproveCandidate } from "../models/gtHelpers";
 import type { Provider } from "../models/provider";
 import { randId } from "../models/utils";
@@ -118,7 +122,7 @@ type UseGroundTruth = {
 
 // Pure helper to compute a stable fingerprint for unsaved detection
 function stateSignature(it: GroundTruthItem): string {
-	const refs = [...(it.references || [])]
+	const refs = [...getItemReferences(it)]
 		.map((r) => ({
 			id: r.id,
 			title: r.title || "",
@@ -128,6 +132,7 @@ function stateSignature(it: GroundTruthItem): string {
 			keyParagraph: (r.keyParagraph || "").trim(),
 			bonus: !!r.bonus,
 			messageIndex: r.messageIndex,
+			toolCallId: r.toolCallId,
 		}))
 		.sort((a, b) => a.id.localeCompare(b.id));
 	return JSON.stringify({
@@ -317,18 +322,28 @@ function useGroundTruth(): UseGroundTruth {
 				const prevBeforeSave = current; // capture to merge transient fields
 				const saved = await p.save(candidate);
 				// SA-232: Backend does not persist visitedAt; reattach any prior visitedAt values by URL.
-				const prevRefs = prevBeforeSave?.references;
-				if (prevRefs?.length && saved.references?.length) {
+				const prevRefs = getItemReferences(prevBeforeSave);
+				const savedRefs = getItemReferences(saved);
+				if (prevRefs.length && savedRefs.length) {
 					const visitedByUrl = new Map(
 						prevRefs
 							.filter((r) => r.visitedAt)
 							.map((r) => [r.url, r.visitedAt as string]),
 					);
-					for (const r of saved.references) {
+					let changed = false;
+					const merged = savedRefs.map((r) => {
 						if (!r.visitedAt) {
 							const v = visitedByUrl.get(r.url);
-							if (v) r.visitedAt = v;
+							if (v) {
+								changed = true;
+								return { ...r, visitedAt: v };
+							}
 						}
+						return r;
+					});
+					if (changed) {
+						// Re-write saved item with visitedAt merged
+						Object.assign(saved, withUpdatedReferences(saved, merged));
 					}
 				}
 				setItems((arr) => arr.map((i) => (i.id === saved.id ? saved : i)));
@@ -358,7 +373,7 @@ function useGroundTruth(): UseGroundTruth {
 						providerId: saved.providerId,
 						itemId: saved.id,
 						status: saved.status,
-						selectedRefCount: saved.references?.length,
+						selectedRefCount: getItemReferences(saved).length,
 						durationMs: Date.now() - started,
 					};
 					if (nextStatus === "approved" || saved.status === "approved")
@@ -578,7 +593,8 @@ function useGroundTruth(): UseGroundTruth {
 			const newHistory = history.filter((_, i) => i !== messageIndex);
 
 			// Re-index references: shift down any references with messageIndex > deleted index
-			const updatedReferences = (prev.references || [])
+			const currentRefs = getItemReferences(prev);
+			const updatedReferences = currentRefs
 				.map((ref) => {
 					if (typeof ref.messageIndex !== "number") return ref;
 
@@ -602,13 +618,15 @@ function useGroundTruth(): UseGroundTruth {
 				.reverse()
 				.find((t) => t.role !== "user");
 
-			return {
-				...prev,
-				history: newHistory,
-				references: updatedReferences,
-				question: lastUser?.content || "",
-				answer: lastAgent?.content || "",
-			};
+			return withUpdatedReferences(
+				{
+					...prev,
+					history: newHistory,
+					question: lastUser?.content || "",
+					answer: lastAgent?.content || "",
+				},
+				updatedReferences,
+			);
 		});
 	}, []);
 
@@ -670,16 +688,19 @@ function useGroundTruth(): UseGroundTruth {
 						references,
 						newMessageIndex,
 					);
-					const filteredRefs = (prev.references || []).filter(
+					const currentRefs = getItemReferences(prev);
+					const filteredRefs = currentRefs.filter(
 						(ref) => ref.messageIndex !== newMessageIndex,
 					);
-					return {
-						...prev,
-						history: nextHistory,
-						references: [...filteredRefs, ...mappedRefs],
-						question: lastUser?.content || prev.question,
-						answer: trimmed,
-					};
+					return withUpdatedReferences(
+						{
+							...prev,
+							history: nextHistory,
+							question: lastUser?.content || prev.question,
+							answer: trimmed,
+						},
+						[...filteredRefs, ...mappedRefs],
+					);
 				});
 				try {
 					logEvent("gtc.agent_turn_add", {
@@ -759,10 +780,10 @@ function useGroundTruth(): UseGroundTruth {
 					}
 
 					// Filter refs for this turn only
-					const refsToKeep =
-						prev.references?.filter(
-							(ref) => ref.messageIndex !== messageIndex,
-						) || [];
+					const currentRefs = getItemReferences(prev);
+					const refsToKeep = currentRefs.filter(
+						(ref) => ref.messageIndex !== messageIndex,
+					);
 
 					const mappedRefs = chatReferencesToGroundTruth(
 						references,
@@ -779,12 +800,14 @@ function useGroundTruth(): UseGroundTruth {
 					}
 
 					// Single state update with all changes
-					return {
-						...prev,
-						history: updatedHistory,
-						references: [...refsToKeep, ...mappedRefs],
-						answer: lastAgentContent,
-					};
+					return withUpdatedReferences(
+						{
+							...prev,
+							history: updatedHistory,
+							answer: lastAgentContent,
+						},
+						[...refsToKeep, ...mappedRefs],
+					);
 				});
 
 				// Fire-and-forget logging (non-blocking)

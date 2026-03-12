@@ -35,7 +35,6 @@ const createMockItem = (
 	id: "item-1",
 	question: "Test Question",
 	answer: "Test Answer",
-	references: [],
 	status: "draft",
 	providerId: "test",
 	...overrides,

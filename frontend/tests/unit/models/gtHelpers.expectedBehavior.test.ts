@@ -22,7 +22,6 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 		question: "Test question",
 		answer: "Test answer",
 		status: "draft",
-		references: [],
 		expectedTools: { required: [{ name: "search" }] },
 		toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
 		history: [
@@ -164,13 +163,19 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 	it("should allow approval for multi-turn items even when references are unvisited", () => {
 		const itemWithUnvisitedReferences: GroundTruthItem = {
 			...baseItem,
-			references: [
-				{
-					id: "ref-1",
-					url: "https://example.com/trace",
-					visitedAt: null,
+			plugins: {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1.0",
+					data: {
+						retrievals: {
+							_unassociated: {
+								candidates: [{ url: "https://example.com/trace" }],
+							},
+						},
+					},
 				},
-			],
+			},
 		};
 
 		const result = canApproveMultiTurn(itemWithUnvisitedReferences);
@@ -189,7 +194,6 @@ describe("canApproveMultiTurn - expectedTools gating", () => {
 		question: "Test question",
 		answer: "Test answer",
 		status: "draft",
-		references: [],
 	};
 	const validHistory: ConversationTurn[] = [
 		{ role: "user", content: "q" },

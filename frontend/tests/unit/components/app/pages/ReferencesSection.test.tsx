@@ -78,6 +78,7 @@ describe("ReferencesSection", () => {
 // Phase 4: ReferencesSection as generic right pane
 // ---------------------------------------------------------------------------
 import type { GroundTruthItem } from "../../../../../src/models/groundTruth";
+import { getItemReferences } from "../../../../../src/models/groundTruth";
 
 const makeItem = (
 	overrides: Partial<GroundTruthItem> = {},
@@ -85,7 +86,6 @@ const makeItem = (
 	id: "i1",
 	question: "Q",
 	answer: "A",
-	references: [],
 	status: "draft",
 	providerId: "test",
 	...overrides,
@@ -179,13 +179,25 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 	it("shows both evidence and RAG compat when multi-turn item has references", () => {
 		const item = makeItem({
 			toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
-			references: [{ id: "r1", url: "https://example.com" }],
+			plugins: {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1.0",
+					data: {
+						retrievals: {
+							_unassociated: {
+								candidates: [{ url: "https://example.com" }],
+							},
+						},
+					},
+				},
+			},
 		});
 		render(
 			<ReferencesSection
 				{...noopProps}
 				item={item}
-				references={item.references}
+				references={getItemReferences(item)}
 				isMultiTurn
 			/>,
 		);

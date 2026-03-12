@@ -13,7 +13,6 @@ describe("useGroundTruthCache", () => {
 		status: "draft",
 		question: "Test question?",
 		answer: "Test answer",
-		references: [],
 		manualTags: [],
 		computedTags: [],
 		providerId: "api",

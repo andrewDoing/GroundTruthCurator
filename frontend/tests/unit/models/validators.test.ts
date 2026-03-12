@@ -122,7 +122,6 @@ const baseItem: GroundTruthItem = {
 	question: "q",
 	answer: "a",
 	status: "draft",
-	references: [],
 };
 
 describe("validateExpectedTools", () => {

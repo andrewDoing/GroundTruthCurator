@@ -1,5 +1,9 @@
 import { useCallback, useRef } from "react";
 import type { GroundTruthItem, Reference } from "../models/groundTruth";
+import {
+	getItemReferences,
+	withUpdatedReferences,
+} from "../models/groundTruth";
 import { dedupeReferences } from "../models/gtHelpers";
 import { nowIso } from "../models/utils";
 
@@ -26,12 +30,11 @@ export function useReferencesEditor(options: {
 		(refId: string, patch: Partial<Reference>) => {
 			setCurrent((prev) => {
 				if (!prev) return prev;
-				return {
-					...prev,
-					references: prev.references.map((r) =>
-						r.id === refId ? { ...r, ...patch } : r,
-					),
-				};
+				const refs = getItemReferences(prev);
+				const updated = refs.map((r) =>
+					r.id === refId ? { ...r, ...patch } : r,
+				);
+				return withUpdatedReferences(prev, updated);
 			});
 		},
 		[setCurrent],
@@ -41,10 +44,8 @@ export function useReferencesEditor(options: {
 		(chosen: Reference[]) => {
 			setCurrent((prev) => {
 				if (!prev) return prev;
-				return {
-					...prev,
-					references: dedupeReferences(prev.references, chosen),
-				};
+				const refs = getItemReferences(prev);
+				return withUpdatedReferences(prev, dedupeReferences(refs, chosen));
 			});
 		},
 		[setCurrent],
@@ -54,19 +55,21 @@ export function useReferencesEditor(options: {
 		(refId: string, onUndoRegister: UndoRegistrar) => {
 			setCurrent((prev) => {
 				if (!prev) return prev;
-				const idx = prev.references.findIndex((r) => r.id === refId);
+				const refs = getItemReferences(prev);
+				const idx = refs.findIndex((r) => r.id === refId);
 				if (idx < 0) return prev;
-				const ref = prev.references[idx];
-				const nextRefs = prev.references.filter((_, i) => i !== idx);
+				const ref = refs[idx];
+				const nextRefs = refs.filter((_, i) => i !== idx);
 				const doUndo = () => {
 					setCurrent((p2) => {
 						if (!p2) return p2;
-						const present = p2.references.some((r) => r.id === ref.id);
+						const currentRefs = getItemReferences(p2);
+						const present = currentRefs.some((r) => r.id === ref.id);
 						if (present) return p2;
-						const arr = [...p2.references];
+						const arr = [...currentRefs];
 						const insertAt = Math.min(idx, arr.length);
 						arr.splice(insertAt, 0, ref);
-						return { ...p2, references: arr };
+						return withUpdatedReferences(p2, arr);
 					});
 					if (undoTimer.current) window.clearTimeout(undoTimer.current);
 				};
@@ -76,7 +79,7 @@ export function useReferencesEditor(options: {
 					() => {},
 					8000,
 				) as unknown as number;
-				return { ...prev, references: nextRefs };
+				return withUpdatedReferences(prev, nextRefs);
 			});
 		},
 		[setCurrent],

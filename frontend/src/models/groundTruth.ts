@@ -67,6 +67,124 @@ export type RetrievalCandidate = {
 };
 
 // ---------------------------------------------------------------------------
+// Per-call retrieval helpers (Phase 6 — retrieval normalization)
+//
+// References are stored in plugins["rag-compat"].data.retrievals per tool
+// call.  The helpers below provide flat Reference[] access for UI
+// components that still consume the legacy Reference shape.
+// ---------------------------------------------------------------------------
+
+const _RAG_COMPAT_KEY = "rag-compat";
+const _UNASSOCIATED_KEY = "_unassociated";
+
+/** Per-call retrieval bucket as stored in plugin data. */
+type RetrievalBucket = {
+	candidates: Array<{
+		url: string;
+		title?: string;
+		chunk?: string;
+		rawPayload?: Record<string, unknown>;
+		relevance?: string;
+		toolCallId?: string | null;
+		messageIndex?: number;
+		keyParagraph?: string;
+		bonus?: boolean;
+		visitedAt?: string | null;
+	}>;
+};
+
+/** Typed shorthand for the retrievals dict inside rag-compat plugin data. */
+type RetrievalsMap = Record<string, RetrievalBucket>;
+
+/**
+ * Read the per-call retrievals map from plugin data.
+ * Returns `undefined` when no per-call state exists.
+ */
+export function getRetrievalsMap(
+	item: Pick<GroundTruthItem, "plugins">,
+): RetrievalsMap | undefined {
+	const data = item.plugins?.[_RAG_COMPAT_KEY]?.data;
+	if (!data) return undefined;
+	const r = data.retrievals;
+	if (r && typeof r === "object" && !Array.isArray(r)) {
+		return r as RetrievalsMap;
+	}
+	return undefined;
+}
+
+/**
+ * Extract a flat Reference[] from per-call retrieval state.
+ *
+ * Read path: returns per-call candidates when present, mapped to the legacy
+ * Reference shape.  Falls back to an empty array when no per-call state
+ * exists (caller should provide legacy references separately if needed).
+ */
+export function getItemReferences(item: GroundTruthItem): Reference[] {
+	const retrievals = getRetrievalsMap(item);
+	if (!retrievals) return [];
+
+	const refs: Reference[] = [];
+	let refIndex = 0;
+	for (const [toolCallId, bucket] of Object.entries(retrievals)) {
+		if (!bucket?.candidates) continue;
+		for (const c of bucket.candidates) {
+			refs.push({
+				id: `ref_${refIndex++}`,
+				title: c.title,
+				url: c.url,
+				snippet: c.chunk,
+				visitedAt: c.visitedAt ?? null,
+				keyParagraph: c.keyParagraph,
+				bonus: c.bonus ?? false,
+				messageIndex: c.messageIndex,
+				toolCallId:
+					toolCallId !== _UNASSOCIATED_KEY ? toolCallId : undefined,
+			});
+		}
+	}
+	return refs;
+}
+
+/**
+ * Return a new item with references written into per-call plugin state.
+ * Groups references by `toolCallId` (falling back to _unassociated).
+ * Immutable — returns a new object.
+ */
+export function withUpdatedReferences(
+	item: GroundTruthItem,
+	refs: Reference[],
+): GroundTruthItem {
+	const retrievals: RetrievalsMap = {};
+	for (const ref of refs) {
+		const key = ref.toolCallId || _UNASSOCIATED_KEY;
+		if (!retrievals[key]) {
+			retrievals[key] = { candidates: [] };
+		}
+		retrievals[key].candidates.push({
+			url: ref.url,
+			title: ref.title,
+			chunk: ref.snippet,
+			relevance: undefined,
+			toolCallId: ref.toolCallId || undefined,
+			messageIndex: ref.messageIndex,
+			keyParagraph: ref.keyParagraph,
+			bonus: ref.bonus,
+			visitedAt: ref.visitedAt,
+		});
+	}
+
+	const plugins = { ...(item.plugins || {}) };
+	const existing = plugins[_RAG_COMPAT_KEY];
+	plugins[_RAG_COMPAT_KEY] = {
+		kind: _RAG_COMPAT_KEY,
+		version: existing?.version || "1.0",
+		data: { ...(existing?.data || {}), retrievals },
+	};
+
+	return { ...item, plugins };
+}
+
+// ---------------------------------------------------------------------------
 // Existing types kept for backward compat
 // ---------------------------------------------------------------------------
 
@@ -95,8 +213,10 @@ export type Reference = {
 	keyParagraph?: string;
 	// Mark as bonus (additional context)
 	bonus?: boolean;
-	// Which agent turn these refs belong to (optional)
+	// Which agent turn these refs belong to (optional, legacy association)
 	messageIndex?: number;
+	// Which tool call these refs belong to (per-call retrieval state)
+	toolCallId?: string;
 };
 
 export type GroundTruthItem = {
@@ -129,10 +249,6 @@ export type GroundTruthItem = {
 	traceIds?: Record<string, string> | null;
 	/** Full raw trace payload for evidence review. */
 	tracePayload?: Record<string, unknown>;
-	// ---------------------------------------------------------------------------
-	// Legacy reference surface (compatibility; canonical data lives in history)
-	// ---------------------------------------------------------------------------
-	references: Reference[];
 	// ---------------------------------------------------------------------------
 	// Common lifecycle and metadata fields
 	// ---------------------------------------------------------------------------

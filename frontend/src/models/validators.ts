@@ -1,5 +1,6 @@
 import { getCachedConfig } from "../services/runtimeConfig";
 import type { ConversationTurn, GroundTruthItem } from "./groundTruth";
+import { getItemReferences } from "./groundTruth";
 
 // ---------------------------------------------------------------------------
 // Expected-tools validation
@@ -140,18 +141,19 @@ export function validateConversationPattern(
 
 // Validation helper (SELF-TESTED)
 export function refsApprovalReady(it: GroundTruthItem): boolean {
+	const refs = getItemReferences(it);
 	// Rule: Approval is allowed with zero references.
-	if (!it.references || it.references.length === 0) return true;
+	if (refs.length === 0) return true;
 
 	// Check if all references must be visited (configurable)
 	if (requireReferenceVisit()) {
-		const allVisited = it.references.every((r) => Boolean(r.visitedAt));
+		const allVisited = refs.every((r) => Boolean(r.visitedAt));
 		if (!allVisited) return false;
 	}
 
 	// Check if key paragraphs are required for all references (configurable)
 	if (requireKeyParagraph()) {
-		const allHaveKeyParagraph = it.references.every(
+		const allHaveKeyParagraph = refs.every(
 			(r) => r.keyParagraph && r.keyParagraph.trim().length >= 40,
 		);
 		if (!allHaveKeyParagraph) return false;

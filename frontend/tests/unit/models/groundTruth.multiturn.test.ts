@@ -17,7 +17,6 @@ describe("groundTruth multi-turn helpers", () => {
 		providerId: "demo",
 		question: "fallback question",
 		answer: "fallback answer",
-		references: [],
 		status: "draft",
 		...overrides,
 	});

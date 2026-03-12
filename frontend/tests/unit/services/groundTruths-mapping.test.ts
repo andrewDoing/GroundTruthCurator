@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ApiGroundTruth } from "../../../src/adapters/apiMapper";
 import { groundTruthFromApi } from "../../../src/adapters/apiMapper";
 import type { components } from "../../../src/api/generated";
+import { getItemReferences } from "../../../src/models/groundTruth";
 import { mapGroundTruthFromApi } from "../../../src/services/groundTruths";
 
 type ApiItem = Omit<
@@ -58,8 +59,8 @@ describe("mapGroundTruthFromApi", () => {
 
 			const result = mapGroundTruthFromApi(apiItem);
 
-			expect(result.references).toHaveLength(1);
-			expect(result.references[0].messageIndex).toBe(1); // Agent turn index
+			expect(getItemReferences(result)).toHaveLength(1);
+			expect(getItemReferences(result)[0].messageIndex).toBe(1); // Agent turn index
 		});
 
 		it("assigns refs to messageIndex 1 even when no answer exists (Bug Fix: SA-86)", () => {
@@ -81,7 +82,7 @@ describe("mapGroundTruthFromApi", () => {
 			const result = mapGroundTruthFromApi(apiItem);
 
 			// References should be assigned to agent turn (messageIndex = 1)
-			expect(result.references[0].messageIndex).toBe(1);
+			expect(getItemReferences(result)[0].messageIndex).toBe(1);
 		});
 
 		it("creates empty agent turn when question exists but answer is missing (Bug Fix: SA-86)", () => {
@@ -169,9 +170,9 @@ describe("mapGroundTruthFromApi", () => {
 			expect(result.history?.[1].content).toBe("");
 
 			// All refs should be assigned to the agent turn
-			expect(result.references).toHaveLength(2);
-			expect(result.references[0].messageIndex).toBe(1);
-			expect(result.references[1].messageIndex).toBe(1);
+			expect(getItemReferences(result)).toHaveLength(2);
+			expect(getItemReferences(result)[0].messageIndex).toBe(1);
+			expect(getItemReferences(result)[1].messageIndex).toBe(1);
 		});
 
 		it("preserves per-turn refs when history exists", () => {
@@ -200,7 +201,7 @@ describe("mapGroundTruthFromApi", () => {
 
 			// Per-turn refs should be extracted with proper messageIndex
 			// This is tested in the provider tests, so we just verify they exist
-			expect(result.references).toBeDefined();
+			expect(getItemReferences(result)).toBeDefined();
 		});
 	});
 
@@ -339,7 +340,7 @@ describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
 
 		expect(fromProvider).toEqual(fromService);
 		// Sanity: both should have 2 references
-		expect(fromProvider.references).toHaveLength(2);
+		expect(getItemReferences(fromProvider)).toHaveLength(2);
 	});
 
 	it("produces identical output when providerId is supplied", () => {

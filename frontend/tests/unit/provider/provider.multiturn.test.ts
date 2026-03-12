@@ -5,6 +5,10 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../../../src/models/groundTruth";
+import {
+	getItemReferences,
+	withUpdatedReferences,
+} from "../../../src/models/groundTruth";
 
 const {
 	mockGetMyAssignments,
@@ -115,7 +119,7 @@ describe("ApiProvider multi-turn mapping", () => {
 		mockGetMyAssignments.mockResolvedValue([apiItem]);
 		const provider = new ApiProvider();
 		const { items } = await provider.list();
-		const refs = items[0].references;
+		const refs = getItemReferences(items[0]);
 		const turnRef = refs.find((r) => r.messageIndex === 1);
 		expect(turnRef).toBeTruthy();
 		expect(turnRef?.url).toBe("https://turn.ref");
@@ -138,7 +142,7 @@ describe("ApiProvider multi-turn mapping", () => {
 		mockGetMyAssignments.mockResolvedValue([apiItem]);
 		const provider = new ApiProvider();
 		const { items } = await provider.list();
-		const topRef = items[0].references.find(
+		const topRef = getItemReferences(items[0]).find(
 			(r: Reference) => r.url === "https://top.ref",
 		);
 		expect(topRef).toBeTruthy();
@@ -187,8 +191,8 @@ describe("ApiProvider multi-turn mapping", () => {
 		mockGetMyAssignments.mockResolvedValue([apiItem]);
 		const provider = new ApiProvider();
 		const { items } = await provider.list();
-		expect(items[0].references).toHaveLength(1);
-		expect(items[0].references[0].messageIndex).toBe(1);
+		expect(getItemReferences(items[0])).toHaveLength(1);
+		expect(getItemReferences(items[0])[0].messageIndex).toBe(1);
 	});
 
 	it("list assigns refs to messageIndex 1 even when answer is missing (Bug Fix: SA-86)", async () => {
@@ -207,9 +211,9 @@ describe("ApiProvider multi-turn mapping", () => {
 		});
 		mockGetMyAssignments.mockResolvedValue([apiItem]);
 		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		expect(items[0].references).toHaveLength(1);
-		expect(items[0].references[0].messageIndex).toBe(1);
+		const { items: items2 } = await provider.list();
+		expect(getItemReferences(items2[0])).toHaveLength(1);
+		expect(getItemReferences(items2[0])[0].messageIndex).toBe(1);
 	});
 
 	it("list creates empty agent turn when question exists but answer is missing (Bug Fix: SA-86)", async () => {
@@ -276,9 +280,9 @@ describe("ApiProvider multi-turn mapping", () => {
 			"How do I configure authentication for my app?",
 		);
 		expect(items[0].history?.[1].content).toBe("");
-		expect(items[0].references).toHaveLength(2);
-		expect(items[0].references[0].messageIndex).toBe(1);
-		expect(items[0].references[1].messageIndex).toBe(1);
+		expect(getItemReferences(items[0])).toHaveLength(2);
+		expect(getItemReferences(items[0])[0].messageIndex).toBe(1);
+		expect(getItemReferences(items[0])[1].messageIndex).toBe(1);
 	});
 });
 
@@ -322,11 +326,10 @@ describe("ApiProvider multi-turn serialization", () => {
 				messageIndex: 1,
 			},
 		];
-		const updated: GroundTruthItem = {
-			...domain,
-			history,
-			references: refs,
-		};
+		const updated: GroundTruthItem = withUpdatedReferences(
+			{ ...domain, history },
+			refs,
+		);
 		await provider.save(updated);
 		expect(capturedPatch).toBeDefined();
 		const patch = capturedPatch as Patch;
@@ -363,11 +366,10 @@ describe("ApiProvider multi-turn serialization", () => {
 			{ role: "agent", content: "Updated A" },
 		];
 		const refs: Reference[] = [{ id: "global", url: "https://global" }];
-		const updated: GroundTruthItem = {
-			...domain,
-			history,
-			references: refs,
-		};
+		const updated: GroundTruthItem = withUpdatedReferences(
+			{ ...domain, history },
+			refs,
+		);
 		await provider.save(updated);
 		expect(capturedPatch).toBeDefined();
 		const patch = capturedPatch as Patch;
@@ -410,11 +412,10 @@ describe("ApiProvider multi-turn serialization", () => {
 				messageIndex: 1,
 			},
 		];
-		const updated: GroundTruthItem = {
-			...domain,
-			history,
-			references: refs,
-		};
+		const updated: GroundTruthItem = withUpdatedReferences(
+			{ ...domain, history },
+			refs,
+		);
 		await provider.save(updated);
 		expect(capturedPatch).toBeDefined();
 		const patch = capturedPatch as Patch;
@@ -466,19 +467,20 @@ describe("ApiProvider multi-turn serialization", () => {
 		const { items } = await provider.list();
 
 		// Verify fromApi() assigned messageIndex=1 to legacy refs
-		expect(items[0].references).toHaveLength(2);
-		expect(items[0].references[0].messageIndex).toBe(1);
-		expect(items[0].references[1].messageIndex).toBe(1);
+		const legacyRefs = getItemReferences(items[0]);
+		expect(legacyRefs).toHaveLength(2);
+		expect(legacyRefs[0].messageIndex).toBe(1);
+		expect(legacyRefs[1].messageIndex).toBe(1);
 
 		// User might edit the item (e.g., change bonus flag, add key paragraph)
-		const updated: GroundTruthItem = {
-			...items[0],
-			references: items[0].references.map((r: Reference) =>
+		const updated: GroundTruthItem = withUpdatedReferences(
+			items[0],
+			legacyRefs.map((r: Reference) =>
 				r.url === "https://legacy.ref/doc1"
 					? { ...r, bonus: true, keyParagraph: "Updated key" }
 					: r,
 			),
-		};
+		);
 
 		// Save the item
 		await provider.save(updated);

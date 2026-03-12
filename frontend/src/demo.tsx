@@ -18,6 +18,7 @@ import useGlobalHotkeys from "./hooks/useGlobalHotkeys";
 import useGroundTruth from "./hooks/useGroundTruth";
 import { useToasts } from "./hooks/useToasts";
 import type { Reference } from "./models/groundTruth";
+import { getItemReferences } from "./models/groundTruth";
 import { normalizeUrl } from "./models/utils";
 import {
 	assignItem,
@@ -417,7 +418,9 @@ export default function GTAppDemo() {
 													gt.addReferences(refs);
 													toast("success", `Added ${refs.length} reference(s)`);
 												}}
-												references={gt.current?.references || []}
+												references={
+													gt.current ? getItemReferences(gt.current) : []
+												}
 												onUpdateReference={(id, partial) =>
 													gt.updateReference(id, partial)
 												}
@@ -520,7 +523,7 @@ export default function GTAppDemo() {
 									gt.addReferences(refs);
 									toast("success", `Added ${refs.length} reference(s)`);
 								}}
-								references={gt.current?.references || []}
+								references={gt.current ? getItemReferences(gt.current) : []}
 								onUpdateReference={(id, partial) =>
 									gt.updateReference(id, partial)
 								}

@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { getItemReferences } from "../../../src/models/groundTruth";
 
 // Force API mode (not demo) so we exercise ApiProvider code path
 vi.mock("../../../src/config/demo", () => ({
@@ -132,18 +133,19 @@ describe("useGroundTruth visitedAt persistence on save (SA-232)", () => {
 		});
 		const current = result.current.current;
 		expect(current).toBeTruthy();
-		if (!current?.references?.[0]) {
+		const currentRefs = getItemReferences(current!);
+		if (!currentRefs[0]) {
 			throw new Error("Expected at least one reference");
 		}
-		const ref = current.references[0];
+		const ref = currentRefs[0];
 		expect(ref.visitedAt).toBeFalsy();
 
 		// Mark visited via openReference
 		await act(async () => {
 			result.current.openReference(ref);
 		});
-		const afterOpenVisitedAt =
-			result.current.current?.references?.[0]?.visitedAt;
+		const afterOpenVisitedAt = getItemReferences(result.current.current!)[0]
+			?.visitedAt;
 		expect(afterOpenVisitedAt).toBeTruthy();
 
 		// Change answer so save is not a no-op
@@ -158,8 +160,8 @@ describe("useGroundTruth visitedAt persistence on save (SA-232)", () => {
 		});
 
 		// visitedAt should still be present
-		const afterSaveVisitedAt =
-			result.current.current?.references?.[0]?.visitedAt;
+		const afterSaveVisitedAt = getItemReferences(result.current.current!)[0]
+			?.visitedAt;
 		expect(afterSaveVisitedAt).toBeTruthy();
 		// It should be exactly the same timestamp (we merge, not overwrite)
 		expect(afterSaveVisitedAt).toBe(afterOpenVisitedAt);

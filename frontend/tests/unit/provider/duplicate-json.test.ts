@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEMO_JSON } from "../../../src/models/demoData";
+import { getItemReferences } from "../../../src/models/groundTruth";
 import { JsonProvider } from "../../../src/models/provider";
 
 describe("JsonProvider duplicate", () => {
@@ -16,7 +17,9 @@ describe("JsonProvider duplicate", () => {
 		// Core fields copied
 		expect(created.question).toBe(original.question);
 		expect(created.answer).toBe(original.answer);
-		expect(created.references?.length).toBe(original.references?.length);
+		expect(getItemReferences(created).length).toBe(
+			getItemReferences(original).length,
+		);
 		// Draft status and not deleted
 		expect(created.status).toBe("draft");
 		expect(created.deleted).toBe(false);

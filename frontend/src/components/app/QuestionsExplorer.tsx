@@ -3,6 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { GroundTruthItem } from "../../models/groundTruth";
 import { getQueuePreview } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
+import { getExplorerExtensions } from "../../registry/ExplorerExtensions";
 import { fetchAvailableDatasets } from "../../services/datasets";
 import type { GroundTruthListPagination } from "../../services/groundTruths";
 import { listAllGroundTruths } from "../../services/groundTruths";
@@ -1044,6 +1045,18 @@ export default function QuestionsExplorer({
 												)}
 										</button>
 									</th>
+									{/* Plugin-contributed columns (headers) */}
+									{getExplorerExtensions().flatMap((ext) =>
+										(ext.columns ?? []).map((col) => (
+											<th
+												key={col.key}
+												className="px-3 py-3 text-center hidden xl:table-cell"
+												style={col.width ? { minWidth: col.width } : undefined}
+											>
+												{col.header}
+											</th>
+										)),
+									)}
 									<th className="px-3 py-3 text-right min-w-[140px] sm:min-w-[180px] lg:min-w-[240px]">
 										Actions
 									</th>
@@ -1238,6 +1251,22 @@ export default function QuestionsExplorer({
 													<span className="text-xs text-slate-400">—</span>
 												)}
 											</td>
+											{/* Plugin-contributed columns (cells) */}
+											{getExplorerExtensions().flatMap((ext) =>
+												(ext.columns ?? []).map((col) => (
+													<td
+														key={col.key}
+														className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden xl:table-cell"
+														style={col.width ? { minWidth: col.width } : undefined}
+													>
+														{col.cellRenderer ? (
+															<col.cellRenderer item={item} />
+														) : (
+															(col.getValue(item) ?? "—")
+														)}
+													</td>
+												)),
+											)}
 											{/* Actions */}
 											<td className="px-3 py-3">
 												<div className="flex flex-wrap items-center justify-end gap-2">

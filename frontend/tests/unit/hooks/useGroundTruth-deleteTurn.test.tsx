@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ConversationTurn } from "../../../src/models/groundTruth";
+import { getItemReferences } from "../../../src/models/groundTruth";
 
 // Force demo mode so the hook uses JsonProvider with DEMO_JSON
 vi.mock("../../../src/config/demo", () => ({
@@ -44,7 +45,7 @@ describe("useGroundTruth deleteTurn", () => {
 		// Clear existing references first, then add test references
 		await act(async () => {
 			if (result.current.current) {
-				result.current.current.references = [];
+				result.current.current.plugins = {};
 			}
 		});
 
@@ -58,7 +59,7 @@ describe("useGroundTruth deleteTurn", () => {
 		});
 
 		expect(result.current.current?.history?.length).toBe(6);
-		expect(result.current.current?.references?.length).toBe(3);
+		expect(getItemReferences(result.current.current!).length).toBe(3);
 
 		// Delete turn at index 2 (second user turn)
 		await act(async () => {
@@ -74,12 +75,12 @@ describe("useGroundTruth deleteTurn", () => {
 		// they are deleted if they HAVE messageIndex === 2
 		// In our case: ref1 has messageIndex 1, ref2 has messageIndex 3, ref3 has messageIndex 5
 		// None have messageIndex === 2, so all 3 should remain, just shifted down
-		const refs = result.current.current?.references || [];
+		const refs = getItemReferences(result.current.current!);
 		expect(refs.length).toBe(3); // All refs remain, just re-indexed
 
-		const ref1 = refs.find((r) => r.id === "ref1");
-		const ref2 = refs.find((r) => r.id === "ref2");
-		const ref3 = refs.find((r) => r.id === "ref3");
+		const ref1 = refs.find((r) => r.url === "http://example.com/1");
+		const ref2 = refs.find((r) => r.url === "http://example.com/2");
+		const ref3 = refs.find((r) => r.url === "http://example.com/3");
 
 		expect(ref1?.messageIndex).toBe(1); // Unchanged (before deleted turn)
 		expect(ref2?.messageIndex).toBe(2); // Shifted down from 3 to 2
@@ -106,7 +107,7 @@ describe("useGroundTruth deleteTurn", () => {
 		// Clear existing references first
 		await act(async () => {
 			if (result.current.current) {
-				result.current.current.references = [];
+				result.current.current.plugins = {};
 			}
 		});
 
@@ -126,9 +127,13 @@ describe("useGroundTruth deleteTurn", () => {
 		expect(result.current.current?.history?.[0].content).toBe("First answer");
 
 		// All references should be shifted down
-		const refs = result.current.current?.references || [];
-		expect(refs.find((r) => r.id === "ref1")?.messageIndex).toBe(0);
-		expect(refs.find((r) => r.id === "ref2")?.messageIndex).toBe(1);
+		const refs = getItemReferences(result.current.current!);
+		expect(
+			refs.find((r) => r.url === "http://example.com/1")?.messageIndex,
+		).toBe(0);
+		expect(
+			refs.find((r) => r.url === "http://example.com/2")?.messageIndex,
+		).toBe(1);
 	});
 
 	it("should delete the last turn", async () => {
@@ -151,7 +156,7 @@ describe("useGroundTruth deleteTurn", () => {
 		// Clear existing references first
 		await act(async () => {
 			if (result.current.current) {
-				result.current.current.references = [];
+				result.current.current.plugins = {};
 			}
 		});
 
@@ -171,10 +176,12 @@ describe("useGroundTruth deleteTurn", () => {
 		expect(result.current.current?.history?.[1].content).toBe("First answer");
 
 		// Reference for deleted turn should be removed
-		const refs = result.current.current?.references || [];
+		const refs = getItemReferences(result.current.current!);
 		expect(refs.length).toBe(1);
-		expect(refs.find((r) => r.id === "ref2")).toBeUndefined();
-		expect(refs.find((r) => r.id === "ref1")?.messageIndex).toBe(1);
+		expect(refs.find((r) => r.url === "http://example.com/2")).toBeUndefined();
+		expect(
+			refs.find((r) => r.url === "http://example.com/1")?.messageIndex,
+		).toBe(1);
 	});
 
 	it("should sync question/answer fields after deletion", async () => {
@@ -260,7 +267,7 @@ describe("useGroundTruth deleteTurn", () => {
 		// Clear existing references
 		await act(async () => {
 			if (result.current.current) {
-				result.current.current.references = [];
+				result.current.current.plugins = {};
 			}
 		});
 
@@ -270,7 +277,7 @@ describe("useGroundTruth deleteTurn", () => {
 		});
 
 		expect(result.current.current?.history?.length).toBe(1);
-		expect(result.current.current?.references?.length).toBe(0);
+		expect(getItemReferences(result.current.current!).length).toBe(0);
 	});
 
 	it("should delete all turns leaving empty history", async () => {
@@ -345,7 +352,7 @@ describe("useGroundTruth deleteTurn", () => {
 		// Clear existing references first
 		await act(async () => {
 			if (result.current.current) {
-				result.current.current.references = [];
+				result.current.current.plugins = {};
 			}
 		});
 
@@ -359,7 +366,7 @@ describe("useGroundTruth deleteTurn", () => {
 			]);
 		});
 
-		expect(result.current.current?.references?.length).toBe(4);
+		expect(getItemReferences(result.current.current!).length).toBe(4);
 
 		// Delete turn at index 1 (first agent turn)
 		await act(async () => {
@@ -367,12 +374,12 @@ describe("useGroundTruth deleteTurn", () => {
 		});
 
 		// All references for turn 1 should be removed
-		const refs = result.current.current?.references || [];
+		const refs = getItemReferences(result.current.current!);
 		expect(refs.length).toBe(1);
-		expect(refs.find((r) => r.id.includes("turn1"))).toBeUndefined();
+		expect(refs.find((r) => r.url === "http://example.com/1")).toBeUndefined();
 
 		// Reference for turn 3 should remain but re-indexed to turn 2
-		const ref = refs.find((r) => r.id === "ref1-turn3");
+		const ref = refs.find((r) => r.url === "http://example.com/4");
 		expect(ref).toBeDefined();
 		expect(ref?.messageIndex).toBe(2); // Shifted from 3 to 2
 	});
@@ -396,7 +403,7 @@ describe("useGroundTruth deleteTurn", () => {
 		// Clear existing references first
 		await act(async () => {
 			if (result.current.current) {
-				result.current.current.references = [];
+				result.current.current.plugins = {};
 			}
 		});
 
@@ -408,7 +415,7 @@ describe("useGroundTruth deleteTurn", () => {
 			]);
 		});
 
-		expect(result.current.current?.references?.length).toBe(2);
+		expect(getItemReferences(result.current.current!).length).toBe(2);
 
 		// Delete turn
 		await act(async () => {
@@ -416,9 +423,9 @@ describe("useGroundTruth deleteTurn", () => {
 		});
 
 		// Reference without messageIndex should be preserved
-		const refs = result.current.current?.references || [];
+		const refs = getItemReferences(result.current.current!);
 		expect(refs.length).toBe(1);
-		expect(refs.find((r) => r.id === "ref-without-index")).toBeDefined();
-		expect(refs.find((r) => r.id === "ref-with-index")).toBeUndefined();
+		expect(refs.find((r) => r.url === "http://example.com/2")).toBeDefined();
+		expect(refs.find((r) => r.url === "http://example.com/1")).toBeUndefined();
 	});
 });

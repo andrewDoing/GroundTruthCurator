@@ -1,4 +1,5 @@
 import type { GroundTruthItem, Reference } from "./groundTruth";
+import { getItemReferences } from "./groundTruth";
 import {
 	refsApprovalReady,
 	validateConversationPattern,
@@ -51,8 +52,8 @@ export function canApproveCandidate(
 	}
 
 	// Single-turn fallback (compatibility — kept for items without history)
-	const hasReferences =
-		Array.isArray(item.references) && item.references.length > 0;
+	const refs = getItemReferences(item);
+	const hasReferences = refs.length > 0;
 	return hasReferences && refsApprovalReady(item);
 }
 

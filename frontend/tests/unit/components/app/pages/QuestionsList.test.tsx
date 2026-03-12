@@ -10,7 +10,6 @@ const mkItem = (id: string, deleted = false): GroundTruthItem => ({
 	status: "draft",
 	providerId: "json",
 	deleted,
-	references: [],
 });
 
 describe("QuestionsList", () => {

@@ -14,6 +14,7 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../../../models/groundTruth";
+import { getItemReferences } from "../../../models/groundTruth";
 import { validateConversationPattern } from "../../../models/validators";
 import TagChip from "../../common/TagChip";
 import ConversationTurnComponent from "./ConversationTurn";
@@ -77,7 +78,7 @@ export default function MultiTurnEditor({
 	}, [current, clearResults]);
 
 	const history = current?.history || [];
-	const references = current?.references || [];
+	const references = current ? getItemReferences(current) : [];
 
 	// Backend-provided global tags (cached via useTags)
 	const { allTags: availableTags, refresh: refreshTags } = useTags();
