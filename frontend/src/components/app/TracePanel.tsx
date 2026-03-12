@@ -1,18 +1,12 @@
 /**
- * TracePanel — evidence panel with editable context entries and tool decisions.
+ * TracePanel — evidence panel aligned with wireframe v2.2.
  *
- * Displays generic agentic-schema data attached to a GroundTruthItem:
- *   - Expected tools review (expectedTools vs toolCalls) — editable when onUpdateExpectedTools is provided
- *   - Tool calls (toolCalls) with expandable arguments and response
- *   - Context entries (contextEntries) — editable when onUpdateContextEntries is provided
- *   - Trace IDs (traceIds)
- *   - Metadata dictionary (metadata)
- *   - Plugin-owned details (plugins)
- *   - Feedback entries (feedback)
- *   - Raw trace payload (tracePayload)
- *
- * Aligned with the evidence/trace panel in wireframes/agent-curation-wireframe-v2.2.html.
- * Each section is collapsible and renders nothing when empty.
+ * Layout (top to bottom):
+ *   1. Header — "📋 Trace Data (N tool calls)" + sentiment badge + collapse toggle
+ *   2. Trace Info — flat 2-column grid of key identifiers
+ *   3. Feedback Scores — justified rows with color-coded numeric scores
+ *   4. Tool Calls — compact grid-based cards with expand/collapse
+ *   5. More Details — collapsible section for remaining data
  */
 
 import { useState } from "react";
@@ -22,18 +16,53 @@ import type {
 	FeedbackEntry,
 	GroundTruthItem,
 	PluginPayload,
-	ToolExpectation,
 } from "../../models/groundTruth";
 import { hasEvidenceData } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
 import ContextEntryEditor from "./editors/ContextEntryEditor";
 import ToolCallDetailView from "./editors/ToolCallDetailView";
-import ToolNecessityEditor from "./editors/ToolNecessityEditor";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Extract executionTimeSeconds from a tool call's response (unknown type). */
+function getExecTime(response: unknown): number | null {
+	if (response && typeof response === "object") {
+		const r = response as Record<string, unknown>;
+		if (typeof r.executionTimeSeconds === "number")
+			return r.executionTimeSeconds;
+	}
+	return null;
+}
+
+/** Derive overall sentiment from feedback values (lower = more positive). */
+function deriveSentiment(
+	feedback: FeedbackEntry[],
+): "positive" | "negative" | null {
+	const numericValues: number[] = [];
+	for (const f of feedback) {
+		for (const v of Object.values(f.values ?? {})) {
+			if (typeof v === "number") numericValues.push(v);
+		}
+	}
+	if (numericValues.length === 0) return null;
+	const avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+	return avg <= 2.5 ? "positive" : "negative";
+}
+
+/** Score color: 1=green, 2=amber, 3+=red. */
+function scoreColor(score: number): string {
+	if (score <= 1) return "text-emerald-700";
+	if (score <= 2) return "text-amber-700";
+	return "text-rose-700";
+}
 
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
+/** Collapsible section used for "More Details" and individual sub-areas. */
 function CollapsibleSection({
 	title,
 	badge,
@@ -69,189 +98,107 @@ function CollapsibleSection({
 	);
 }
 
-// ── Expected Tools Review ───────────────────────────────────────────────────
+// ── Trace Info ──────────────────────────────────────────────────────────────
 
-type ToolExpectationStatus = {
-	expectation: ToolExpectation;
-	called: boolean;
-};
+function TraceInfoSection({ item }: { item: GroundTruthItem }) {
+	const traceIds = item.traceIds ?? {};
+	const contextEntries = item.contextEntries ?? [];
+	const tracePayload = item.tracePayload ?? {};
 
-function ExpectedToolsSection({
-	item,
-	onUpdateExpectedTools,
-}: {
-	item: GroundTruthItem;
-	onUpdateExpectedTools?: (tools: ExpectedTools) => void;
-}) {
-	const expected = item.expectedTools;
-	const toolCalls = item.toolCalls ?? [];
-	const hasAnyExpectedTools =
-		expected &&
-		(expected.required?.length ||
-			expected.optional?.length ||
-			expected.notNeeded?.length);
+	const entries: [string, string][] = [];
 
-	// Show the editor when handler is provided and there are tool calls to classify
-	if (onUpdateExpectedTools && toolCalls.length > 0) {
-		const calledNames = new Set(toolCalls.map((tc) => tc.name));
-		const requiredMissing = (expected?.required ?? []).filter(
-			(te) => !calledNames.has(te.name),
-		);
-		const allRequiredMet = requiredMissing.length === 0;
-
-		return (
-			<CollapsibleSection
-				title="Expected Tools"
-				badge={
-					!hasAnyExpectedTools
-						? "unclassified"
-						: allRequiredMet
-							? "✓"
-							: `${requiredMissing.length} missing`
-				}
-				defaultOpen={!allRequiredMet || !hasAnyExpectedTools}
-			>
-				<ToolNecessityEditor
-					toolCalls={toolCalls}
-					expectedTools={expected}
-					onUpdate={onUpdateExpectedTools}
-				/>
-			</CollapsibleSection>
-		);
+	// Trace IDs
+	for (const [k, v] of Object.entries(traceIds)) {
+		const display =
+			typeof v === "string" && v.length > 20
+				? `${v.substring(0, 18)}…`
+				: String(v);
+		entries.push([k, display]);
 	}
 
-	// Read-only view when no update handler or no expectedTools
-	if (!hasAnyExpectedTools) {
-		return null;
+	// Key context entries
+	const contextMap = new Map(contextEntries.map((e) => [e.key, e]));
+	if (contextMap.has("impacted_device_type")) {
+		const deviceType = String(
+			contextMap.get("impacted_device_type")?.value ?? "",
+		);
+		const device = contextMap.has("impacted_device")
+			? String(contextMap.get("impacted_device")?.value ?? "")
+			: "";
+		entries.push(["device", `${deviceType} ${device}`.trim()]);
 	}
 
-	const calledNames = new Set((item.toolCalls ?? []).map((tc) => tc.name));
+	// Feedback type from metadata or derive from feedback
+	const sentiment = deriveSentiment(item.feedback ?? []);
+	if (sentiment) {
+		entries.push(["feedback", sentiment === "positive" ? "like" : "dislike"]);
+	}
 
-	const requiredStatus: ToolExpectationStatus[] = (expected.required ?? []).map(
-		(te) => ({ expectation: te, called: calledNames.has(te.name) }),
-	);
-	const optionalStatus: ToolExpectationStatus[] = (expected.optional ?? []).map(
-		(te) => ({ expectation: te, called: calledNames.has(te.name) }),
-	);
-	const notNeededStatus: ToolExpectationStatus[] = (
-		expected.notNeeded ?? []
-	).map((te) => ({ expectation: te, called: calledNames.has(te.name) }));
+	// Resolution from tracePayload or contextEntries
+	const resolution =
+		tracePayload.resolution ?? contextMap.get("resolution")?.value;
+	if (resolution) {
+		entries.push(["resolution", String(resolution)]);
+	}
 
-	const allRequiredMet = requiredStatus.every((s) => s.called);
+	if (entries.length === 0) return null;
+
+	// Separate normal entries from wide ones (resolution spans full width)
+	const wideKeys = new Set(["resolution"]);
+	const normalEntries = entries.filter(([k]) => !wideKeys.has(k));
+	const wideEntries = entries.filter(([k]) => wideKeys.has(k));
 
 	return (
-		<CollapsibleSection
-			title="Expected Tools"
-			badge={
-				allRequiredMet
-					? "✓"
-					: `${requiredStatus.filter((s) => !s.called).length} missing`
-			}
-			defaultOpen={!allRequiredMet}
-		>
-			<div className="space-y-2">
-				{requiredStatus.length > 0 && (
-					<div>
-						<div className="mb-1 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-							Required
-						</div>
-						{requiredStatus.map(({ expectation, called }) => (
-							<div
-								key={expectation.name}
-								className={cn(
-									"flex items-center gap-2 rounded-md px-2 py-1 text-xs",
-									called
-										? "bg-emerald-50 text-emerald-800"
-										: "bg-rose-50 text-rose-800",
-								)}
-							>
-								<span>{called ? "✓" : "✗"}</span>
-								<span className="font-mono">{expectation.name}</span>
-							</div>
-						))}
-					</div>
-				)}
-				{optionalStatus.length > 0 && (
-					<div>
-						<div className="mb-1 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-							Optional
-						</div>
-						{optionalStatus.map(({ expectation, called }) => (
-							<div
-								key={expectation.name}
-								className={cn(
-									"flex items-center gap-2 rounded-md px-2 py-1 text-xs",
-									called
-										? "bg-violet-50 text-violet-800"
-										: "bg-slate-50 text-slate-600",
-								)}
-							>
-								<span>{called ? "✓" : "–"}</span>
-								<span className="font-mono">{expectation.name}</span>
-							</div>
-						))}
-					</div>
-				)}
-				{notNeededStatus.length > 0 && (
-					<div>
-						<div className="mb-1 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-							Not Needed
-						</div>
-						{notNeededStatus.map(({ expectation, called }) => (
-							<div
-								key={expectation.name}
-								className={cn(
-									"flex items-center gap-2 rounded-md px-2 py-1 text-xs",
-									called
-										? "bg-amber-50 text-amber-800"
-										: "bg-slate-50 text-slate-500",
-								)}
-							>
-								<span>{called ? "⚠" : "–"}</span>
-								<span className="font-mono">{expectation.name}</span>
-								{called && (
-									<span className="text-amber-700 italic">
-										(called but not expected)
-									</span>
-								)}
-							</div>
-						))}
-					</div>
-				)}
+		<div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
+			<div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+				Trace Info
 			</div>
-		</CollapsibleSection>
+			<div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+				{normalEntries.map(([k, v]) => (
+					<div key={k}>
+						<span className="font-mono text-slate-500">{k}: </span>
+						<span className="text-slate-700 font-mono">{v}</span>
+					</div>
+				))}
+				{wideEntries.map(([k, v]) => (
+					<div key={k} className="col-span-2">
+						<span className="font-mono text-slate-500">{k}: </span>
+						<span className="text-slate-700">{v}</span>
+					</div>
+				))}
+			</div>
+		</div>
 	);
 }
 
-// ── Tool Calls ──────────────────────────────────────────────────────────────
-// ToolCallDetailView handles expand/collapse for arguments and response.
+// ── Feedback Scores ─────────────────────────────────────────────────────────
 
-// ── Feedback ───────────────────────────────────────────────────────────────
+function FeedbackScoresSection({ feedback }: { feedback: FeedbackEntry[] }) {
+	const allValues: [string, number][] = [];
+	for (const f of feedback) {
+		for (const [k, v] of Object.entries(f.values ?? {})) {
+			if (typeof v === "number") allValues.push([k, v]);
+		}
+	}
+	if (allValues.length === 0) return null;
 
-function FeedbackEntryRow({ entry }: { entry: FeedbackEntry }) {
-	const hasValues = entry.values && Object.keys(entry.values).length > 0;
 	return (
-		<div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
-			{entry.source && (
-				<div className="text-xs font-semibold text-slate-600">
-					{entry.source}
+		<div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+			<div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+				Feedback Scores
+			</div>
+			{allValues.map(([question, score]) => (
+				<div
+					key={question}
+					className="flex items-center justify-between text-xs py-0.5"
+				>
+					<span className="text-slate-600 mr-2">{question}</span>
+					<span className={cn("font-medium", scoreColor(score))}>{score}</span>
 				</div>
-			)}
-			{hasValues && (
-				<div className="space-y-0.5">
-					{Object.entries(entry.values ?? {}).map(([k, v]) => (
-						<div key={k} className="flex items-start gap-2 text-xs">
-							<span className="font-mono text-slate-500 shrink-0">{k}:</span>
-							<span className="text-slate-700">
-								{typeof v === "object" ? JSON.stringify(v) : String(v)}
-							</span>
-						</div>
-					))}
-				</div>
-			)}
-			{!entry.source && !hasValues && (
-				<span className="text-xs text-slate-400 italic">(empty entry)</span>
-			)}
+			))}
+			<p className="mt-1 text-xs text-slate-400 italic">
+				Scale: 1 = Strongly Agree, 5 = Strongly Disagree
+			</p>
 		</div>
 	);
 }
@@ -269,23 +216,6 @@ function KVDict({ data }: { data: Record<string, unknown> }) {
 					</span>
 				</div>
 			))}
-		</div>
-	);
-}
-
-// ── Context Entries ───────────────────────────────────────────────────────────
-
-function ContextEntryRow({ entry }: { entry: ContextEntry }) {
-	return (
-		<div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-			<div className="flex items-start gap-2 text-xs">
-				<span className="font-mono text-slate-500 shrink-0">{entry.key}:</span>
-				<span className="text-slate-700 break-all">
-					{typeof entry.value === "object"
-						? JSON.stringify(entry.value)
-						: String(entry.value)}
-				</span>
-			</div>
 		</div>
 	);
 }
@@ -326,6 +256,8 @@ function PluginPayloadCard({
 // Main TracePanel
 // ---------------------------------------------------------------------------
 
+export { getExecTime };
+
 export default function TracePanel({
 	item,
 	className,
@@ -337,6 +269,8 @@ export default function TracePanel({
 	onUpdateContextEntries?: (entries: ContextEntry[]) => void;
 	onUpdateExpectedTools?: (tools: ExpectedTools) => void;
 }) {
+	const [expanded, setExpanded] = useState(true);
+
 	if (!hasEvidenceData(item)) {
 		return (
 			<div
@@ -352,121 +286,155 @@ export default function TracePanel({
 
 	const toolCalls = item.toolCalls ?? [];
 	const contextEntries = item.contextEntries ?? [];
-	const traceIds = item.traceIds ?? {};
 	const metadata = item.metadata ?? {};
 	const plugins = item.plugins ?? {};
 	const feedback = item.feedback ?? [];
 	const tracePayload = item.tracePayload ?? {};
+	const sentiment = deriveSentiment(feedback);
+
+	// Determine if "More Details" has content (expected tools are now inline)
+	const hasMoreDetails =
+		contextEntries.length > 0 ||
+		onUpdateContextEntries ||
+		Object.keys(metadata).length > 0 ||
+		Object.entries(plugins).length > 0 ||
+		Object.keys(tracePayload).length > 0;
 
 	return (
-		<div className={cn("space-y-3", className)}>
-			<div className="text-sm font-semibold text-slate-700 px-1">
-				Evidence &amp; Trace
-			</div>
+		<div className={cn("rounded-2xl border bg-white shadow-sm", className)}>
+			{/* ── Header ── */}
+			<button
+				type="button"
+				className="flex w-full items-center justify-between p-4 cursor-pointer hover:bg-slate-50 rounded-2xl select-none"
+				onClick={() => setExpanded((v) => !v)}
+				aria-expanded={expanded}
+			>
+				<div className="flex items-center gap-2 flex-wrap">
+					<span className="text-sm font-medium text-slate-700">
+						📋 Trace Data ({toolCalls.length} tool call
+						{toolCalls.length !== 1 ? "s" : ""})
+					</span>
+					{sentiment && (
+						<span
+							className={cn(
+								"rounded-full px-2 py-0.5 text-xs font-medium",
+								sentiment === "positive"
+									? "bg-emerald-100 text-emerald-800"
+									: "bg-rose-100 text-rose-800",
+							)}
+						>
+							{sentiment === "positive" ? "👍 Positive" : "👎 Negative"}
+						</span>
+					)}
+				</div>
+				<span className="text-xs text-slate-500">
+					{expanded ? "▾ Collapse" : "▸ Expand"}
+				</span>
+			</button>
 
-			{/* Expected Tools review – editable when handler is provided */}
-			<ExpectedToolsSection
-				item={item}
-				onUpdateExpectedTools={onUpdateExpectedTools}
-			/>
-
-			{/* Trace IDs */}
-			{Object.keys(traceIds).length > 0 && (
-				<CollapsibleSection title="Trace IDs" defaultOpen>
-					<KVDict data={traceIds as Record<string, unknown>} />
-				</CollapsibleSection>
-			)}
-
-			{/* Tool Calls */}
-			{toolCalls.length > 0 && (
-				<CollapsibleSection
-					title="Tool Calls"
-					badge={toolCalls.length}
-					defaultOpen
-				>
-					<div className="space-y-2">
-						{toolCalls.map((tc, i) => (
-							<ToolCallDetailView
-								key={tc.id || String(i)}
-								tc={tc}
-								index={i}
-								itemId={item.id}
-							/>
-						))}
+			{/* ── Expanded content ── */}
+			{expanded && (
+				<div className="border-t px-4 pb-4 space-y-3">
+					{/* Trace Info */}
+					<div className="mt-3">
+						<TraceInfoSection item={item} />
 					</div>
-				</CollapsibleSection>
-			)}
 
-			{/* Context Entries — editable when handler is provided */}
-			{(contextEntries.length > 0 || onUpdateContextEntries) && (
-				<CollapsibleSection
-					title="Context Entries"
-					badge={contextEntries.length}
-					defaultOpen
-				>
-					{onUpdateContextEntries ? (
-						<ContextEntryEditor
-							entries={contextEntries}
-							onUpdate={onUpdateContextEntries}
-						/>
-					) : (
-						<div className="space-y-2">
-							{contextEntries.map((entry) => (
-								<ContextEntryRow
-									key={`${entry.key}-${JSON.stringify(entry.value)}`}
-									entry={entry}
+					{/* Feedback Scores */}
+					<FeedbackScoresSection feedback={feedback} />
+
+					{/* Tool Calls */}
+					{toolCalls.length > 0 && (
+						<>
+							<div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mt-2">
+								Tool Calls ({toolCalls.length})
+							</div>
+							{toolCalls.map((tc, i) => (
+								<ToolCallDetailView
+									key={tc.id || String(i)}
+									tc={tc}
+									index={i}
+									itemId={item.id}
+									expectedTools={item.expectedTools}
+									onUpdateExpectedTools={onUpdateExpectedTools}
 								/>
 							))}
-						</div>
+						</>
 					)}
-				</CollapsibleSection>
-			)}
 
-			{/* Feedback */}
-			{feedback.length > 0 && (
-				<CollapsibleSection
-					title="Feedback"
-					badge={feedback.length}
-					defaultOpen
-				>
-					<div className="space-y-2">
-						{feedback.map((f, i) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: feedback entries have no stable id
-							<FeedbackEntryRow key={i} entry={f} />
-						))}
-					</div>
-				</CollapsibleSection>
-			)}
+					{/* More Details — collapsible for remaining data */}
+					{hasMoreDetails && (
+						<CollapsibleSection title="More Details">
+							<div className="space-y-3">
+								{(contextEntries.length > 0 || onUpdateContextEntries) && (
+									<CollapsibleSection
+										title="Context Entries"
+										badge={contextEntries.length}
+										defaultOpen
+									>
+										{onUpdateContextEntries ? (
+											<ContextEntryEditor
+												entries={contextEntries}
+												onUpdate={onUpdateContextEntries}
+											/>
+										) : (
+											<div className="space-y-2">
+												{contextEntries.map((entry) => (
+													<div
+														key={`${entry.key}-${JSON.stringify(entry.value)}`}
+														className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+													>
+														<div className="flex items-start gap-2 text-xs">
+															<span className="font-mono text-slate-500 shrink-0">
+																{entry.key}:
+															</span>
+															<span className="text-slate-700 break-all">
+																{typeof entry.value === "object"
+																	? JSON.stringify(entry.value)
+																	: String(entry.value)}
+															</span>
+														</div>
+													</div>
+												))}
+											</div>
+										)}
+									</CollapsibleSection>
+								)}
 
-			{/* Metadata */}
-			{Object.keys(metadata).length > 0 && (
-				<CollapsibleSection title="Metadata">
-					<KVDict data={metadata} />
-				</CollapsibleSection>
-			)}
+								{Object.keys(metadata).length > 0 && (
+									<CollapsibleSection title="Metadata">
+										<KVDict data={metadata} />
+									</CollapsibleSection>
+								)}
 
-			{/* Plugin-owned Details */}
-			{Object.entries(plugins).length > 0 && (
-				<CollapsibleSection
-					title="Plugin Details"
-					badge={Object.keys(plugins).length}
-					defaultOpen
-				>
-					<div className="space-y-2">
-						{Object.entries(plugins).map(([slot, payload]) => (
-							<PluginPayloadCard key={slot} slot={slot} payload={payload} />
-						))}
-					</div>
-				</CollapsibleSection>
-			)}
+								{Object.entries(plugins).length > 0 && (
+									<CollapsibleSection
+										title="Plugin Details"
+										badge={Object.keys(plugins).length}
+									>
+										<div className="space-y-2">
+											{Object.entries(plugins).map(([slot, payload]) => (
+												<PluginPayloadCard
+													key={slot}
+													slot={slot}
+													payload={payload}
+												/>
+											))}
+										</div>
+									</CollapsibleSection>
+								)}
 
-			{/* Trace Payload (raw) */}
-			{Object.keys(tracePayload).length > 0 && (
-				<CollapsibleSection title="Trace Payload">
-					<pre className="overflow-auto rounded-md bg-slate-100 p-2 text-xs text-slate-700 max-h-64">
-						{JSON.stringify(tracePayload, null, 2)}
-					</pre>
-				</CollapsibleSection>
+								{Object.keys(tracePayload).length > 0 && (
+									<CollapsibleSection title="Trace Payload">
+										<pre className="overflow-auto rounded-md bg-slate-100 p-2 text-xs text-slate-700 max-h-64">
+											{JSON.stringify(tracePayload, null, 2)}
+										</pre>
+									</CollapsibleSection>
+								)}
+							</div>
+						</CollapsibleSection>
+					)}
+				</div>
 			)}
 		</div>
 	);

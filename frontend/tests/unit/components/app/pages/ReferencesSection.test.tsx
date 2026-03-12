@@ -110,8 +110,8 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		// TracePanel renders "Evidence & Trace" heading
-		expect(screen.getByText(/Evidence.*Trace/i)).toBeInTheDocument();
+		// TracePanel renders "Trace Data" heading (wireframe v2.2 layout)
+		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
 	});
 
 	it("shows RAG compat panel when in single-turn mode", () => {
@@ -132,7 +132,7 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 		).toBeInTheDocument();
 	});
 
-	it("shows expected tools section in TracePanel when item has expectedTools", () => {
+	it("shows TracePanel header when item has expectedTools", () => {
 		const item = makeItem({
 			expectedTools: {
 				required: [{ name: "search" }],
@@ -140,7 +140,8 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			toolCalls: [],
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		expect(screen.getByText(/Expected Tools/i)).toBeInTheDocument();
+		// TracePanel shows header even with only expectedTools (no tool calls)
+		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
 	});
 
 	it("shows generic evidence for context-only items", () => {
@@ -151,9 +152,9 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			],
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		expect(screen.getByText(/Evidence.*Trace/i)).toBeInTheDocument();
-		expect(screen.getByText(/Context Entries/i)).toBeInTheDocument();
-		expect(screen.getByText(/customer_tier:/i)).toBeInTheDocument();
+		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
+		// Context Entries is inside "More Details" collapsible
+		expect(screen.getByText(/More Details/i)).toBeInTheDocument();
 	});
 
 	it("shows generic plugin-owned details for plugin-only items", () => {
@@ -170,10 +171,9 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			},
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		expect(screen.getByText(/Evidence.*Trace/i)).toBeInTheDocument();
-		expect(screen.getByText(/Plugin Details/i)).toBeInTheDocument();
-		expect(screen.getByText("rag-compat")).toBeInTheDocument();
-		expect(screen.getByText(/retrievalMode:/i)).toBeInTheDocument();
+		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
+		// Plugin Details is inside "More Details" collapsible
+		expect(screen.getByText(/More Details/i)).toBeInTheDocument();
 	});
 
 	it("shows only evidence panel when multi-turn item has references", () => {
@@ -201,7 +201,7 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 				isMultiTurn
 			/>,
 		);
-		expect(screen.getByText(/Evidence.*Trace/i)).toBeInTheDocument();
+		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
 		// RAG references panel is hidden in multi-turn mode
 		expect(screen.queryByText(/Selected/i)).not.toBeInTheDocument();
 	});

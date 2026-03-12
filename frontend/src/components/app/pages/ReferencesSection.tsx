@@ -124,20 +124,20 @@ export default function ReferencesSection({
 	return (
 		<aside
 			className={cn(
-				"self-start rounded-2xl border bg-white shadow-sm flex flex-col overflow-hidden",
-				showRagCompat
-					? "h-[calc(100vh-5.5rem)]"
-					: "max-h-[calc(100vh-5.5rem)]",
+				"self-start flex flex-col overflow-hidden",
+				// When showing evidence, let TracePanel provide its own container styling.
+				// Only add border/bg when RAG panel is the primary surface.
+				showEvidence
+					? "max-h-[calc(100vh-5.5rem)]"
+					: "rounded-2xl border bg-white shadow-sm h-[calc(100vh-5.5rem)]",
 			)}
 		>
 			{/* Evidence & Trace panel (generic agentic data) */}
 			{showEvidence && item && (
 				<div
 					className={cn(
-						"overflow-y-auto p-3",
-						showRagCompat
-							? "flex-none border-b max-h-[50%]"
-							: "flex-1",
+						"overflow-y-auto",
+						showRagCompat ? "flex-none border-b max-h-[50%]" : "flex-1",
 					)}
 				>
 					<TracePanel
