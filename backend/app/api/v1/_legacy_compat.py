@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+# Legacy compatibility helpers for API endpoints that still accept raw payloads
+# with old RAG-era field names (editedQuestion, answer, refs, etc.).
+# Retained because bulk import and PATCH handlers coerce untyped history entries
+# and apply legacy field updates from callers that haven't migrated to the
+# generic plugin-packed schema. Remove once all API callers send properly-typed
+# payloads through AgenticGroundTruthEntry directly.
+
 from typing import Any, cast
 
 from app.domain.models import AgenticGroundTruthEntry, HistoryItem, Reference

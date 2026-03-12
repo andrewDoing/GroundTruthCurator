@@ -70,16 +70,7 @@ function MiniCurateApp() {
 						canApprove={true}
 						saving={false}
 						onDuplicate={() => void 0}
-						onUpdateQuestion={(q) => {
-							setItems((arr) =>
-								arr.map((i) =>
-									i.id === selectedId ? { ...i, question: q } : i,
-								),
-							);
-							setUnsaved(true);
-						}}
 						onUpdateComment={() => void 0}
-						onUpdateAnswer={() => void 0}
 						onUpdateTags={() => void 0}
 						onUpdateHistory={(history) => {
 							setItems((arr) =>

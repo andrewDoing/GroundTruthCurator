@@ -1,15 +1,15 @@
 // Public API for the plugin component registry.
 
-export {
-	getExplorerExtensions,
-	registerExplorerExtension,
-	resetExplorerExtensions,
-} from "./ExplorerExtensions";
 export type {
 	ExplorerCellProps,
 	ExplorerColumnExtension,
 	ExplorerExtension,
 	ExplorerFilterExtension,
+} from "./ExplorerExtensions";
+export {
+	getExplorerExtensions,
+	registerExplorerExtension,
+	resetExplorerExtensions,
 } from "./ExplorerExtensions";
 export {
 	FieldComponentRegistry,

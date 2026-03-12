@@ -137,8 +137,7 @@ export function getItemReferences(item: GroundTruthItem): Reference[] {
 				keyParagraph: c.keyParagraph,
 				bonus: c.bonus ?? false,
 				messageIndex: c.messageIndex,
-				toolCallId:
-					toolCallId !== _UNASSOCIATED_KEY ? toolCallId : undefined,
+				toolCallId: toolCallId !== _UNASSOCIATED_KEY ? toolCallId : undefined,
 			});
 		}
 	}

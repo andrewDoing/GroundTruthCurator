@@ -1257,7 +1257,9 @@ export default function QuestionsExplorer({
 													<td
 														key={col.key}
 														className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden xl:table-cell"
-														style={col.width ? { minWidth: col.width } : undefined}
+														style={
+															col.width ? { minWidth: col.width } : undefined
+														}
 													>
 														{col.cellRenderer ? (
 															<col.cellRenderer item={item} />

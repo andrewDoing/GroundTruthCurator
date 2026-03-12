@@ -202,6 +202,7 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			/>,
 		);
 		expect(screen.getByText(/Evidence.*Trace/i)).toBeInTheDocument();
-		expect(screen.getByText(/RAG References/i)).toBeInTheDocument();
+		// RAG references panel is rendered (label removed in Phase 7 legacy retirement)
+		expect(screen.getByText(/Selected/i)).toBeInTheDocument();
 	});
 });

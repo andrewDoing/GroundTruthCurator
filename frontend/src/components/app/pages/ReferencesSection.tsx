@@ -138,18 +138,9 @@ export default function ReferencesSection({
 				</div>
 			)}
 
-			{/* RAG compatibility panel — retrieval search and selected references */}
+			{/* RAG references panel — retrieval search and selected references */}
 			{showRagCompat && (
 				<div className="flex flex-col flex-1 min-h-0">
-					{/* Section label when both panels are visible */}
-					{showEvidence && (
-						<div className="flex items-center gap-2 border-b px-3 py-2 text-xs font-medium text-slate-500 bg-slate-50">
-							<span className="rounded-full bg-slate-200 px-2 py-0.5">
-								RAG References
-							</span>
-							<span className="text-slate-400">compatibility surface</span>
-						</div>
-					)}
 					<div className="flex-1 min-h-0 overflow-hidden">
 						<ReferencesTabs
 							rightTab={rightTab}

@@ -1,31 +1,4 @@
 import { Check, RefreshCw, Save, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-
-// Determine if it's appropriate to move focus into the editor
-function shouldStealFocus(): boolean {
-	const ae = typeof document !== "undefined" ? document.activeElement : null;
-	if (!ae) return true;
-	// If focus is already on an editable control, don't steal.
-	if (ae instanceof HTMLElement) {
-		const tag = ae.tagName.toLowerCase();
-		if (tag === "input" || tag === "textarea" || ae.isContentEditable) {
-			return false;
-		}
-	}
-	return true;
-}
-
-function moveCaretToEnd(el: HTMLTextAreaElement) {
-	const len = el.value?.length ?? 0;
-	try {
-		el.selectionStart = len;
-		el.selectionEnd = len;
-		// Ensure scroll position shows the end if content overflows
-		el.scrollTop = el.scrollHeight;
-	} catch {
-		// Some environments may not support selection APIs; ignore.
-	}
-}
 
 import useCurationInstructions from "../../../hooks/useCurationInstructions";
 import type { AgentGenerationResult } from "../../../hooks/useGroundTruth";
@@ -34,13 +7,11 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../../../models/groundTruth";
-import { getItemReferences } from "../../../models/groundTruth";
 import { cn } from "../../../models/utils";
 import {
 	validateConversationPattern,
 	validateExpectedTools,
 } from "../../../models/validators";
-import TagsEditor from "../../app/editor/TagsEditor";
 import InstructionsPane from "../../app/InstructionsPane";
 import defaultCurateMd from "../defaultCurateInstructions.md?raw";
 import MultiTurnEditor from "../editor/MultiTurnEditor";
@@ -49,8 +20,6 @@ export default function CuratePane({
 	current,
 	canApprove,
 	saving,
-	onUpdateQuestion,
-	onUpdateAnswer,
 	onUpdateComment,
 	onUpdateTags,
 	onUpdateHistory,
@@ -66,14 +35,11 @@ export default function CuratePane({
 	onRemoveReference,
 	onOpenReference,
 	onAddReferences,
-	onEditorModeChange,
 	className,
 }: {
 	current: GroundTruthItem | null | undefined;
 	canApprove: boolean;
 	saving: boolean;
-	onUpdateQuestion: (v: string) => void;
-	onUpdateAnswer: (v: string) => void;
 	onUpdateComment: (v: string) => void;
 	onUpdateTags: (tags: string[]) => void;
 	onUpdateHistory: (history: ConversationTurn[]) => void;
@@ -89,100 +55,12 @@ export default function CuratePane({
 	onRemoveReference: (refId: string) => void;
 	onOpenReference: (ref: Reference) => void;
 	onAddReferences?: (refs: Reference[]) => void;
-	onEditorModeChange?: (mode: "single" | "multi") => void;
 	className?: string;
 }) {
-	// Ref to the Question textarea for autofocus on item load/selection
-	const questionRef = useRef<HTMLTextAreaElement | null>(null);
-
-	// Multi-turn mode: always default to multi-turn mode (single-turn mode is disabled)
-	// editorMode is fixed to "multi" - keeping state for potential future use
-	const [editorMode] = useState<"single" | "multi">("multi");
-
-	// NOTE: Mode toggle disabled - refs and handler removed
-	// const userOverrideRef = useRef(false);
-	// const lastItemIdRef = useRef<string | null>(null);
-
-	// NOTE: Auto-switching logic disabled - always stay in multi-turn mode
-	// Update mode when current item changes based on whether it has history
-	// Only auto-switch if the user hasn't manually overridden the mode for the current item
-	// useEffect(() => {
-	// 	if (!current) return;
-	//
-	// 	// If we switched to a different item, reset the override flag
-	// 	if (current.id !== lastItemIdRef.current) {
-	// 		userOverrideRef.current = false;
-	// 		lastItemIdRef.current = current.id;
-	// 	}
-	//
-	// 	// Don't auto-switch if user manually overrode the mode
-	// 	if (userOverrideRef.current) return;
-	//
-	// 	// If item has history (multi-turn), switch to multi-turn mode
-	// 	if (isMultiTurn(current) && editorMode === "single") {
-	// 		setEditorMode("multi");
-	// 	}
-	// 	// If item lacks history (single-turn), switch to single-turn mode
-	// 	else if (!isMultiTurn(current) && editorMode === "multi") {
-	// 		setEditorMode("single");
-	// 	}
-	// }, [current, editorMode]);
-
-	// Notify parent when editor mode changes
-	useEffect(() => {
-		onEditorModeChange?.(editorMode);
-	}, [editorMode, onEditorModeChange]);
-
-	// NOTE: Mode toggle handler disabled, code kept for potential future use
-	// const handleModeToggle = (mode: "single" | "multi") => {
-	// 	// Mark that the user manually changed the mode
-	// 	userOverrideRef.current = true;
-	//
-	// 	// If switching from single to multi and there's no history yet, initialize with current Q&A
-	// 	if (mode === "multi" && current && !isMultiTurn(current)) {
-	// 		const initialHistory: ConversationTurn[] = [];
-	// 		if (current.question?.trim()) {
-	// 			initialHistory.push({ role: "user", content: current.question.trim() });
-	// 		}
-	// 		if (current.answer?.trim()) {
-	// 			initialHistory.push({ role: "agent", content: current.answer.trim() });
-	// 		}
-	// 		if (initialHistory.length > 0) {
-	// 			onUpdateHistory(initialHistory);
-	//
-	// 			// Assign existing references (those without messageIndex) to the first agent turn (index 1)
-	// 			// This ensures references from single-turn mode are properly associated with the agent turn
-	// 			if (current.references && current.references.length > 0 && onUpdateReference) {
-	// 				const agentMessageIndex = 1; // First agent turn is at index 1 (after user turn at 0)
-	// 				current.references.forEach(ref => {
-	// 					if (ref.messageIndex === undefined) {
-	// 						onUpdateReference(ref.id, { messageIndex: agentMessageIndex });
-	// 					}
-	// 				});
-	// 			}
-	// 		}
-	// 	}
-	//
-	// 	setEditorMode(mode);
-	// 	localStorage.setItem("gtc-editor-mode", mode);
-	// };
-
 	// Dataset-specific curation instructions (fallback to per-item or local default)
 	const datasetName = current?.datasetName;
 	const { markdown: datasetMd, error: dsError } =
 		useCurationInstructions(datasetName);
-
-	// Focus the Question textarea when a current item becomes available or changes
-	useEffect(() => {
-		if (!current?.id) return;
-		const el = questionRef.current;
-		if (!el) return;
-		if (!shouldStealFocus()) return;
-		// Focus and place caret at end for natural appending
-		el.focus();
-		moveCaretToEnd(el);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [current?.id]);
 
 	return (
 		<div className={cn("flex min-h-0 gap-3", className)}>
@@ -209,83 +87,21 @@ export default function CuratePane({
 					</div>
 				)}
 
-				{/* Mode Toggle - DISABLED: Always use multi-turn mode */}
-				{/* <div className="flex items-center gap-2 rounded-2xl border bg-white p-2">
-				<button
-					type="button"
-					onClick={() => handleModeToggle("single")}
-					className={cn(
-						"flex-1 rounded-xl px-4 py-2 text-sm font-medium transition-colors",
-						editorMode === "single"
-							? "bg-violet-600 text-white shadow"
-							: "text-slate-600 hover:bg-slate-100",
-					)}
-				>
-					Single-turn
-				</button>
-				<button
-					type="button"
-					onClick={() => handleModeToggle("multi")}
-					className={cn(
-						"flex-1 rounded-xl px-4 py-2 text-sm font-medium transition-colors",
-						editorMode === "multi"
-							? "bg-violet-600 text-white shadow"
-							: "text-slate-600 hover:bg-slate-100",
-					)}
-				>
-					Multi-turn
-				</button>
-			</div> */}
-
-				{/* Editor: Single-turn or Multi-turn */}
-				{editorMode === "single" ? (
-					<>
-						<div className="rounded-2xl border bg-white p-4 shadow-sm">
-							<div className="mb-3 text-sm font-medium">Question</div>
-							<textarea
-								ref={questionRef}
-								aria-label="Question"
-								className="h-24 w-full resize-y rounded-xl border p-3 focus:outline-none focus:ring-2 focus:ring-violet-300"
-								value={current?.question || ""}
-								onChange={(e) => onUpdateQuestion(e.target.value)}
-							/>
-						</div>
-
-						<div className="rounded-2xl border bg-white p-4 shadow-sm">
-							<div className="mb-3 text-sm font-medium">Answer</div>
-							<textarea
-								aria-label="Answer"
-								className="h-48 w-full resize-y rounded-xl border p-3 focus:outline-none focus:ring-2 focus:ring-violet-300"
-								value={current?.answer || ""}
-								onChange={(e) => onUpdateAnswer(e.target.value)}
-							/>
-						</div>
-					</>
-				) : (
-					<div className="rounded-2xl border bg-white p-4 shadow-sm">
-						<MultiTurnEditor
-							current={current || null}
-							onUpdateHistory={onUpdateHistory}
-							onDeleteTurn={onDeleteTurn}
-							onGenerate={onGenerateAgentTurn}
-							canEdit={!current?.deleted}
-							onUpdateReference={onUpdateReference}
-							onRemoveReference={onRemoveReference}
-							onOpenReference={onOpenReference}
-							onAddReferences={onAddReferences}
-							onUpdateTags={onUpdateTags}
-						/>
-					</div>
-				)}
-
-				{editorMode === "single" && (
-					<TagsEditor
-						selected={current?.manualTags || []}
-						computedTags={current?.computedTags}
-						onChange={onUpdateTags}
-						title="Tags"
+				{/* Multi-turn conversation editor */}
+				<div className="rounded-2xl border bg-white p-4 shadow-sm">
+					<MultiTurnEditor
+						current={current || null}
+						onUpdateHistory={onUpdateHistory}
+						onDeleteTurn={onDeleteTurn}
+						onGenerate={onGenerateAgentTurn}
+						canEdit={!current?.deleted}
+						onUpdateReference={onUpdateReference}
+						onRemoveReference={onRemoveReference}
+						onOpenReference={onOpenReference}
+						onAddReferences={onAddReferences}
+						onUpdateTags={onUpdateTags}
 					/>
-				)}
+				</div>
 
 				{/* Comments Panel */}
 				<div className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -320,66 +136,30 @@ export default function CuratePane({
 									</span>
 								</p>
 							)}
-							{editorMode === "multi" ? (
-								<>
-									{validateConversationPattern(current.history).valid
-										? null
-										: validateConversationPattern(current.history).errors.map(
-												(error) => (
-													<p key={error} className="flex items-start gap-2">
-														<span className="mt-0.5 flex-shrink-0">✗</span>
-														<span>
-															<strong>Conversation pattern error:</strong>{" "}
-															{error}
-														</span>
-													</p>
-												),
-											)}
-									{/* Expected tools gating: show missing required tools */}
-									{validateExpectedTools(current).errors.map((error) => (
-										<p key={error} className="flex items-start gap-2">
-											<span className="mt-0.5 flex-shrink-0">✗</span>
-											<span>
-												<strong>Expected tool not called:</strong>{" "}
-												{error
-													.replace(/^Required tool /, "")
-													.replace(/ was not called$/, "")}
-											</span>
-										</p>
-									))}
-								</>
-							) : (
-								<>
-									{getItemReferences(current).length === 0 && (
-										<p className="flex items-start gap-2">
-											<span className="mt-0.5 flex-shrink-0">✗</span>
-											<span>
-												<strong>No references:</strong> Select at least one
-												reference
-											</span>
-										</p>
+							{validateConversationPattern(current.history).valid
+								? null
+								: validateConversationPattern(current.history).errors.map(
+										(error) => (
+											<p key={error} className="flex items-start gap-2">
+												<span className="mt-0.5 flex-shrink-0">✗</span>
+												<span>
+													<strong>Conversation pattern error:</strong> {error}
+												</span>
+											</p>
+										),
 									)}
-									{getItemReferences(current).filter((r) => !r.visitedAt)
-										.length > 0 && (
-										<p className="flex items-start gap-2">
-											<span className="mt-0.5 flex-shrink-0">✗</span>
-											<span>
-												<strong>Unvisited references:</strong>{" "}
-												{
-													getItemReferences(current).filter((r) => !r.visitedAt)
-														.length
-												}{" "}
-												reference
-												{getItemReferences(current).filter((r) => !r.visitedAt)
-													.length !== 1
-													? "s"
-													: ""}{" "}
-												need to be opened and reviewed
-											</span>
-										</p>
-									)}
-								</>
-							)}
+							{/* Expected tools gating: show missing required tools */}
+							{validateExpectedTools(current).errors.map((error) => (
+								<p key={error} className="flex items-start gap-2">
+									<span className="mt-0.5 flex-shrink-0">✗</span>
+									<span>
+										<strong>Expected tool not called:</strong>{" "}
+										{error
+											.replace(/^Required tool /, "")
+											.replace(/ was not called$/, "")}
+									</span>
+								</p>
+							))}
 						</div>
 					</div>
 				)}

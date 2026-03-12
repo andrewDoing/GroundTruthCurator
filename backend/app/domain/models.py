@@ -255,6 +255,14 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
 
     _RAG_COMPAT_PLUGIN: ClassVar[str] = "rag-compat"
 
+    # --- Legacy compatibility layer ---
+    # The model_validator, computed_fields, and property accessors below exist because
+    # stored Cosmos DB documents may still carry top-level RAG fields (synthQuestion,
+    # editedQuestion, answer, refs, etc.). They transparently relocate those fields into
+    # plugins["rag-compat"] on read and re-expose them for internal code that still
+    # accesses .synth_question, .answer, .refs, .totalReferences. Remove once all stored
+    # documents have been migrated to the plugin-packed format.
+
     @model_validator(mode="before")
     @classmethod
     def translate_legacy_payload_for_core_model(cls, value: object) -> object:
@@ -522,33 +530,11 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
             return
         self._set_rag_compat_value("totalReferences", None if value is None else int(value))
 
-    @property
-    def contextUsedForGeneration(self) -> str | None:
-        return cast(str | None, self._rag_compat_data().get("contextUsedForGeneration"))
-
-    @property
-    def contextSource(self) -> str | None:
-        return cast(str | None, self._rag_compat_data().get("contextSource"))
-
-    @property
-    def modelUsedForGeneration(self) -> str | None:
-        return cast(str | None, self._rag_compat_data().get("modelUsedForGeneration"))
-
-    @property
-    def semanticClusterNumber(self) -> int | None:
-        return cast(int | None, self._rag_compat_data().get("semanticClusterNumber"))
-
-    @property
-    def weight(self) -> float | None:
-        return cast(float | None, self._rag_compat_data().get("weight"))
-
-    @property
-    def samplingBucket(self) -> int | None:
-        return cast(int | None, self._rag_compat_data().get("samplingBucket"))
-
-    @property
-    def questionLength(self) -> int | None:
-        return cast(int | None, self._rag_compat_data().get("questionLength"))
+    # NOTE: Informational RAG-era accessors (contextUsedForGeneration, contextSource,
+    # modelUsedForGeneration, semanticClusterNumber, weight, samplingBucket, questionLength)
+    # removed in Phase 7 legacy retirement. No callers accessed them via
+    # AgenticGroundTruthEntry; GroundTruthItem still has explicit fields for Cosmos
+    # backward-compat reads.
 
 
 class GroundTruthItem(AgenticGroundTruthEntry):

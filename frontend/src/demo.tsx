@@ -350,8 +350,6 @@ export default function GTAppDemo() {
 											current={gt.current}
 											canApprove={gt.canApprove}
 											saving={gt.saving}
-											onUpdateQuestion={(v) => gt.updateQuestion(v)}
-											onUpdateAnswer={(v) => gt.updateAnswer(v)}
 											onUpdateComment={(v) => gt.updateComment(v)}
 											onUpdateTags={(tags) => gt.updateTags(tags)}
 											onUpdateHistory={(history) => gt.updateHistory(history)}
@@ -457,8 +455,6 @@ export default function GTAppDemo() {
 									current={gt.current}
 									canApprove={gt.canApprove}
 									saving={gt.saving}
-									onUpdateQuestion={(v) => gt.updateQuestion(v)}
-									onUpdateAnswer={(v) => gt.updateAnswer(v)}
 									onUpdateComment={(v) => gt.updateComment(v)}
 									onUpdateTags={(tags) => gt.updateTags(tags)}
 									onUpdateHistory={(history) => gt.updateHistory(history)}

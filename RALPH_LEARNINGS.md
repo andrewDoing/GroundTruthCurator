@@ -130,3 +130,15 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - `QuestionsExplorer.tsx` renders plugin-contributed columns from `getExplorerExtensions()` in both header and row cells.
 - Phase 6 validation: backend `394/394` tests, frontend `297/297` tests, tsc clean, Biome `138 files` (3 pre-existing errors, 16 pre-existing warnings — all in test files, `noNonNullAssertion`).
 - The `GroundTruthItem` field-shadowing warnings (12 in pytest) are pre-existing noise from Phase 1.
+- **Reviewer iteration 1 (2026-03-12)**: Phase 6 approved with 0 findings. All 4 steps verified: backend per-call CRUD + migration (14 tests), apiMapper auto-migration + round-trip, top-level references removal with ~25 consumer updates, ExplorerExtensions registry with RAG "Refs" column. All gates pass (394/394 backend, 297/297 frontend, ruff/ty/tsc/Biome clean). `chatService.ts:77` `.references` is on `ChatResponse` API schema (not GroundTruthItem) — not a stale access. CuratePane `.references` only in comments — inert.
+- Future phases adding explorer filter URL-sync should wire `ExplorerFilterExtension.matches()` into QuestionsExplorer's filter state management — the types are registered but filtering UI is not yet connected.
+
+### Phase 7 Legacy Retirement
+
+- **Backend compat code retained**: `_legacy_compat.py`, `GroundTruthItem` subclass, core property accessors (`synth_question`, `edited_question`, `answer`, `refs`, `totalReferences`), `translate_legacy_payload_for_core_model` validator, and Cosmos SELECT clause are all still actively needed for stored documents and internal services. Do not remove until all Cosmos documents migrate to plugin-packed format and all internal callers switch to `AgenticGroundTruthEntry`.
+- Removed 7 informational-only property accessors from `AgenticGroundTruthEntry` (`contextUsedForGeneration`, `contextSource`, `modelUsedForGeneration`, `semanticClusterNumber`, `weight`, `samplingBucket`, `questionLength`) — zero callers. `GroundTruthItem` still has explicit fields for these.
+- **CuratePane is now multi-turn-only**. Removed: `editorMode` state, `onUpdateQuestion`/`onUpdateAnswer`/`onEditorModeChange` props, `shouldStealFocus`/`moveCaretToEnd` helpers, `questionRef`, single-turn Q/A textareas, single-turn `TagsEditor` conditional, single-turn approval issue branch (~160 lines removed). All editing flows through `onUpdateHistory` → `MultiTurnEditor`.
+- `onUpdateQuestion`/`onUpdateAnswer` are no longer passed from `demo.tsx`. The `gt.updateQuestion()`/`gt.updateAnswer()` callbacks still exist in `useGroundTruth` and are called automatically by the history sync logic.
+- "compatibility surface" label removed from `ReferencesSection.tsx` — RAG references panel still renders when `references.length > 0`.
+- Fixed 3 pre-existing Biome formatting errors in QuestionsExplorer.tsx, groundTruth.ts, registry/index.ts — `make -f Makefile.harness ci` now fully green.
+- Phase 7 validation: `make -f Makefile.harness ci` passes — ruff, ty, tsc, Biome (138 files, 0 errors, 16 warnings), 394/394 backend tests (5 field-shadowing warnings pre-existing), 297/297 frontend tests (39 test files).
