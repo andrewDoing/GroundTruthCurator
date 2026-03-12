@@ -34,12 +34,13 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../../../models/groundTruth";
-import { hasEvidenceData } from "../../../models/groundTruth";
 import { cn } from "../../../models/utils";
-import { validateConversationPattern } from "../../../models/validators";
+import {
+	validateConversationPattern,
+	validateExpectedTools,
+} from "../../../models/validators";
 import TagsEditor from "../../app/editor/TagsEditor";
 import InstructionsPane from "../../app/InstructionsPane";
-import TracePanel from "../../app/TracePanel";
 import defaultCurateMd from "../defaultCurateInstructions.md?raw";
 import MultiTurnEditor from "../editor/MultiTurnEditor";
 
@@ -182,8 +183,6 @@ export default function CuratePane({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [current?.id]);
 
-	const showEvidence = !!current && hasEvidenceData(current);
-
 	return (
 		<div className={cn("flex min-h-0 gap-3", className)}>
 			{/* Left pane: conversation editor, approval, actions */}
@@ -321,18 +320,33 @@ export default function CuratePane({
 								</p>
 							)}
 							{editorMode === "multi" ? (
-								validateConversationPattern(current.history).valid ? null : (
-									validateConversationPattern(current.history).errors.map(
-										(error) => (
-											<p key={error} className="flex items-start gap-2">
-												<span className="mt-0.5 flex-shrink-0">✗</span>
-												<span>
-													<strong>Conversation pattern error:</strong> {error}
-												</span>
-											</p>
-										),
-									)
-								)
+								<>
+									{validateConversationPattern(current.history).valid
+										? null
+										: validateConversationPattern(current.history).errors.map(
+												(error) => (
+													<p key={error} className="flex items-start gap-2">
+														<span className="mt-0.5 flex-shrink-0">✗</span>
+														<span>
+															<strong>Conversation pattern error:</strong>{" "}
+															{error}
+														</span>
+													</p>
+												),
+											)}
+									{/* Expected tools gating: show missing required tools */}
+									{validateExpectedTools(current).errors.map((error) => (
+										<p key={error} className="flex items-start gap-2">
+											<span className="mt-0.5 flex-shrink-0">✗</span>
+											<span>
+												<strong>Expected tool not called:</strong>{" "}
+												{error
+													.replace(/^Required tool /, "")
+													.replace(/ was not called$/, "")}
+											</span>
+										</p>
+									))}
+								</>
 							) : (
 								<>
 									{current.references.length === 0 && (
@@ -436,13 +450,6 @@ export default function CuratePane({
 					)}
 				</div>
 			</section>
-
-			{/* Right pane: evidence/trace panel (shown when item has generic trace data) */}
-			{showEvidence && current && (
-				<aside className="hidden lg:block w-80 xl:w-96 flex-none overflow-y-auto min-h-0">
-					<TracePanel item={current} />
-				</aside>
-			)}
 		</div>
 	);
 }

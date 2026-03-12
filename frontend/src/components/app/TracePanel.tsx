@@ -2,6 +2,7 @@
  * TracePanel — read-only right-pane evidence panel.
  *
  * Displays generic agentic-schema data attached to a GroundTruthItem:
+ *   - Expected tools review (expectedTools vs toolCalls)
  *   - Tool calls (toolCalls)
  *   - Trace IDs (traceIds)
  *   - Metadata dictionary (metadata)
@@ -17,6 +18,7 @@ import type {
 	FeedbackEntry,
 	GroundTruthItem,
 	ToolCallRecord,
+	ToolExpectation,
 } from "../../models/groundTruth";
 import { hasEvidenceData } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
@@ -57,6 +59,122 @@ function CollapsibleSection({
 			</button>
 			{open && <div className="border-t px-4 pb-4 pt-3">{children}</div>}
 		</div>
+	);
+}
+
+// ── Expected Tools Review ───────────────────────────────────────────────────
+
+type ToolExpectationStatus = {
+	expectation: ToolExpectation;
+	called: boolean;
+};
+
+function ExpectedToolsSection({ item }: { item: GroundTruthItem }) {
+	const expected = item.expectedTools;
+	if (
+		!expected ||
+		(!expected.required?.length &&
+			!expected.optional?.length &&
+			!expected.notNeeded?.length)
+	) {
+		return null;
+	}
+
+	const calledNames = new Set((item.toolCalls ?? []).map((tc) => tc.name));
+
+	const requiredStatus: ToolExpectationStatus[] = (expected.required ?? []).map(
+		(te) => ({ expectation: te, called: calledNames.has(te.name) }),
+	);
+	const optionalStatus: ToolExpectationStatus[] = (expected.optional ?? []).map(
+		(te) => ({ expectation: te, called: calledNames.has(te.name) }),
+	);
+	const notNeededStatus: ToolExpectationStatus[] = (
+		expected.notNeeded ?? []
+	).map((te) => ({ expectation: te, called: calledNames.has(te.name) }));
+
+	const allRequiredMet = requiredStatus.every((s) => s.called);
+
+	return (
+		<CollapsibleSection
+			title="Expected Tools"
+			badge={
+				allRequiredMet
+					? "✓"
+					: `${requiredStatus.filter((s) => !s.called).length} missing`
+			}
+			defaultOpen={!allRequiredMet}
+		>
+			<div className="space-y-2">
+				{requiredStatus.length > 0 && (
+					<div>
+						<div className="mb-1 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+							Required
+						</div>
+						{requiredStatus.map(({ expectation, called }) => (
+							<div
+								key={expectation.name}
+								className={cn(
+									"flex items-center gap-2 rounded-md px-2 py-1 text-xs",
+									called
+										? "bg-emerald-50 text-emerald-800"
+										: "bg-rose-50 text-rose-800",
+								)}
+							>
+								<span>{called ? "✓" : "✗"}</span>
+								<span className="font-mono">{expectation.name}</span>
+							</div>
+						))}
+					</div>
+				)}
+				{optionalStatus.length > 0 && (
+					<div>
+						<div className="mb-1 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+							Optional
+						</div>
+						{optionalStatus.map(({ expectation, called }) => (
+							<div
+								key={expectation.name}
+								className={cn(
+									"flex items-center gap-2 rounded-md px-2 py-1 text-xs",
+									called
+										? "bg-violet-50 text-violet-800"
+										: "bg-slate-50 text-slate-600",
+								)}
+							>
+								<span>{called ? "✓" : "–"}</span>
+								<span className="font-mono">{expectation.name}</span>
+							</div>
+						))}
+					</div>
+				)}
+				{notNeededStatus.length > 0 && (
+					<div>
+						<div className="mb-1 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+							Not Needed
+						</div>
+						{notNeededStatus.map(({ expectation, called }) => (
+							<div
+								key={expectation.name}
+								className={cn(
+									"flex items-center gap-2 rounded-md px-2 py-1 text-xs",
+									called
+										? "bg-amber-50 text-amber-800"
+										: "bg-slate-50 text-slate-500",
+								)}
+							>
+								<span>{called ? "⚠" : "–"}</span>
+								<span className="font-mono">{expectation.name}</span>
+								{called && (
+									<span className="text-amber-700 italic">
+										(called but not expected)
+									</span>
+								)}
+							</div>
+						))}
+					</div>
+				)}
+			</div>
+		</CollapsibleSection>
 	);
 }
 
@@ -189,6 +307,9 @@ export default function TracePanel({
 			<div className="text-sm font-semibold text-slate-700 px-1">
 				Evidence &amp; Trace
 			</div>
+
+			{/* Expected Tools review – always show when present */}
+			<ExpectedToolsSection item={item} />
 
 			{/* Trace IDs */}
 			{Object.keys(traceIds).length > 0 && (

@@ -1,4 +1,5 @@
 import type { GroundTruthItem } from "../../models/groundTruth";
+import { hasEvidenceData } from "../../models/groundTruth";
 
 type SprintStats = {
 	sprint: string;
@@ -7,9 +8,17 @@ type SprintStats = {
 	deleted: number;
 };
 
+/**
+ * Generic plugin-contributed metrics that can be extended by plugin packs.
+ * Each key is a metric name and each value is a displayable number.
+ */
+export type PluginMetrics = Record<string, number>;
+
 export type StatsPayload = {
 	total: { approved: number; draft: number; deleted: number };
 	perSprint: SprintStats[];
+	/** Optional plugin-contributed metrics to display alongside core stats. */
+	pluginMetrics?: PluginMetrics;
 };
 
 export default function StatsView({
@@ -28,6 +37,33 @@ export default function StatsView({
 			return acc;
 		},
 		{ approved: 0, draft: 0, deleted: 0 },
+	);
+
+	// Compute generic agentic metrics from current items
+	const agenticMetrics = items.reduce(
+		(acc, it) => {
+			if (it.toolCalls && it.toolCalls.length > 0) {
+				acc.itemsWithToolCalls++;
+				acc.totalToolCalls += it.toolCalls.length;
+			}
+			if (it.contextEntries && it.contextEntries.length > 0) {
+				acc.itemsWithContext++;
+			}
+			if (hasEvidenceData(it)) {
+				acc.itemsWithEvidence++;
+			}
+			if (it.expectedTools) {
+				acc.itemsWithExpectedTools++;
+			}
+			return acc;
+		},
+		{
+			itemsWithToolCalls: 0,
+			totalToolCalls: 0,
+			itemsWithContext: 0,
+			itemsWithEvidence: 0,
+			itemsWithExpectedTools: 0,
+		},
 	);
 
 	return (
@@ -90,6 +126,67 @@ export default function StatsView({
 					))}
 				</div>
 			</div>
+
+			{/* Generic agentic evidence metrics – derived from current items */}
+			{items.length > 0 && (
+				<div className="mt-6">
+					<div className="mb-2 text-sm font-medium">
+						Generic Evidence Metrics
+					</div>
+					<p className="mb-3 text-xs text-slate-500">
+						Computed from {items.length} loaded item
+						{items.length !== 1 ? "s" : ""}.
+					</p>
+					<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+						<div className="rounded-xl border bg-slate-50 p-3">
+							<div className="text-xs text-slate-500">Items w/ Trace</div>
+							<div className="mt-1 text-xl font-bold text-slate-800">
+								{agenticMetrics.itemsWithEvidence}
+							</div>
+						</div>
+						<div className="rounded-xl border bg-violet-50 p-3">
+							<div className="text-xs text-slate-500">Total Tool Calls</div>
+							<div className="mt-1 text-xl font-bold text-violet-800">
+								{agenticMetrics.totalToolCalls}
+							</div>
+							<div className="mt-0.5 text-xs text-slate-400">
+								{agenticMetrics.itemsWithToolCalls} items
+							</div>
+						</div>
+						<div className="rounded-xl border bg-blue-50 p-3">
+							<div className="text-xs text-slate-500">Items w/ Context</div>
+							<div className="mt-1 text-xl font-bold text-blue-800">
+								{agenticMetrics.itemsWithContext}
+							</div>
+						</div>
+						<div className="rounded-xl border bg-amber-50 p-3">
+							<div className="text-xs text-slate-500">
+								Items w/ Expected Tools
+							</div>
+							<div className="mt-1 text-xl font-bold text-amber-800">
+								{agenticMetrics.itemsWithExpectedTools}
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Plugin-contributed metrics (extensible per plugin pack) */}
+			{data.pluginMetrics && Object.keys(data.pluginMetrics).length > 0 && (
+				<div className="mt-6">
+					<div className="mb-2 text-sm font-medium">Plugin Metrics</div>
+					<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+						{Object.entries(data.pluginMetrics).map(([key, value]) => (
+							<div key={key} className="rounded-xl border bg-slate-50 p-3">
+								<div className="text-xs text-slate-500">{key}</div>
+								<div className="mt-1 text-xl font-bold text-slate-800">
+									{value}
+								</div>
+							</div>
+						))}
+					</div>
+				</div>
+			)}
 		</section>
 	);
 }

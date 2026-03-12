@@ -236,12 +236,15 @@ export default function QuestionsExplorer({
 		setFetchedItems([]);
 
 		// Build API parameters from applied filters
+		// Note: toolCallCount is a client-side sort only (not passed to API)
 		const sortByParam =
 			appliedFilter.sortColumn === "refs"
 				? "totalReferences"
 				: appliedFilter.sortColumn === "tagCount"
 					? "tagCount"
-					: appliedFilter.sortColumn;
+					: appliedFilter.sortColumn === "toolCallCount"
+						? null // client-side sort; do not pass to backend
+						: appliedFilter.sortColumn;
 
 		// Ensure page is at least 1
 		const safePage = Math.max(1, currentPage);
@@ -296,9 +299,20 @@ export default function QuestionsExplorer({
 	const totalItemsCount = pagination?.total ?? sourceItems.length;
 
 	const displayItems = useMemo(() => {
-		// Server handles all sorting now, no client-side sorting needed
+		// Client-side sort for toolCallCount (not supported by backend API)
+		if (appliedFilter.sortColumn === "toolCallCount") {
+			const sorted = [...sourceItems].sort((a, b) => {
+				const countA = a.toolCalls?.length ?? 0;
+				const countB = b.toolCalls?.length ?? 0;
+				return appliedFilter.sortDirection === "desc"
+					? countB - countA
+					: countA - countB;
+			});
+			return sorted;
+		}
+		// Server handles all other sorting
 		return sourceItems;
-	}, [sourceItems]);
+	}, [sourceItems, appliedFilter.sortColumn, appliedFilter.sortDirection]);
 
 	const handleFilterChange = (filter: FilterType) => {
 		setActiveFilter(filter);
@@ -353,7 +367,7 @@ export default function QuestionsExplorer({
 	};
 
 	const handleSort = (
-		column: "refs" | "reviewedAt" | "hasAnswer" | "tagCount",
+		column: "refs" | "reviewedAt" | "hasAnswer" | "tagCount" | "toolCallCount",
 	) => {
 		if (sortColumn === column) {
 			// If already sorting by this column, toggle direction
@@ -1007,6 +1021,29 @@ export default function QuestionsExplorer({
 												)}
 										</button>
 									</th>
+									{/* Tool Calls column – generic evidence indicator */}
+									<th className="px-3 py-3 text-center min-w-[60px] hidden xl:table-cell">
+										<button
+											type="button"
+											onClick={() => handleSort("toolCallCount")}
+											className="inline-flex items-center gap-1 transition-colors hover:text-violet-700 w-full justify-center"
+											aria-label="Sort by Tool Call Count"
+											title="Number of tool calls captured in the trace"
+										>
+											Tools
+											{appliedFilter.sortColumn === "toolCallCount" && (
+												<span className="text-violet-600">
+													{appliedFilter.sortDirection === "desc" ? "↓" : "↑"}
+												</span>
+											)}
+											{sortColumn === "toolCallCount" &&
+												sortColumn !== appliedFilter.sortColumn && (
+													<span className="text-amber-500 opacity-50">
+														{sortDirection === "desc" ? "↓" : "↑"}
+													</span>
+												)}
+										</button>
+									</th>
 									<th className="px-3 py-3 text-right min-w-[140px] sm:min-w-[180px] lg:min-w-[240px]">
 										Actions
 									</th>
@@ -1016,7 +1053,7 @@ export default function QuestionsExplorer({
 								{loadError ? (
 									<tr>
 										<td
-											colSpan={10}
+											colSpan={11}
 											className="px-4 py-8 text-center text-sm text-rose-600"
 										>
 											Failed to load items: {loadError}
@@ -1025,7 +1062,7 @@ export default function QuestionsExplorer({
 								) : isLoading && sourceItems.length === 0 ? (
 									<tr>
 										<td
-											colSpan={10}
+											colSpan={11}
 											className="px-4 py-8 text-center text-sm text-slate-500"
 										>
 											Loading ground truths…
@@ -1034,7 +1071,7 @@ export default function QuestionsExplorer({
 								) : displayItems.length === 0 ? (
 									<tr>
 										<td
-											colSpan={10}
+											colSpan={11}
 											className="px-4 py-8 text-center text-sm text-slate-500"
 										>
 											No items to display
@@ -1180,6 +1217,26 @@ export default function QuestionsExplorer({
 															},
 														)
 													: "-"}
+											</td>
+											{/* Tool Calls (generic evidence indicator) */}
+											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden xl:table-cell">
+												{(item.toolCalls?.length ?? 0) > 0 ? (
+													<span
+														className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800"
+														title={`${item.toolCalls?.length} tool call(s) captured`}
+													>
+														{item.toolCalls?.length}
+													</span>
+												) : item.expectedTools ? (
+													<span
+														className="text-xs text-amber-600"
+														title="Expected tools defined but no tool calls recorded"
+													>
+														⚠
+													</span>
+												) : (
+													<span className="text-xs text-slate-400">—</span>
+												)}
 											</td>
 											{/* Actions */}
 											<td className="px-3 py-3">

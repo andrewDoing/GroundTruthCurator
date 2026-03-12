@@ -109,3 +109,89 @@ describe("validateConversationPattern", () => {
 		);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// validateExpectedTools
+// ---------------------------------------------------------------------------
+import type { GroundTruthItem } from "../../../src/models/groundTruth";
+import { validateExpectedTools } from "../../../src/models/validators";
+
+const baseItem: GroundTruthItem = {
+	id: "t1",
+	providerId: "test",
+	question: "q",
+	answer: "a",
+	status: "draft",
+	references: [],
+};
+
+describe("validateExpectedTools", () => {
+	it("returns valid when no expectedTools defined", () => {
+		const result = validateExpectedTools({ ...baseItem });
+		expect(result.valid).toBe(true);
+		expect(result.missingRequired).toHaveLength(0);
+	});
+
+	it("returns valid when expectedTools.required is empty", () => {
+		const result = validateExpectedTools({
+			...baseItem,
+			expectedTools: { required: [] },
+		});
+		expect(result.valid).toBe(true);
+	});
+
+	it("returns valid when all required tools are in toolCalls", () => {
+		const result = validateExpectedTools({
+			...baseItem,
+			expectedTools: {
+				required: [{ name: "search" }, { name: "lookup" }],
+			},
+			toolCalls: [
+				{ id: "1", name: "search", callType: "tool" },
+				{ id: "2", name: "lookup", callType: "tool" },
+			],
+		});
+		expect(result.valid).toBe(true);
+		expect(result.missingRequired).toHaveLength(0);
+	});
+
+	it("returns invalid with missingRequired when a required tool is absent", () => {
+		const result = validateExpectedTools({
+			...baseItem,
+			expectedTools: {
+				required: [{ name: "search" }, { name: "lookup" }],
+			},
+			toolCalls: [{ id: "1", name: "search", callType: "tool" }],
+		});
+		expect(result.valid).toBe(false);
+		expect(result.missingRequired).toEqual(["lookup"]);
+		expect(result.errors).toHaveLength(1);
+		expect(result.errors[0]).toContain("lookup");
+	});
+
+	it("ignores optional and notNeeded in validation", () => {
+		const result = validateExpectedTools({
+			...baseItem,
+			expectedTools: {
+				required: [{ name: "search" }],
+				optional: [{ name: "summarize" }],
+				notNeeded: [{ name: "rerank" }],
+			},
+			toolCalls: [{ id: "1", name: "search", callType: "tool" }],
+		});
+		expect(result.valid).toBe(true);
+	});
+
+	it("returns multiple missing tools in errors array", () => {
+		const result = validateExpectedTools({
+			...baseItem,
+			expectedTools: {
+				required: [{ name: "toolA" }, { name: "toolB" }, { name: "toolC" }],
+			},
+			toolCalls: [],
+		});
+		expect(result.valid).toBe(false);
+		expect(result.missingRequired).toHaveLength(3);
+		expect(result.errors).toHaveLength(3);
+	});
+});

@@ -41,8 +41,6 @@ export default function GTAppDemo() {
 		"curate",
 	);
 	const [selfServeBusy, setSelfServeBusy] = useState(false);
-	// Track the current editor mode (single-turn or multi-turn)
-	const [editorMode, setEditorMode] = useState<"single" | "multi">("single");
 
 	// Feature hook
 	const gt = useGroundTruth();
@@ -328,14 +326,11 @@ export default function GTAppDemo() {
 						<CuratePane
 							className={cn(
 								"col-span-1", // Mobile: full width
-								// In multi-turn mode (no references sidebar), take full remaining width
-								editorMode === "multi"
-									? sidebarOpen
-										? "md:col-span-8 lg:col-span-9"
-										: "md:col-span-12"
-									: sidebarOpen
-										? "md:col-span-8 lg:col-span-5"
-										: "md:col-span-12 lg:col-span-7",
+								// With the right pane always visible on large screens,
+								// the editor takes the remaining columns
+								sidebarOpen
+									? "md:col-span-8 lg:col-span-5"
+									: "md:col-span-12 lg:col-span-7",
 							)}
 							current={gt.current}
 							canApprove={gt.canApprove}
@@ -347,22 +342,21 @@ export default function GTAppDemo() {
 							onUpdateHistory={(history) => gt.updateHistory(history)}
 							onDeleteTurn={(messageIndex) => gt.deleteTurn(messageIndex)}
 							onGenerateAgentTurn={onGenerateAgentTurn}
-							onEditorModeChange={setEditorMode}
 							onSaveDraft={() => onSave("draft")}
 							onApprove={() => onSave("approved")}
 							onUpdateReference={(refId, partial) =>
 								gt.updateReference(refId, partial)
 							}
 							onRemoveReference={(refId) => {
-								// In multi-turn mode, the modal shows its own toasts
+								// In multi-turn mode, the TurnReferencesModal shows its own toasts
+								// for per-turn reference removal; this path covers the compatibility
+								// right-pane removal (single-turn RAG compat surface).
 								gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
-									if (editorMode === "single") {
-										toast("info", "Reference removed.", {
-											duration: timeoutMs,
-											actionLabel: "Undo",
-											onAction: undo,
-										});
-									}
+									toast("info", "Reference removed.", {
+										duration: timeoutMs,
+										actionLabel: "Undo",
+										onAction: undo,
+									});
 								});
 							}}
 							onOpenReference={onOpenRef}
@@ -396,44 +390,43 @@ export default function GTAppDemo() {
 							onRestore={() => toggleDeletedFlag(false)}
 						/>
 
-						{/* Right: References (Tabbed) - Only show in single-turn mode */}
-						{editorMode === "single" && (
-							<div
-								className={cn(
-									"hidden lg:block col-span-1",
-									sidebarOpen ? "lg:col-span-4" : "lg:col-span-5",
-								)}
-							>
-								<ReferencesSection
-									query={gt.query}
-									setQuery={gt.setQuery}
-									searching={gt.searching}
-									searchResults={gt.searchResults}
-									onRunSearch={gt.runSearch}
-									onAddRefs={(refs) => {
-										gt.addReferences(refs);
-										toast("success", `Added ${refs.length} reference(s)`);
-									}}
-									references={gt.current?.references || []}
-									onUpdateReference={(id, partial) =>
-										gt.updateReference(id, partial)
-									}
-									onRemoveReference={(refId) =>
-										gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
-											toast("info", "Reference removed.", {
-												duration: timeoutMs,
-												actionLabel: "Undo",
-												onAction: undo,
-											});
-										})
-									}
-									onOpenReference={onOpenRef}
-									isMultiTurn={
-										!!(gt.current?.history && gt.current.history.length > 0)
-									}
-								/>
-							</div>
-						)}
+						{/* Right: Generic evidence + RAG compatibility panel (always visible on large screens) */}
+						<div
+							className={cn(
+								"hidden lg:block col-span-1",
+								sidebarOpen ? "lg:col-span-4" : "lg:col-span-5",
+							)}
+						>
+							<ReferencesSection
+								item={gt.current}
+								query={gt.query}
+								setQuery={gt.setQuery}
+								searching={gt.searching}
+								searchResults={gt.searchResults}
+								onRunSearch={gt.runSearch}
+								onAddRefs={(refs) => {
+									gt.addReferences(refs);
+									toast("success", `Added ${refs.length} reference(s)`);
+								}}
+								references={gt.current?.references || []}
+								onUpdateReference={(id, partial) =>
+									gt.updateReference(id, partial)
+								}
+								onRemoveReference={(refId) =>
+									gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
+										toast("info", "Reference removed.", {
+											duration: timeoutMs,
+											actionLabel: "Undo",
+											onAction: undo,
+										});
+									})
+								}
+								onOpenReference={onOpenRef}
+								isMultiTurn={
+									!!(gt.current?.history && gt.current.history.length > 0)
+								}
+							/>
+						</div>
 					</div>
 				)}
 			</main>

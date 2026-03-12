@@ -42,3 +42,11 @@ Purpose: persistent handoff notes for Ralph loop runs across fresh context windo
 - `POST /v1/ground-truths?approve=true` bulk imports must use `validate_item_for_approval()` (not `collect_approval_validation_errors()` directly) so plugin-pack approval hooks run. Regression coverage lives in `backend/tests/unit/test_phase1_rework.py::TestBulkImportApprovalValidation::test_bulk_import_approve_enforces_plugin_pack_approval_hooks`.
 - Phase 3 validation command: `cd backend && uv run ruff check app/ && uv run ty check app/ && uv run pytest tests/integration/ -v -k 'assignments or ground_truths or search or snapshot'`.
 - Phase 3 iteration 2 review closed `R-001`: `backend/app/api/v1/ground_truths.py` now routes bulk `approve=true` imports through `validate_item_for_approval()`, and the targeted regression + integration slice both pass (`18 passed` targeted unit slice, `90 passed / 2 skipped` integration slice). Treat remaining `GroundTruthItem` field-shadowing warnings as known deferred noise, not a fresh Phase 3 regression.
+
+### Frontend evidence shell (Phase 4)
+- `frontend/src/components/app/pages/ReferencesSection.tsx` is now the generic right-pane host: render `TracePanel` first when `hasEvidenceData(item)` is true, then show `ReferencesTabs` only as a labeled RAG compatibility surface (`!isMultiTurn || references.length > 0`).
+- `frontend/src/components/app/TracePanel.tsx` now owns expected-tools review UI. Required expected tools are compared against `item.toolCalls`; missing required tools show as failures there and also block approval through `validateExpectedTools()` / `canApproveMultiTurn()`.
+- `frontend/src/models/groundTruth.ts` `hasEvidenceData(item)` now treats `expectedTools` as evidence data too, so expected-tools-only items still render the evidence pane.
+- `frontend/src/components/app/QuestionsExplorer.tsx` supports `toolCallCount` sorting, but it is client-side only for now — do not pass that sort key to backend list APIs.
+- Phase 4 validation command: `cd frontend && npm run lint:check && npm run typecheck && npm run test:run -- --pool=threads --poolOptions.threads.singleThread && npm run build`.
+- Current frontend gate after Phase 4: `264/264` tests passing, with only the known `QuestionsExplorer` `act(...)` warnings and Vite chunk-size warning still emitted.

@@ -1,6 +1,53 @@
 import { getCachedConfig } from "../services/runtimeConfig";
 import type { ConversationTurn, GroundTruthItem } from "./groundTruth";
 
+// ---------------------------------------------------------------------------
+// Expected-tools validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of validating an item's expectedTools against its actual toolCalls.
+ */
+export type ExpectedToolsValidationResult = {
+	/** True when all required tools are present in toolCalls (or no requirements). */
+	valid: boolean;
+	/** Names of required tools that were not found in toolCalls. */
+	missingRequired: string[];
+	/** Human-readable error messages, one per missing required tool. */
+	errors: string[];
+};
+
+/**
+ * Validates that every tool listed under `expectedTools.required` appears at
+ * least once in `toolCalls`.  Optional and notNeeded buckets are informational
+ * and do not affect the result.
+ *
+ * Returns `valid: true` when:
+ * - `expectedTools` is absent or has no required tools, OR
+ * - All required tools appear in `toolCalls`.
+ */
+export function validateExpectedTools(
+	item: GroundTruthItem,
+): ExpectedToolsValidationResult {
+	const required = item.expectedTools?.required;
+	if (!required?.length) {
+		return { valid: true, missingRequired: [], errors: [] };
+	}
+
+	const calledNames = new Set((item.toolCalls ?? []).map((tc) => tc.name));
+	const missingRequired = required
+		.filter((te) => !calledNames.has(te.name))
+		.map((te) => te.name);
+
+	return {
+		valid: missingRequired.length === 0,
+		missingRequired,
+		errors: missingRequired.map(
+			(name) => `Required tool "${name}" was not called`,
+		),
+	};
+}
+
 // Get config value for reference visit requirement (default: true)
 const requireReferenceVisit = () => {
 	const config = getCachedConfig();

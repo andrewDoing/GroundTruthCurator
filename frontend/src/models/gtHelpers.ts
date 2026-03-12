@@ -1,5 +1,9 @@
 import type { GroundTruthItem, Reference } from "./groundTruth";
-import { refsApprovalReady, validateConversationPattern } from "./validators";
+import {
+	refsApprovalReady,
+	validateConversationPattern,
+	validateExpectedTools,
+} from "./validators";
 
 // Dedupe references by URL and messageIndex combination
 // In multi-turn contexts, the same URL can exist for different turns
@@ -41,7 +45,8 @@ export function canApproveCandidate(
 }
 
 // Determine if a multi-turn / generic item can be approved.
-// Generic approval gate: valid conversation pattern + not deleted.
+// Generic approval gate: valid conversation pattern + not deleted +
+// all required expected tools present in toolCalls (when specified).
 // Retrieval-specific reference gating stays on the single-turn compatibility path
 // until the later compatibility-pack work lands.
 export function canApproveMultiTurn(
@@ -53,6 +58,10 @@ export function canApproveMultiTurn(
 	// Validate conversation pattern (starts with user, pairs complete)
 	const patternValidation = validateConversationPattern(item.history);
 	if (!patternValidation.valid) return false;
+
+	// Validate expected tools when the item defines required tools
+	const toolValidation = validateExpectedTools(item);
+	if (!toolValidation.valid) return false;
 
 	return true;
 }

@@ -209,11 +209,12 @@ export function getQueuePreview(item: GroundTruthItem): string {
 
 /**
  * Returns whether the item has any generic evidence data worth showing
- * in the evidence/trace panel (toolCalls, traceIds, metadata, feedback).
+ * in the evidence/trace panel (toolCalls, expectedTools, traceIds, metadata, feedback).
  */
 export function hasEvidenceData(item: GroundTruthItem): boolean {
 	return (
 		(item.toolCalls?.length ?? 0) > 0 ||
+		item.expectedTools != null ||
 		item.traceIds != null ||
 		Object.keys(item.metadata ?? {}).length > 0 ||
 		(item.feedback?.length ?? 0) > 0 ||

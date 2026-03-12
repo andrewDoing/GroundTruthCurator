@@ -9,7 +9,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { GroundTruthItem } from "../../../src/models/groundTruth";
+import type {
+	ConversationTurn,
+	GroundTruthItem,
+} from "../../../src/models/groundTruth";
 import { canApproveMultiTurn } from "../../../src/models/gtHelpers";
 
 describe("canApproveMultiTurn - Expected Behavior Validation", () => {
@@ -170,5 +173,65 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 
 		const result = canApproveMultiTurn(itemWithUnvisitedReferences);
 		expect(result).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// canApproveMultiTurn – expectedTools gating (Phase 4)
+// ---------------------------------------------------------------------------
+
+describe("canApproveMultiTurn - expectedTools gating", () => {
+	const localBaseItem: GroundTruthItem = {
+		id: "test-et",
+		providerId: "test",
+		question: "Test question",
+		answer: "Test answer",
+		status: "draft",
+		references: [],
+	};
+	const validHistory: ConversationTurn[] = [
+		{ role: "user", content: "q" },
+		{ role: "agent", content: "a" },
+	];
+
+	it("approves when no expectedTools are defined", () => {
+		const item: GroundTruthItem = {
+			...localBaseItem,
+			history: validHistory,
+		};
+		expect(canApproveMultiTurn(item)).toBe(true);
+	});
+
+	it("approves when all required tools are present in toolCalls", () => {
+		const item: GroundTruthItem = {
+			...localBaseItem,
+			history: validHistory,
+			expectedTools: { required: [{ name: "search" }] },
+			toolCalls: [{ id: "1", name: "search", callType: "tool" }],
+		};
+		expect(canApproveMultiTurn(item)).toBe(true);
+	});
+
+	it("blocks approval when a required tool is missing from toolCalls", () => {
+		const item: GroundTruthItem = {
+			...localBaseItem,
+			history: validHistory,
+			expectedTools: { required: [{ name: "search" }] },
+			toolCalls: [],
+		};
+		expect(canApproveMultiTurn(item)).toBe(false);
+	});
+
+	it("does not block approval for optional or notNeeded tools", () => {
+		const item: GroundTruthItem = {
+			...localBaseItem,
+			history: validHistory,
+			expectedTools: {
+				optional: [{ name: "summarize" }],
+				notNeeded: [{ name: "rerank" }],
+			},
+			toolCalls: [],
+		};
+		expect(canApproveMultiTurn(item)).toBe(true);
 	});
 });

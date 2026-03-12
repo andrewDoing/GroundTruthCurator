@@ -71,3 +71,90 @@ describe("ReferencesSection", () => {
 		expect(onRemoveReference).toHaveBeenCalled();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Phase 4: ReferencesSection as generic right pane
+// ---------------------------------------------------------------------------
+import type { GroundTruthItem } from "../../../../../src/models/groundTruth";
+
+const makeItem = (
+	overrides: Partial<GroundTruthItem> = {},
+): GroundTruthItem => ({
+	id: "i1",
+	question: "Q",
+	answer: "A",
+	references: [],
+	status: "draft",
+	providerId: "test",
+	...overrides,
+});
+
+describe("ReferencesSection – generic right pane (Phase 4)", () => {
+	const noopProps = {
+		query: "",
+		setQuery: vi.fn(),
+		searching: false,
+		searchResults: [],
+		onRunSearch: vi.fn(),
+		onAddRefs: vi.fn(),
+		references: [],
+		onUpdateReference: vi.fn(),
+		onRemoveReference: vi.fn(),
+		onOpenReference: vi.fn(),
+	};
+
+	it("shows TracePanel when item has toolCalls", () => {
+		const item = makeItem({
+			toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
+		});
+		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
+		// TracePanel renders "Evidence & Trace" heading
+		expect(screen.getByText(/Evidence.*Trace/i)).toBeInTheDocument();
+	});
+
+	it("shows RAG compat panel when in single-turn mode", () => {
+		render(
+			<ReferencesSection {...noopProps} item={null} isMultiTurn={false} />,
+		);
+		// Search tab should be visible (RAG compat surface)
+		const searchBtns = screen.getAllByRole("button", { name: /Search/i });
+		expect(searchBtns.length).toBeGreaterThan(0);
+	});
+
+	it("shows empty state when multi-turn mode and no evidence or references", () => {
+		const item = makeItem(); // no toolCalls, no traceIds, etc.
+		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
+		// No references, no evidence data → empty state
+		expect(
+			screen.getByText(/No evidence or references available/i),
+		).toBeInTheDocument();
+	});
+
+	it("shows expected tools section in TracePanel when item has expectedTools", () => {
+		const item = makeItem({
+			expectedTools: {
+				required: [{ name: "search" }],
+			},
+			toolCalls: [],
+		});
+		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
+		expect(screen.getByText(/Expected Tools/i)).toBeInTheDocument();
+	});
+
+	it("shows both evidence and RAG compat when multi-turn item has references", () => {
+		const item = makeItem({
+			toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
+			references: [{ id: "r1", url: "https://example.com" }],
+		});
+		render(
+			<ReferencesSection
+				{...noopProps}
+				item={item}
+				references={item.references}
+				isMultiTurn
+			/>,
+		);
+		expect(screen.getByText(/Evidence.*Trace/i)).toBeInTheDocument();
+		expect(screen.getByText(/RAG References/i)).toBeInTheDocument();
+	});
+});
