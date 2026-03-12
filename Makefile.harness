@@ -33,7 +33,7 @@ dev-up:
 	@./scripts/harness/dev_up.sh
 
 dev-up-demo:
-	@DEMO_MODE=true VITE_DEMO_MODE=true ./scripts/harness/dev_up.sh
+	@GTC_REPO_BACKEND=memory GTC_DEMO_MODE=true GTC_DEMO_USER_ID=demo-user VITE_DEMO_MODE=true VITE_DEV_USER_ID=demo-user ./scripts/harness/dev_up.sh
 
 dev-down:
 	@./scripts/harness/dev_down.sh

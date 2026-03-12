@@ -45,6 +45,8 @@ VITE_DEMO_MODE=true VITE_DEV_USER_ID=demo-user make dev-up
 
 This enables the demo UI flow, seeds the backend memory repo with demo items, and uses `demo-user` for assignment-aware API calls. Stop it later with `make dev-down`.
 
+If you prefer a single shortcut target, `make -f Makefile.harness dev-up-demo` applies the same memory-backed demo settings and `demo-user` identity automatically.
+
 ### Running Tests
 
 ```bash

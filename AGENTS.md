@@ -38,6 +38,12 @@ To start dev servers with in-memory demo data (no Cosmos dependency):
 VITE_DEMO_MODE=true VITE_DEV_USER_ID=demo-user make dev-up
 ```
 
+If you prefer a single shortcut target with the same stable demo identity, use:
+
+```bash
+make -f Makefile.harness dev-up-demo
+```
+
 The `sample.env` sets `GTC_REPO_BACKEND=cosmos` by default. To force the in-memory backend (e.g. when no Cosmos emulator is running), add `GTC_REPO_BACKEND=memory`:
 
 ```bash
