@@ -345,6 +345,153 @@ export const DEMO_JSON: GroundTruthItem[] = [
 			"Deleted sample keeps restore flows visible with real trace-like evidence.",
 		datasetName: "network-diagnostics",
 	},
+	{
+		id: "demo-kb-retrieval",
+		providerId: "json",
+		question:
+			"What is our refund policy for services interrupted during a network outage?",
+		answer:
+			"Customers affected by confirmed outages lasting more than 4 hours are eligible for a pro-rated service credit. Credits are applied automatically within 2 billing cycles for outages flagged in the NOC system.",
+		history: [
+			{
+				role: "user",
+				content:
+					"What is our refund policy for services interrupted during a network outage?",
+			},
+			{
+				role: "agent",
+				content:
+					"Based on our internal knowledge base, customers affected by confirmed outages lasting more than 4 hours are eligible for a pro-rated service credit. The credit is calculated based on the duration of the outage relative to the billing period and is applied automatically within 2 billing cycles for outages flagged in the NOC system. For outages under 4 hours, agents may issue a goodwill credit at their discretion up to $25.",
+			},
+		],
+		contextEntries: [
+			{ key: "channel", value: "internal-agent-assist" },
+			{ key: "category", value: "billing-policy" },
+		],
+		toolCalls: [
+			{
+				id: "tool-kb-search-001",
+				name: "search_documents",
+				callType: "tool",
+				stepNumber: 1,
+				arguments: {
+					query: "refund policy network outage service credit",
+					top_k: 5,
+				},
+				response: {
+					result: {
+						documents: [
+							{
+								title: "Outage Credit Policy v3.2",
+								score: 0.94,
+							},
+							{
+								title: "Goodwill Credit Guidelines",
+								score: 0.87,
+							},
+						],
+					},
+					executionTimeSeconds: 0.82,
+				},
+			},
+			{
+				id: "tool-kb-search-002",
+				name: "search_documents",
+				callType: "tool",
+				stepNumber: 2,
+				arguments: {
+					query: "NOC outage credit automatic billing adjustment",
+					top_k: 3,
+				},
+				response: {
+					result: {
+						documents: [
+							{
+								title: "NOC-to-Billing Automation Runbook",
+								score: 0.91,
+							},
+						],
+					},
+					executionTimeSeconds: 0.64,
+				},
+			},
+		],
+		expectedTools: {
+			required: [{ name: "search_documents" }],
+		},
+		feedback: [
+			{
+				source: "curator-review",
+				values: {
+					"Answer is grounded in retrieved documents": 1,
+					"All relevant documents were retrieved": 2,
+				},
+			},
+		],
+		metadata: {
+			sourceFormat: "agent-trace",
+			datasetTheme: "knowledge-retrieval",
+		},
+		traceIds: {
+			traceId: "demo-trace-kb-001",
+			conversationId: "demo-cid-kb-001",
+		},
+		plugins: {
+			"rag-compat": {
+				kind: "rag-compat",
+				version: "1.0",
+				data: {
+					retrievals: {
+						"tool-kb-search-001": {
+							candidates: [
+								{
+									url: "https://kb.example.com/policies/outage-credit-v3.2",
+									title: "Outage Credit Policy v3.2",
+									chunk:
+										"Customers on postpaid plans who experience a confirmed outage exceeding 4 continuous hours are entitled to a pro-rated service credit equal to the outage duration divided by the billing period.",
+									toolCallId: "tool-kb-search-001",
+									relevance: "relevant",
+								},
+								{
+									url: "https://kb.example.com/policies/goodwill-credit",
+									title: "Goodwill Credit Guidelines",
+									chunk:
+										"For outages under the 4-hour threshold, agents may issue a discretionary goodwill credit of up to $25 per incident without supervisor approval.",
+									toolCallId: "tool-kb-search-001",
+									relevance: "partially_relevant",
+								},
+							],
+						},
+						"tool-kb-search-002": {
+							candidates: [
+								{
+									url: "https://kb.example.com/runbooks/noc-billing-automation",
+									title: "NOC-to-Billing Automation Runbook",
+									chunk:
+										"Credits for NOC-flagged outages are applied automatically within 2 billing cycles. No manual agent action is required for confirmed outages in the NOC system.",
+									toolCallId: "tool-kb-search-002",
+									relevance: "relevant",
+								},
+							],
+						},
+					},
+				},
+			},
+		},
+		status: "draft",
+		deleted: false,
+		tags: ["retrieval", "policy", "billing"],
+		comment:
+			"Demo item showcasing retrieval tool calls with per-call reference management.",
+		curationInstructions: `
+### Curation Guidelines (Knowledge Retrieval)
+
+- Verify the answer is grounded in the retrieved documents.
+- Check that all relevant references are associated with the correct tool call.
+- Mark references as relevant, partially relevant, or not relevant.
+`,
+		datasetName: "knowledge-retrieval",
+	},
 ];
 
 export function createDemoProvider(): Provider {
