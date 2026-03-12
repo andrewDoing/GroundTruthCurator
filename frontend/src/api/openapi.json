@@ -2165,7 +2165,7 @@
 						"anyOf": [
 							{
 								"items": {
-									"$ref": "#/components/schemas/app__api__v1__ground_truths__HistoryEntryPatch"
+									"$ref": "#/components/schemas/app__api__v1__assignments__HistoryEntryPatch"
 								},
 								"type": "array"
 							},
@@ -2776,7 +2776,7 @@
 						"anyOf": [
 							{
 								"items": {
-									"$ref": "#/components/schemas/app__api__v1__ground_truths__HistoryEntryPatch"
+									"$ref": "#/components/schemas/app__api__v1__assignments__HistoryEntryPatch"
 								},
 								"type": "array"
 							},
@@ -3664,7 +3664,7 @@
 				"required": ["total", "succeeded", "failed"],
 				"title": "ValidationSummary"
 			},
-			"app__api__v1__ground_truths__HistoryEntryPatch": {
+			"app__api__v1__assignments__HistoryEntryPatch": {
 				"properties": {
 					"role": {
 						"type": "string",
