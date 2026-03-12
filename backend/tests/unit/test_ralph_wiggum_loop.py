@@ -100,9 +100,15 @@ def test_reviewer_prompt_references_learnings_handoff(tmp_path) -> None:
     assert "Read the learnings handoff file before reviewing" in prompt
 
 
+def test_format_total_duration_rounds_to_nearest_second() -> None:
+    assert ralph_wiggum_loop.format_total_duration(65.4) == "0:01:05"
+    assert ralph_wiggum_loop.format_total_duration(65.5) == "0:01:06"
+
+
 def test_run_selected_phases_auto_advances_until_complete(monkeypatch, tmp_path, capsys) -> None:
     phase_calls: list[int] = []
     commit_calls: list[int] = []
+    clock = iter([100.0, 105.0])
 
     def fake_run_phase_loop(**kwargs):
         phase_calls.append(kwargs["phase"].number)
@@ -113,6 +119,7 @@ def test_run_selected_phases_auto_advances_until_complete(monkeypatch, tmp_path,
 
     monkeypatch.setattr(ralph_wiggum_loop, "run_phase_loop", fake_run_phase_loop)
     monkeypatch.setattr(ralph_wiggum_loop, "run_phase_commit", fake_run_phase_commit)
+    monkeypatch.setattr(ralph_wiggum_loop, "perf_counter", lambda: next(clock))
 
     plan_path = tmp_path / "demo-plan.instructions.md"
     plan_path.write_text("", encoding="utf-8")
@@ -137,12 +144,15 @@ def test_run_selected_phases_auto_advances_until_complete(monkeypatch, tmp_path,
     assert exit_code == 0
     assert phase_calls == [1, 2]
     assert commit_calls == [1, 2]
-    assert "Moving to phase 2: Second" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "Moving to phase 2: Second" in output
+    assert "Total duration: 0:00:05" in output
 
 
 def test_run_selected_phases_respects_explicit_phase_pin(monkeypatch, tmp_path, capsys) -> None:
     phase_calls: list[int] = []
     commit_calls: list[int] = []
+    clock = iter([200.0, 204.0])
 
     def fake_run_phase_loop(**kwargs):
         phase_calls.append(kwargs["phase"].number)
@@ -153,6 +163,7 @@ def test_run_selected_phases_respects_explicit_phase_pin(monkeypatch, tmp_path, 
 
     monkeypatch.setattr(ralph_wiggum_loop, "run_phase_loop", fake_run_phase_loop)
     monkeypatch.setattr(ralph_wiggum_loop, "run_phase_commit", fake_run_phase_commit)
+    monkeypatch.setattr(ralph_wiggum_loop, "perf_counter", lambda: next(clock))
 
     plan_path = tmp_path / "demo-plan.instructions.md"
     plan_path.write_text("", encoding="utf-8")
@@ -177,7 +188,9 @@ def test_run_selected_phases_respects_explicit_phase_pin(monkeypatch, tmp_path, 
     assert exit_code == 0
     assert phase_calls == [1]
     assert commit_calls == [1]
-    assert "Next phase is 2: Second" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "Next phase is 2: Second" in output
+    assert "Total duration: 0:00:04" in output
 
 
 def test_run_selected_phases_returns_blocked_when_review_items_remain(
@@ -185,10 +198,13 @@ def test_run_selected_phases_returns_blocked_when_review_items_remain(
     tmp_path,
     capsys,
 ) -> None:
+    clock = iter([300.0, 309.0])
+
     def fake_run_phase_loop(**kwargs):
         return False, [{"id": "R-001", "status": "open"}], 7
 
     monkeypatch.setattr(ralph_wiggum_loop, "run_phase_loop", fake_run_phase_loop)
+    monkeypatch.setattr(ralph_wiggum_loop, "perf_counter", lambda: next(clock))
 
     plan_path = tmp_path / "demo-plan.instructions.md"
     plan_path.write_text("", encoding="utf-8")
@@ -208,4 +224,6 @@ def test_run_selected_phases_returns_blocked_when_review_items_remain(
     )
 
     assert exit_code == 2
-    assert "hit the max iteration limit" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "hit the max iteration limit" in output
+    assert "Total duration: 0:00:09" in output

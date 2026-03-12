@@ -6,8 +6,9 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from time import perf_counter
 
 
 REVIEW_GATE_JSON_START = "<!-- REVIEW_GATE_JSON_START -->"
@@ -44,6 +45,11 @@ class Phase:
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def format_total_duration(elapsed_seconds: float) -> str:
+    rounded_seconds = max(0, int(round(elapsed_seconds)))
+    return str(timedelta(seconds=rounded_seconds))
 
 
 def parse_args() -> argparse.Namespace:
@@ -647,77 +653,84 @@ def run_selected_phases(
     date_folder: str,
     loop_state: dict,
 ) -> int:
+    start_time = perf_counter()
     phase = starting_phase
     current_loop_state = loop_state
     slug = derive_plan_slug(plan_path)
 
-    while True:
-        review_path = build_review_path(repo_root, date_folder, slug, phase.number)
-        status_path = build_status_path(review_path)
-        upcoming_phase = next_phase(phases, phase.number)
-        prior_open_items = unresolved_review_items(current_loop_state, phase.number)
-        review_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        while True:
+            review_path = build_review_path(repo_root, date_folder, slug, phase.number)
+            status_path = build_status_path(review_path)
+            upcoming_phase = next_phase(phases, phase.number)
+            prior_open_items = unresolved_review_items(current_loop_state, phase.number)
+            review_path.parent.mkdir(parents=True, exist_ok=True)
 
-        gate_passed, open_items, completed_iteration = run_phase_loop(
-            args=args,
-            repo_root=repo_root,
-            plan_path=plan_path,
-            changes_path=changes_path,
-            learnings_path=learnings_path,
-            review_path=review_path,
-            status_path=status_path,
-            loop_state_path=loop_state_path,
-            phase=phase,
-            upcoming_phase=upcoming_phase,
-            prior_open_items=prior_open_items,
-        )
-
-        if gate_passed:
-            run_phase_commit(
+            gate_passed, open_items, completed_iteration = run_phase_loop(
                 args=args,
                 repo_root=repo_root,
                 plan_path=plan_path,
                 changes_path=changes_path,
                 learnings_path=learnings_path,
                 review_path=review_path,
+                status_path=status_path,
+                loop_state_path=loop_state_path,
                 phase=phase,
+                upcoming_phase=upcoming_phase,
+                prior_open_items=prior_open_items,
             )
 
-        if gate_passed and upcoming_phase is not None and should_auto_advance(args):
+            if gate_passed:
+                run_phase_commit(
+                    args=args,
+                    repo_root=repo_root,
+                    plan_path=plan_path,
+                    changes_path=changes_path,
+                    learnings_path=learnings_path,
+                    review_path=review_path,
+                    phase=phase,
+                )
+
+            if gate_passed and upcoming_phase is not None and should_auto_advance(args):
+                print(
+                    f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
+                    f"Moving to phase {upcoming_phase.number}: {upcoming_phase.title}",
+                    flush=True,
+                )
+                current_loop_state = {
+                    "lastReviewedPhase": phase.number,
+                    "openReviewItems": open_items,
+                }
+                phase = upcoming_phase
+                continue
+
+            if gate_passed and upcoming_phase is not None:
+                print(
+                    f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
+                    f"Next phase is {upcoming_phase.number}: {upcoming_phase.title}",
+                    flush=True,
+                )
+                return 0
+
+            if gate_passed:
+                print(
+                    f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
+                    "All implementation phases are complete.",
+                    flush=True,
+                )
+                return 0
+
             print(
-                f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
-                f"Moving to phase {upcoming_phase.number}: {upcoming_phase.title}",
+                f"Phase {phase.number} hit the max iteration limit ({args.max_iterations}). "
+                f"{len(open_items)} review item(s) still need to be addressed.",
                 flush=True,
             )
-            current_loop_state = {
-                "lastReviewedPhase": phase.number,
-                "openReviewItems": open_items,
-            }
-            phase = upcoming_phase
-            continue
-
-        if gate_passed and upcoming_phase is not None:
-            print(
-                f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
-                f"Next phase is {upcoming_phase.number}: {upcoming_phase.title}",
-                flush=True,
-            )
-            return 0
-
-        if gate_passed:
-            print(
-                f"Phase {phase.number} approved after {completed_iteration} iteration(s). "
-                "All implementation phases are complete.",
-                flush=True,
-            )
-            return 0
-
+            return 2
+    finally:
         print(
-            f"Phase {phase.number} hit the max iteration limit ({args.max_iterations}). "
-            f"{len(open_items)} review item(s) still need to be addressed.",
+            f"Total duration: {format_total_duration(perf_counter() - start_time)}",
             flush=True,
         )
-        return 2
 
 
 def main() -> None:
