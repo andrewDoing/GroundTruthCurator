@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.adapters.trace_export import TraceExportAdapter
+from app.plugins.adapters.trace_export import TraceExportAdapter
 
 
 def test_trace_export_adapter_maps_trace_into_agentic_ground_truth() -> None:

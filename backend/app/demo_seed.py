@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import TypedDict
 from uuid import UUID
 
-from app.adapters.trace_export import TraceExportAdapter
+from app.plugins.adapters.trace_export import TraceExportAdapter
 from app.domain.enums import GroundTruthStatus
 from app.domain.models import (
     AgenticGroundTruthEntry,

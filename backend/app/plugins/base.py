@@ -12,6 +12,7 @@ This module defines:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -624,3 +625,97 @@ class PluginPackRegistry:
     def __len__(self) -> int:
         """Return the number of registered packs."""
         return len(self._packs)
+
+
+# ---------------------------------------------------------------------------
+# Trace adapter plugin system
+# ---------------------------------------------------------------------------
+
+
+class TraceAdapterPlugin(ABC):
+    """Abstract base class for trace-format adapter plugins.
+
+    Each plugin defines how a specific trace payload format is transformed
+    into ``AgenticGroundTruthEntry`` objects.  End users drop concrete
+    implementations into ``plugins/adapters/`` and they are auto-discovered
+    at startup.
+
+    Example::
+
+        class MyCustomAdapter(TraceAdapterPlugin):
+            @property
+            def name(self) -> str:
+                return "my-custom-format"
+
+            def adapt_payload(
+                self, payload: Mapping[str, Any], **kwargs: Any,
+            ) -> list[AgenticGroundTruthEntry]:
+                ...
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Unique identifier for this adapter (e.g. ``'trace-export'``)."""
+
+    @abstractmethod
+    def adapt_payload(
+        self,
+        payload: Mapping[str, Any],
+        **kwargs: Any,
+    ) -> list[AgenticGroundTruthEntry]:
+        """Transform a raw payload into ground-truth entries.
+
+        Args:
+            payload: The raw trace payload (format is adapter-specific).
+            **kwargs: Additional adapter-specific configuration
+                      (e.g. ``dataset_name``, ``bucket``).
+
+        Returns:
+            A list of adapted ground-truth entries.
+        """
+
+
+class TraceAdapterRegistry:
+    """Registry for auto-discovered trace adapter plugins.
+
+    Provides lookup-by-name and enumeration of all registered adapters.
+    """
+
+    def __init__(self) -> None:
+        self._adapters: dict[str, type[TraceAdapterPlugin]] = {}
+
+    def register(self, adapter_cls: type[TraceAdapterPlugin]) -> None:
+        """Register an adapter plugin class.
+
+        Args:
+            adapter_cls: A *class* (not instance) extending TraceAdapterPlugin.
+
+        Raises:
+            ValueError: If the adapter name is empty or already registered.
+        """
+        # Instantiate briefly to read the name property
+        instance = adapter_cls.__new__(adapter_cls)
+        name = instance.name
+        if not name:
+            raise ValueError("TraceAdapterPlugin.name must be non-empty")
+        if name in self._adapters:
+            raise ValueError(
+                f"Duplicate trace adapter name '{name}': "
+                f"{self._adapters[name].__name__} already registered"
+            )
+        self._adapters[name] = adapter_cls
+
+    def get(self, name: str) -> type[TraceAdapterPlugin] | None:
+        """Look up an adapter class by name."""
+        return self._adapters.get(name)
+
+    def names(self) -> list[str]:
+        """Return sorted list of all registered adapter names."""
+        return sorted(self._adapters)
+
+    def __len__(self) -> int:
+        return len(self._adapters)
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._adapters
