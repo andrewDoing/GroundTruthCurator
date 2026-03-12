@@ -83,7 +83,7 @@ describe("CuratePane", () => {
 		expect(screen.queryByLabelText("Answer")).not.toBeInTheDocument();
 	});
 
-	it("allows adding a user turn after a preserved non-user role", () => {
+	it("allows adding any turn type after a preserved non-user role", () => {
 		const itemWithHistory: GroundTruthItem = {
 			...item,
 			history: [
@@ -122,6 +122,6 @@ describe("CuratePane", () => {
 		).toBeEnabled();
 		expect(
 			screen.getByRole("button", { name: /Add Agent Turn/i }),
-		).toBeDisabled();
+		).toBeEnabled();
 	});
 });

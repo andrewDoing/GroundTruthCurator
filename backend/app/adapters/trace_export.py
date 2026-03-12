@@ -118,13 +118,13 @@ def _build_history(chat_history: list[Mapping[str, Any]]) -> list[HistoryEntry]:
         if user_query:
             history.append(HistoryEntry(role="user", msg=user_query))
 
-        response_sections = [
-            _clean_text(chat_item.get("chat_response")),
-            _clean_text(chat_item.get("rca")),
-        ]
-        assistant_message = "\n\n".join(section for section in response_sections if section)
-        if assistant_message:
-            history.append(HistoryEntry(role="assistant", msg=assistant_message))
+        chat_response = _clean_text(chat_item.get("chat_response"))
+        if chat_response:
+            history.append(HistoryEntry(role="orchestrator-agent", msg=chat_response))
+
+        rca = _clean_text(chat_item.get("rca"))
+        if rca:
+            history.append(HistoryEntry(role="output-agent", msg=rca))
     return history
 
 

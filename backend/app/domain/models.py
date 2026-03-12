@@ -442,6 +442,13 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
                 return turn.msg
         return None
 
+    def _find_last_agent_message(self) -> str | None:
+        """Return the last non-user history message (any agent role)."""
+        for turn in reversed(self.history or []):
+            if turn.role != "user" and turn.msg:
+                return turn.msg
+        return None
+
     @property
     def synth_question(self) -> str | None:
         if "synth_question" in self.__dict__:
@@ -475,9 +482,7 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
         if "answer" in self.__dict__:
             return cast(str | None, self.__dict__.get("answer"))
         compat = self._rag_compat_data()
-        return cast(str | None, compat.get("answer")) or self._find_history_message(
-            "assistant", reverse=True
-        )
+        return cast(str | None, compat.get("answer")) or self._find_last_agent_message()
 
     @answer.setter
     def answer(self, value: str | None) -> None:

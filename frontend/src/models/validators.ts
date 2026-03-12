@@ -85,11 +85,14 @@ type ConversationValidationResult = {
 };
 
 /**
- * Validates that a conversation follows the required pattern:
+ * Validates that a conversation meets minimum structural requirements:
+ * - Must have at least one turn
  * - Must start with a user turn (role === "user")
- * - Must alternate between user and non-user turns (free-form agent roles supported)
- * - Every user turn must have a corresponding non-user (agent) turn
- * - The conversation should end with a non-user turn for approval
+ * - Must end with a non-user (agent) turn
+ *
+ * Consecutive turns of the same role (e.g. multiple agent responses) are
+ * allowed to support agentic workflows such as orchestrator → sub-agent or
+ * separate chat_response and RCA turns.
  *
  * @param history - The conversation history to validate
  * @returns Validation result with any errors found
@@ -109,28 +112,9 @@ export function validateConversationPattern(
 		errors.push("Conversation must start with a user turn");
 	}
 
-	// Check alternating pattern: even indices must be "user", odd indices must be non-"user"
-	for (let i = 0; i < history.length; i++) {
-		const currentTurn = history[i];
-		const expectedIsUser = i % 2 === 0;
-
-		if (expectedIsUser && currentTurn.role !== "user") {
-			errors.push(
-				`Turn ${i + 1} should be a user turn, but found role "${currentTurn.role}"`,
-			);
-		} else if (!expectedIsUser && currentTurn.role === "user") {
-			errors.push(
-				`Turn ${i + 1} should be an agent/non-user turn, but found user turn`,
-			);
-		}
-	}
-
-	// For approval, the conversation should end with a non-user turn (even index count)
-	// This ensures every user query has an agent response
-	if (history.length % 2 !== 0) {
-		errors.push(
-			"Conversation must end with an agent response (every user turn needs an agent response)",
-		);
+	// Must end with an agent (non-user) turn so every user query has a response
+	if (history[history.length - 1].role === "user") {
+		errors.push("Conversation must end with an agent response");
 	}
 
 	return {

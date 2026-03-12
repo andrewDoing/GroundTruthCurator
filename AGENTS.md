@@ -30,6 +30,20 @@ Run from repository root:
 
 Use `dev` for interactive local work, and `dev-up` / `dev-down` when an agent or developer needs the servers managed in the background. Background PID files and logs live under `.harness/dev/`.
 
+### Demo Mode
+
+To start dev servers with in-memory demo data (no Cosmos dependency):
+
+```bash
+VITE_DEMO_MODE=true VITE_DEV_USER_ID=demo-user make dev-up
+```
+
+The `sample.env` sets `GTC_REPO_BACKEND=cosmos` by default. To force the in-memory backend (e.g. when no Cosmos emulator is running), add `GTC_REPO_BACKEND=memory`:
+
+```bash
+GTC_REPO_BACKEND=memory VITE_DEMO_MODE=true VITE_DEV_USER_ID=demo-user make dev-up
+```
+
 ## Backend Commands
 
 Run from `backend/`:

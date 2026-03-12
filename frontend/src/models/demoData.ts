@@ -19,6 +19,11 @@ export const DEMO_JSON: GroundTruthItem[] = [
 				content:
 					"The usage spike came from long streaming sessions and tethering while the handset was off Wi-Fi. No outage or provisioning defect was detected, so the best resolution is to explain the plan cap and coach the customer toward Wi-Fi-heavy usage.",
 			},
+			{
+				role: "assistant",
+				content:
+					"Root Cause Analysis: The line exceeded its 50 GB plan cap due to extended video streaming (≈38 GB) and mobile hotspot tethering (≈9 GB) over cellular while Wi-Fi was available but not connected. No network fault or provisioning error contributed.",
+			},
 		],
 		contextEntries: [
 			{ key: "impacted_device_type", value: "MSISDN" },

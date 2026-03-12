@@ -93,10 +93,10 @@ export default function MultiTurnEditor({
 		return counts;
 	}, [references]);
 
-	// Determine which turn types can be added next
-	const lastTurn = history.length > 0 ? history[history.length - 1] : null;
-	const canAddUser = !lastTurn || lastTurn.role !== "user";
-	const canAddAgent = lastTurn?.role === "user";
+	// Any turn type can be added at any position (agentic workflows allow
+	// consecutive agent turns such as orchestrator → sub-agent or RCA).
+	const canAddUser = true;
+	const canAddAgent = true;
 
 	const handleAddUserTurn = () => {
 		if (!canAddUser || isGenerating) return;
@@ -129,27 +129,6 @@ export default function MultiTurnEditor({
 		const turn = history[index];
 		if (!turn) return;
 
-		// Validation: Check if deleting this turn would break conversation flow
-		// If this is a user turn and the next turn is an agent (non-user) turn, warn the user
-		if (turn.role === "user" && index < history.length - 1) {
-			const nextTurn = history[index + 1];
-			if (nextTurn?.role !== "user") {
-				if (
-					!window.confirm(
-						"Deleting this user turn will also require deleting the following agent turn to maintain conversation flow. Delete both turns?",
-					)
-				) {
-					return;
-				}
-				// Delete both the user turn and the following agent turn
-				onDeleteTurn(index);
-				// After deleting index, the next turn shifts down, so delete at same index
-				onDeleteTurn(index);
-				return;
-			}
-		}
-
-		// Standard confirmation for single turn deletion
 		if (window.confirm("Are you sure you want to delete this turn?")) {
 			onDeleteTurn(index);
 		}
@@ -230,8 +209,7 @@ export default function MultiTurnEditor({
 					{history.length === 0 ? (
 						<div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">
 							<p className="text-sm text-slate-600">
-								No conversation turns yet. Start by adding a user turn, then
-								alternate between user and agent turns.
+								No conversation turns yet. Start by adding a user turn.
 							</p>
 						</div>
 					) : (
@@ -300,11 +278,7 @@ export default function MultiTurnEditor({
 						type="button"
 						onClick={handleAddUserTurn}
 						disabled={!canAddUser || isGenerating}
-						title={
-							!canAddUser
-								? "Can only add user turn after a non-user turn or as first turn"
-								: "Add a new user turn"
-						}
+						title="Add a new user turn"
 						className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-50"
 					>
 						<UserCircle className="h-4 w-4" />
@@ -314,11 +288,7 @@ export default function MultiTurnEditor({
 						type="button"
 						onClick={handleAddAgentTurn}
 						disabled={!canAddAgent || isGenerating}
-						title={
-							!canAddAgent
-								? "Can only add agent turn after user turn"
-								: "Add a new agent turn"
-						}
+						title="Add a new agent turn"
 						className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-violet-50"
 					>
 						<MessageCircle className="h-4 w-4" />

@@ -69,3 +69,6 @@ site/
 .copilot-tracking/.harness/
 .harness/
 .copilot-tracking/*
+
+# Redacted trace exports (may contain PII)
+wireframes/trace_export_redacted.json

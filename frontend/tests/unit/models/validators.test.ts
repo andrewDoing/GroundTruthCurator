@@ -34,7 +34,7 @@ describe("validateConversationPattern", () => {
 		expect(result.errors).toHaveLength(0);
 	});
 
-	it("should reject conversation ending with user turn (incomplete)", () => {
+	it("should reject conversation ending with user turn", () => {
 		const history: ConversationTurn[] = [
 			{ role: "user", content: "What is the weather?" },
 			{ role: "agent", content: "It's sunny today." },
@@ -43,7 +43,7 @@ describe("validateConversationPattern", () => {
 		const result = validateConversationPattern(history);
 		expect(result.valid).toBe(false);
 		expect(result.errors).toContain(
-			"Conversation must end with an agent response (every user turn needs an agent response)",
+			"Conversation must end with an agent response",
 		);
 	});
 
@@ -61,52 +61,63 @@ describe("validateConversationPattern", () => {
 		expect(result.errors).toHaveLength(0);
 	});
 
-	it("should reject conversation with broken alternating pattern", () => {
+	it("should accept consecutive agent turns (agentic workflow)", () => {
+		const history: ConversationTurn[] = [
+			{ role: "user", content: "Why is my bill high?" },
+			{ role: "agent", content: "The usage spike came from streaming." },
+			{
+				role: "agent",
+				content: "Root cause: long streaming sessions on mobile data.",
+			},
+		];
+		const result = validateConversationPattern(history);
+		expect(result.valid).toBe(true);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("should accept multiple agent roles in sequence", () => {
+		const history: ConversationTurn[] = [
+			{ role: "user", content: "Diagnose network issue" },
+			{ role: "orchestrator-agent", content: "Routing to diagnostics..." },
+			{ role: "output-agent", content: "Signal strength is low in your area." },
+			{ role: "agent", content: "Summary: tower congestion detected." },
+		];
+		const result = validateConversationPattern(history);
+		expect(result.valid).toBe(true);
+		expect(result.errors).toHaveLength(0);
+	});
+
+	it("should reject conversation starting with agent even if multiple agents follow", () => {
+		const history: ConversationTurn[] = [
+			{ role: "agent", content: "Starting with agent" },
+			{ role: "agent", content: "Another agent" },
+		];
+		const result = validateConversationPattern(history);
+		expect(result.valid).toBe(false);
+		expect(result.errors).toContain("Conversation must start with a user turn");
+	});
+
+	it("should reject consecutive user turns that end with user", () => {
 		const history: ConversationTurn[] = [
 			{ role: "user", content: "Question 1" },
-			{ role: "user", content: "Question 2" }, // Wrong - should be agent
-			{ role: "agent", content: "Answer" },
-		];
-		const result = validateConversationPattern(history);
-		expect(result.valid).toBe(false);
-		expect(result.errors.length).toBeGreaterThan(0);
-		expect(
-			result.errors.some((e) =>
-				e.includes("Turn 2 should be an agent/non-user turn"),
-			),
-		).toBe(true);
-	});
-
-	it("should reject conversation with consecutive agent turns", () => {
-		const history: ConversationTurn[] = [
-			{ role: "user", content: "Question" },
-			{ role: "agent", content: "Answer 1" },
-			{ role: "agent", content: "Answer 2" }, // Wrong - should be user
-		];
-		const result = validateConversationPattern(history);
-		expect(result.valid).toBe(false);
-		expect(result.errors.length).toBeGreaterThan(0);
-	});
-
-	it("should provide multiple errors when multiple violations exist", () => {
-		const history: ConversationTurn[] = [
-			{ role: "agent", content: "Starting with agent" }, // Error 1: doesn't start with user
-			{ role: "agent", content: "Another agent" }, // Error 2: wrong pattern
-		];
-		const result = validateConversationPattern(history);
-		expect(result.valid).toBe(false);
-		expect(result.errors.length).toBeGreaterThan(1);
-	});
-
-	it("should handle conversation with only one user turn (incomplete)", () => {
-		const history: ConversationTurn[] = [
-			{ role: "user", content: "Just a question" },
+			{ role: "user", content: "Question 2" },
 		];
 		const result = validateConversationPattern(history);
 		expect(result.valid).toBe(false);
 		expect(result.errors).toContain(
-			"Conversation must end with an agent response (every user turn needs an agent response)",
+			"Conversation must end with an agent response",
 		);
+	});
+
+	it("should accept consecutive user turns followed by agent", () => {
+		const history: ConversationTurn[] = [
+			{ role: "user", content: "Question 1" },
+			{ role: "user", content: "Wait, let me rephrase" },
+			{ role: "agent", content: "Here is my answer." },
+		];
+		const result = validateConversationPattern(history);
+		expect(result.valid).toBe(true);
+		expect(result.errors).toHaveLength(0);
 	});
 });
 

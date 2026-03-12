@@ -10,9 +10,7 @@ import {
 	X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type {
-	ConversationTurn,
-} from "../../../models/groundTruth";
+import type { ConversationTurn } from "../../../models/groundTruth";
 import { cn } from "../../../models/utils";
 import MarkdownRenderer from "../../common/MarkdownRenderer";
 
@@ -234,32 +232,29 @@ export default function ConversationTurnComponent({
 				</div>
 			</div>
 
-			{!isCollapsed && (
-				<>
-					{isEditing ? (
-						<textarea
-							className="w-full rounded-lg border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
-							value={editContent}
-							onChange={(e) => setEditContent(e.target.value)}
-							rows={6}
-							disabled={isGenerating}
-							placeholder={
-								isUser
-									? "Enter user message..."
-									: "Enter agent response (Markdown supported)..."
-							}
-						/>
-					) : (
-						<MarkdownRenderer
-							content={turn.content}
-							compact
-							className={cn(
-								"rounded-lg px-1 py-0.5", // subtle padding within turn box
-							)}
-						/>
-					)}
-				</>
-			)}
+			{!isCollapsed &&
+				(isEditing ? (
+					<textarea
+						className="w-full rounded-lg border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+						value={editContent}
+						onChange={(e) => setEditContent(e.target.value)}
+						rows={6}
+						disabled={isGenerating}
+						placeholder={
+							isUser
+								? "Enter user message..."
+								: "Enter agent response (Markdown supported)..."
+						}
+					/>
+				) : (
+					<MarkdownRenderer
+						content={turn.content}
+						compact
+						className={cn(
+							"rounded-lg px-1 py-0.5", // subtle padding within turn box
+						)}
+					/>
+				))}
 		</div>
 	);
 }
