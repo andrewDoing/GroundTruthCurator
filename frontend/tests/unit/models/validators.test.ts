@@ -119,8 +119,10 @@ import { validateExpectedTools } from "../../../src/models/validators";
 const baseItem: GroundTruthItem = {
 	id: "t1",
 	providerId: "test",
-	question: "q",
-	answer: "a",
+	history: [
+		{ role: "user", content: "q", turnId: "turn_1" },
+		{ role: "agent", content: "a", turnId: "turn_2" },
+	],
 	status: "draft",
 };
 

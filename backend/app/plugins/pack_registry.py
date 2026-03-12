@@ -74,3 +74,20 @@ def reset_default_pack_registry() -> None:
     """
     global _default_pack_registry
     _default_pack_registry = None
+
+
+def get_required_pack(name: str, registry: PluginPackRegistry | None = None):
+    active_registry = registry or get_default_pack_registry()
+    pack = active_registry.get(name)
+    if pack is None:
+        raise LookupError(f"Required plugin pack '{name}' is not registered")
+    return pack
+
+
+def get_rag_compat_pack(registry: PluginPackRegistry | None = None):
+    from app.plugins.packs.rag_compat import RagCompatPack
+
+    pack = get_required_pack("rag-compat", registry)
+    if not isinstance(pack, RagCompatPack):
+        raise TypeError("Registered 'rag-compat' pack is not a RagCompatPack instance")
+    return pack

@@ -13,7 +13,11 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../../../models/groundTruth";
-import { getItemReferences } from "../../../models/groundTruth";
+import {
+	getItemReferences,
+	getLastUserTurn,
+	getReferenceMessageIndex,
+} from "../../../models/groundTruth";
 import { validateConversationPattern } from "../../../models/validators";
 import TagChip from "../../common/TagChip";
 import ConversationTurnComponent from "./ConversationTurn";
@@ -60,7 +64,7 @@ export default function MultiTurnEditor({
 	// Search functionality for references modal
 	const { query, setQuery, searching, searchResults, runSearch, clearResults } =
 		useReferencesSearch({
-			getSeedQuery: () => current?.question,
+			getSeedQuery: () => (current ? getLastUserTurn(current) : ""),
 		});
 
 	useEffect(() => {
@@ -86,12 +90,13 @@ export default function MultiTurnEditor({
 	const referenceCounts = useMemo(() => {
 		const counts = new Map<number, number>();
 		references.forEach((ref) => {
-			if (typeof ref.messageIndex === "number") {
-				counts.set(ref.messageIndex, (counts.get(ref.messageIndex) || 0) + 1);
+			const messageIndex = getReferenceMessageIndex(ref, history);
+			if (typeof messageIndex === "number") {
+				counts.set(messageIndex, (counts.get(messageIndex) || 0) + 1);
 			}
 		});
 		return counts;
-	}, [references]);
+	}, [history, references]);
 
 	// Determine which turn types can be added next
 	const lastTurn = history.length > 0 ? history[history.length - 1] : null;
@@ -236,9 +241,8 @@ export default function MultiTurnEditor({
 						</div>
 					) : (
 						history.map((turn, idx) => {
-							// Intermediate variable breaks the direct array-index-to-key
-							// connection; turns have no stable id so position is the correct key.
-							const turnKey = `${turn.role}-${String(idx)}`;
+							const turnKey =
+								turn.turnId || turn.stepId || `${turn.role}-${String(idx)}`;
 							const isAgentTurn = turn.role !== "user";
 							return (
 								<ConversationTurnComponent
@@ -365,6 +369,7 @@ export default function MultiTurnEditor({
 					isOpen={true}
 					onClose={() => setViewingReferencesForTurn(null)}
 					messageIndex={viewingReferencesForTurn}
+					turnId={history[viewingReferencesForTurn]?.turnId}
 					references={references}
 					onUpdateReference={onUpdateReference}
 					onRemoveReference={onRemoveReference}

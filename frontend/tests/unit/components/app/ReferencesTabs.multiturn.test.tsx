@@ -1,14 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { RefObject } from "react";
-import type { RightTab } from "../../../../src/components/app/ReferencesPanel/ReferencesTabs";
 import ReferencesTabs from "../../../../src/components/app/ReferencesPanel/ReferencesTabs";
 import type { Reference } from "../../../../src/models/groundTruth";
 
-describe("ReferencesTabs multi-turn gating", () => {
+describe("ReferencesTabs evidence surfaces", () => {
 	type Props = Parameters<typeof ReferencesTabs>[0];
 	const makeProps = (): Props => ({
-		rightTab: "selected" as RightTab,
-		setRightTab: vi.fn(),
 		query: "",
 		setQuery: vi.fn(),
 		searching: false,
@@ -23,56 +20,26 @@ describe("ReferencesTabs multi-turn gating", () => {
 		onUpdateReference: vi.fn(),
 		onRemoveReference: vi.fn(),
 		onOpenReference: vi.fn(),
-		isMultiTurn: false,
+		showSearch: true,
 	});
 
-	it("forces selected tab and hides search when multi-turn is active", async () => {
-		const props = makeProps();
-		props.rightTab = "search";
-		props.isMultiTurn = true;
-		render(<ReferencesTabs {...props} />);
-		await waitFor(() => {
-			expect(props.setRightTab).toHaveBeenCalledWith("selected");
-		});
-		expect(screen.queryByRole("button", { name: /search/i })).toBeNull();
-	});
-
-	it("does not update parent state during render in multi-turn mode", () => {
-		const props = makeProps();
-		props.rightTab = "search";
-		props.isMultiTurn = true;
-		const consoleError = vi
-			.spyOn(console, "error")
-			.mockImplementation(() => undefined);
-		render(<ReferencesTabs {...props} />);
+	it("renders search and review surfaces when host-owned search is enabled", () => {
+		render(<ReferencesTabs {...makeProps()} />);
+		expect(screen.getByText(/Evidence Review/i)).toBeInTheDocument();
+		expect(screen.getByText(/Search Evidence/i)).toBeInTheDocument();
 		expect(
-			consoleError.mock.calls.some((call) =>
-				call.some(
-					(value) =>
-						typeof value === "string" &&
-						value.includes("Cannot update a component while rendering"),
-				),
-			),
-		).toBe(false);
-		consoleError.mockRestore();
-	});
-
-	it("renders guidance banner in multi-turn mode", () => {
-		const props = makeProps();
-		props.isMultiTurn = true;
-		render(<ReferencesTabs {...props} />);
-		expect(
-			screen.getByText(/Per-turn reference management enabled/i),
+			screen.getByText(/Review Attached Evidence \(0\)/i),
 		).toBeInTheDocument();
 	});
 
-	it("shows search tab when multi-turn is disabled", () => {
-		const props = makeProps();
-		props.rightTab = "search";
-		render(<ReferencesTabs {...props} />);
-		const buttons = screen.getAllByRole("button", { name: /search/i });
-		expect(buttons.some((btn) => btn.getAttribute("title") === "Search")).toBe(
-			true,
-		);
+	it("replaces global tabs with guidance when search is plugin-owned", () => {
+		render(<ReferencesTabs {...makeProps()} showSearch={false} />);
+		expect(screen.queryByText(/^Search Evidence$/i)).toBeNull();
+		expect(
+			screen.getByText(/plugin-specific evidence surfaces/i),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(/Review Attached Evidence \(0\)/i),
+		).toBeInTheDocument();
 	});
 });

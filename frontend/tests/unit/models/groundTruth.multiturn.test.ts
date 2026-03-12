@@ -48,14 +48,14 @@ describe("groundTruth multi-turn helpers", () => {
 	});
 
 	describe("last turn helpers", () => {
-		it("falls back to question when no user turns exist", () => {
+		it("returns empty compatibility question when canonical history has no user turn", () => {
 			const item = makeItem({ history: [{ role: "agent", content: "Agent" }] });
-			expect(getLastUserTurn(item)).toBe("fallback question");
+			expect(getLastUserTurn(item)).toBe("");
 		});
 
-		it("falls back to answer when no agent turns exist", () => {
+		it("returns empty compatibility answer when canonical history has no agent turn", () => {
 			const item = makeItem({ history: [{ role: "user", content: "User" }] });
-			expect(getLastAgentTurn(item)).toBe("fallback answer");
+			expect(getLastAgentTurn(item)).toBe("");
 		});
 
 		it("returns latest matching turn content", () => {

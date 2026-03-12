@@ -78,478 +78,279 @@ beforeEach(() => {
 	mockGetGroundTruth.mockReset();
 });
 
-describe("ApiProvider multi-turn mapping", () => {
-	it("list maps history roles and content", async () => {
-		const apiItem = makeApiItem({
-			history: [
-				{ role: "user", msg: "How do I?" },
-				{ role: "assistant", msg: "Use the regenerate command." },
-			],
+describe("ApiProvider mapping", () => {
+	describe("core-generic multi-turn contracts", () => {
+		it("maps history roles, content, and stable turn identity", async () => {
+			const apiItem = makeApiItem({
+				history: [
+					{ role: "user", msg: "How do I?" },
+					{ role: "assistant", msg: "Use the regenerate command." },
+				],
+			});
+			mockGetMyAssignments.mockResolvedValue([apiItem]);
+			const provider = new ApiProvider();
+			const { items } = await provider.list();
+			const history = items[0].history ?? [];
+			expect(history).toHaveLength(2);
+			expect(history[0]).toMatchObject({ role: "user", content: "How do I?" });
+			expect(history[1]).toMatchObject({
+				role: "agent",
+				content: "Use the regenerate command.",
+			});
+			expect(history[0]?.turnId).toBeTruthy();
+			expect(history[1]?.turnId).toBeTruthy();
 		});
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		expect(items).toHaveLength(1);
-		const history = items[0].history ?? [];
-		expect(history[0]).toMatchObject({ role: "user", content: "How do I?" });
-		expect(history[1]).toMatchObject({
-			role: "agent",
-			content: "Use the regenerate command.",
+
+		it("maps per-turn refs onto the owning non-user turn", async () => {
+			const apiItem = makeApiItem({
+				history: [
+					{ role: "user", msg: "Q" },
+					{
+						role: "assistant",
+						msg: "A",
+						refs: [
+							{
+								url: "https://turn.ref",
+								content: "Snippet",
+								keyExcerpt: "Key",
+								bonus: true,
+							},
+						],
+					},
+				],
+			});
+			mockGetMyAssignments.mockResolvedValue([apiItem]);
+			const provider = new ApiProvider();
+			const { items } = await provider.list();
+			const turn = items[0].history?.[1];
+			const [ref] = getItemReferences(items[0]);
+			expect(ref).toMatchObject({
+				url: "https://turn.ref",
+				bonus: true,
+				messageIndex: 1,
+				turnId: turn?.turnId,
+			});
 		});
 	});
 
-	it("list maps per-turn refs with messageIndex", async () => {
-		const apiItem = makeApiItem({
-			history: [
-				{ role: "user", msg: "Q" },
-				{
-					role: "assistant",
-					msg: "A",
-					refs: [
-						{
-							url: "https://turn.ref",
-							content: "Snippet",
-							keyExcerpt: "Key",
-							bonus: true,
-						},
-					],
-				},
-			],
+	describe("compat-migration read projections", () => {
+		it("projects legacy single-turn payloads into stable user and agent turns", async () => {
+			const apiItem = makeApiItem({
+				synthQuestion: "What is X?",
+				editedQuestion: "What is X exactly?",
+				answer: "X is Y",
+				tags: ["important", "technical"],
+				history: undefined,
+			});
+			mockGetMyAssignments.mockResolvedValue([apiItem]);
+			const provider = new ApiProvider();
+			const { items } = await provider.list();
+			const history = items[0].history ?? [];
+			expect(history).toHaveLength(2);
+			expect(history[0]).toMatchObject({
+				role: "user",
+				content: "What is X exactly?",
+			});
+			expect(history[1]).toMatchObject({
+				role: "agent",
+				content: "X is Y",
+			});
 		});
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		const refs = getItemReferences(items[0]);
-		const turnRef = refs.find((r) => r.messageIndex === 1);
-		expect(turnRef).toBeTruthy();
-		expect(turnRef?.url).toBe("https://turn.ref");
-		expect(turnRef?.bonus).toBe(true);
-	});
 
-	it("list includes top-level refs with messageIndex=1 for legacy items (Bug Fix: SA-86)", async () => {
-		// Legacy single-turn items have no history (or empty history array)
-		// Top-level refs should be assigned to the agent turn (messageIndex = 1)
-		const apiItem = makeApiItem({
-			refs: [
-				{
-					url: "https://top.ref",
-					content: "Top snippet",
-					keyExcerpt: "Top key",
-					bonus: false,
-				},
-			],
+		it("anchors legacy top-level refs to the synthesized agent turn even without an answer", async () => {
+			const apiItem = makeApiItem({
+				editedQuestion: "How do I configure authentication for my app?",
+				answer: "",
+				refs: [
+					{
+						url: "https://docs.example.com/auth",
+						content: "Authentication documentation content",
+						keyExcerpt: "Use OAuth 2.0 for authentication",
+						bonus: false,
+					},
+				],
+				history: undefined,
+			});
+			mockGetMyAssignments.mockResolvedValue([apiItem]);
+			const provider = new ApiProvider();
+			const { items } = await provider.list();
+			const history = items[0].history ?? [];
+			const [ref] = getItemReferences(items[0]);
+			expect(history).toHaveLength(2);
+			expect(history[0]?.content).toBe(
+				"How do I configure authentication for my app?",
+			);
+			expect(history[1]).toMatchObject({ role: "agent", content: "" });
+			expect(ref).toMatchObject({
+				url: "https://docs.example.com/auth",
+				messageIndex: 1,
+				turnId: history[1]?.turnId,
+			});
 		});
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		const topRef = getItemReferences(items[0]).find(
-			(r: Reference) => r.url === "https://top.ref",
-		);
-		expect(topRef).toBeTruthy();
-		// Legacy items: refs assigned to agent turn
-		expect(topRef?.messageIndex).toBe(1);
-	});
-
-	it("list does not apply top-level tags to user turn when converting single-turn", async () => {
-		const apiItem = makeApiItem({
-			synthQuestion: "What is X?",
-			editedQuestion: "What is X exactly?",
-			answer: "X is Y",
-			tags: ["important", "technical"],
-			history: undefined, // No history = single-turn item
-		});
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		expect(items).toHaveLength(1);
-		const history = items[0].history ?? [];
-		expect(history).toHaveLength(2);
-		expect(history[0]).toMatchObject({
-			role: "user",
-			content: "What is X exactly?",
-		});
-		expect(history[1]).toMatchObject({
-			role: "agent",
-			content: "X is Y",
-		});
-	});
-
-	it("list assigns refs to messageIndex 1 when converting single-turn with answer", async () => {
-		const apiItem = makeApiItem({
-			synthQuestion: "Question",
-			answer: "Answer",
-			refs: [
-				{
-					url: "https://example.com",
-					content: "content",
-					keyExcerpt: "key",
-					bonus: false,
-				},
-			],
-			history: undefined,
-		});
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		expect(getItemReferences(items[0])).toHaveLength(1);
-		expect(getItemReferences(items[0])[0].messageIndex).toBe(1);
-	});
-
-	it("list assigns refs to messageIndex 1 even when answer is missing (Bug Fix: SA-86)", async () => {
-		const apiItem = makeApiItem({
-			synthQuestion: "Question",
-			answer: "",
-			refs: [
-				{
-					url: "https://example.com",
-					content: "content",
-					keyExcerpt: "key",
-					bonus: false,
-				},
-			],
-			history: undefined,
-		});
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items: items2 } = await provider.list();
-		expect(getItemReferences(items2[0])).toHaveLength(1);
-		expect(getItemReferences(items2[0])[0].messageIndex).toBe(1);
-	});
-
-	it("list creates empty agent turn when question exists but answer is missing (Bug Fix: SA-86)", async () => {
-		const apiItem = makeApiItem({
-			synthQuestion: "Question without answer",
-			editedQuestion: undefined, // No edited question
-			answer: "",
-			history: undefined,
-		});
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		expect(items[0].history).toHaveLength(2);
-		expect(items[0].history?.[0]).toMatchObject({
-			role: "user",
-			content: "Question without answer",
-		});
-		expect(items[0].history?.[1]).toMatchObject({
-			role: "agent",
-			content: "",
-		});
-	});
-
-	it("list creates empty agent turn for null answer (Bug Fix: SA-86)", async () => {
-		const apiItem = makeApiItem({
-			synthQuestion: "Question",
-			answer: null as unknown as string,
-			history: undefined,
-		});
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		expect(items[0].history).toHaveLength(2);
-		expect(items[0].history?.[1]).toMatchObject({
-			role: "agent",
-			content: "",
-		});
-	});
-
-	it("list assigns refs to messageIndex 1 for question with refs but no answer (Bug Fix: SA-86)", async () => {
-		const apiItem = makeApiItem({
-			editedQuestion: "How do I configure authentication for my app?",
-			answer: "",
-			refs: [
-				{
-					url: "https://docs.example.com/auth",
-					content: "Authentication documentation content",
-					keyExcerpt: "Use OAuth 2.0 for authentication",
-					bonus: false,
-				},
-				{
-					url: "https://docs.example.com/config",
-					content: "Configuration guide",
-					bonus: false,
-				},
-			],
-			history: undefined,
-		});
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		expect(items[0].history).toHaveLength(2);
-		expect(items[0].history?.[0].content).toBe(
-			"How do I configure authentication for my app?",
-		);
-		expect(items[0].history?.[1].content).toBe("");
-		expect(getItemReferences(items[0])).toHaveLength(2);
-		expect(getItemReferences(items[0])[0].messageIndex).toBe(1);
-		expect(getItemReferences(items[0])[1].messageIndex).toBe(1);
 	});
 });
 
-describe("ApiProvider multi-turn serialization", () => {
-	it("save serializes history roles and agent refs", async () => {
-		const apiItem = makeApiItem({
-			history: [
-				{ role: "user", msg: "Original Q" },
-				{ role: "assistant", msg: "Original A" },
-			],
-		});
-		let capturedPatch: Patch | undefined;
-		mockUpdateAssignedGroundTruth.mockImplementation(
-			async (_dataset: string, _bucket: string, id: string, patch: Patch) => {
-				capturedPatch = patch;
-				return {
-					...apiItem,
-					id,
-					history: (patch.history as ApiItem["history"]) ?? apiItem.history,
-					refs: (patch.refs as ApiItem["refs"]) ?? apiItem.refs,
-					answer: (patch.answer as string) ?? apiItem.answer,
-					editedQuestion:
-						(patch.editedQuestion as string) ?? apiItem.editedQuestion,
-					status: (patch.status as ApiItem["status"]) ?? apiItem.status,
-				} as ApiItem;
-			},
-		);
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		const domain = items[0];
-		const history: NonNullable<GroundTruthItem["history"]> = [
-			{ role: "user", content: "Updated Q" },
-			{ role: "agent", content: "Updated A" },
-		];
-		const refs: Reference[] = [
-			{ id: "global", url: "https://global" },
-			{
-				id: "turn",
-				url: "https://turn",
-				messageIndex: 1,
-			},
-		];
-		const updated: GroundTruthItem = withUpdatedReferences(
-			{ ...domain, history },
-			refs,
-		);
-		await provider.save(updated);
-		expect(capturedPatch).toBeDefined();
-		const patch = capturedPatch as Patch;
-		const patchHistory = patch.history as ApiItem["history"];
-		expect(patchHistory?.[0]?.role).toBe("user");
-		expect(patchHistory?.[1]?.role).toBe("assistant");
-		const agentRefs = patchHistory?.[1]?.refs;
-		expect(agentRefs).toHaveLength(1);
-		expect(agentRefs?.[0]?.url).toBe("https://turn");
-		const userRefs = patchHistory?.[0]?.refs;
-		expect(userRefs).toBeUndefined();
-	});
-
-	it("save omits agent refs when none provided", async () => {
-		const apiItem = makeApiItem({
-			history: [
-				{ role: "user", msg: "Original Q" },
-				{ role: "assistant", msg: "Original A" },
-			],
-		});
-		let capturedPatch: Patch | undefined;
-		mockUpdateAssignedGroundTruth.mockImplementation(
-			async (_dataset: string, _bucket: string, _id: string, patch: Patch) => {
-				capturedPatch = patch;
-				return apiItem;
-			},
-		);
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		const domain = items[0];
-		const history: NonNullable<GroundTruthItem["history"]> = [
-			{ role: "user", content: "Updated Q" },
-			{ role: "agent", content: "Updated A" },
-		];
-		const refs: Reference[] = [{ id: "global", url: "https://global" }];
-		const updated: GroundTruthItem = withUpdatedReferences(
-			{ ...domain, history },
-			refs,
-		);
-		await provider.save(updated);
-		expect(capturedPatch).toBeDefined();
-		const patch = capturedPatch as Patch;
-		const patchHistory = patch.history as ApiItem["history"];
-		expect(patchHistory?.[1]?.refs).toBeUndefined();
-	});
-
-	it("save excludes refs for user turns even if provided", async () => {
-		const apiItem = makeApiItem({
-			history: [
-				{ role: "user", msg: "Original Q" },
-				{ role: "assistant", msg: "Original A" },
-			],
-		});
-		let capturedPatch: Patch | undefined;
-		mockUpdateAssignedGroundTruth.mockImplementation(
-			async (_dataset: string, _bucket: string, id: string, patch: Patch) => {
-				capturedPatch = patch;
-				void id;
-				return apiItem;
-			},
-		);
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-		const domain = items[0];
-		const history: NonNullable<GroundTruthItem["history"]> = [
-			{ role: "user", content: "Updated Q" },
-			{ role: "agent", content: "Updated A" },
-		];
-		const refs: Reference[] = [
-			{
-				id: "user-ref",
-				url: "https://user",
-				messageIndex: 0,
-			},
-			{
-				id: "agent-ref",
-				url: "https://agent",
-				messageIndex: 1,
-			},
-		];
-		const updated: GroundTruthItem = withUpdatedReferences(
-			{ ...domain, history },
-			refs,
-		);
-		await provider.save(updated);
-		expect(capturedPatch).toBeDefined();
-		const patch = capturedPatch as Patch;
-		const patchHistory = patch.history as ApiItem["history"];
-		expect(patchHistory?.[0]?.refs).toBeUndefined();
-		expect(patchHistory?.[1]?.refs).toHaveLength(1);
-		expect(patchHistory?.[1]?.refs?.[0]?.url).toBe("https://agent");
-	});
-
-	it("save preserves top-level refs for legacy single-turn items (SA-86 bug fix)", async () => {
-		// Regression test for bug where top-level refs were wiped on save
-		// Legacy single-turn items have refs at top-level (no history).
-		// When loaded, fromApi() converts them to multi-turn and assigns messageIndex=1.
-		// When saved, toPatch() must save them back to top-level to prevent data loss.
-		const apiItem = makeApiItem({
-			synthQuestion: "What is X?",
-			answer: "X is Y",
-			refs: [
+describe("ApiProvider serialization", () => {
+	describe("core-generic multi-turn writes", () => {
+		it("serializes history roles and keeps refs scoped to non-user turns", async () => {
+			const apiItem = makeApiItem({
+				history: [
+					{ role: "user", msg: "Original Q" },
+					{ role: "assistant", msg: "Original A" },
+				],
+			});
+			let capturedPatch: Patch | undefined;
+			mockUpdateAssignedGroundTruth.mockImplementation(
+				async (_dataset: string, _bucket: string, id: string, patch: Patch) => {
+					capturedPatch = patch;
+					return {
+						...apiItem,
+						id,
+						history: (patch.history as ApiItem["history"]) ?? apiItem.history,
+						refs: (patch.refs as ApiItem["refs"]) ?? apiItem.refs,
+						answer: (patch.answer as string) ?? apiItem.answer,
+						editedQuestion:
+							(patch.editedQuestion as string) ?? apiItem.editedQuestion,
+						status: (patch.status as ApiItem["status"]) ?? apiItem.status,
+					} as ApiItem;
+				},
+			);
+			mockGetMyAssignments.mockResolvedValue([apiItem]);
+			const provider = new ApiProvider();
+			const { items } = await provider.list();
+			const domain = items[0];
+			const history: NonNullable<GroundTruthItem["history"]> = [
+				{ role: "user", content: "Updated Q", turnId: "turn-user-updated" },
+				{ role: "agent", content: "Updated A", turnId: "turn-agent-updated" },
+			];
+			const refs: Reference[] = [
+				{ id: "global", url: "https://global" },
 				{
-					url: "https://legacy.ref/doc1",
-					content: "Legacy content",
-					keyExcerpt: "Key paragraph",
-					bonus: false,
+					id: "turn",
+					url: "https://turn",
+					turnId: "turn-agent-updated",
 				},
 				{
-					url: "https://legacy.ref/doc2",
-					content: "Bonus content",
-					bonus: true,
+					id: "user-ref",
+					url: "https://user",
+					turnId: "turn-user-updated",
 				},
-			],
-			history: undefined, // No history = legacy single-turn item
+			];
+			const updated: GroundTruthItem = withUpdatedReferences(
+				{ ...domain, history },
+				refs,
+			);
+			await provider.save(updated);
+			expect(capturedPatch).toBeDefined();
+			const patch = capturedPatch as Patch;
+			const patchHistory = patch.history as ApiItem["history"];
+			expect(patchHistory?.[0]?.role).toBe("user");
+			expect(patchHistory?.[1]?.role).toBe("assistant");
+			expect(patchHistory?.[0]?.refs).toBeUndefined();
+			expect(patchHistory?.[1]?.refs).toHaveLength(1);
+			expect(patchHistory?.[1]?.refs?.[0]?.url).toBe("https://turn");
 		});
 
-		let capturedPatch: Patch | undefined;
-		mockUpdateAssignedGroundTruth.mockImplementation(
-			async (_dataset: string, _bucket: string, id: string, patch: Patch) => {
-				capturedPatch = patch;
-				return {
-					...apiItem,
-					id,
-					refs: (patch.refs as ApiItem["refs"]) ?? apiItem.refs,
-					status: (patch.status as ApiItem["status"]) ?? apiItem.status,
-				} as ApiItem;
-			},
-		);
-
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-
-		// Verify fromApi() assigned messageIndex=1 to legacy refs
-		const legacyRefs = getItemReferences(items[0]);
-		expect(legacyRefs).toHaveLength(2);
-		expect(legacyRefs[0].messageIndex).toBe(1);
-		expect(legacyRefs[1].messageIndex).toBe(1);
-
-		// User might edit the item (e.g., change bonus flag, add key paragraph)
-		const updated: GroundTruthItem = withUpdatedReferences(
-			items[0],
-			legacyRefs.map((r: Reference) =>
-				r.url === "https://legacy.ref/doc1"
-					? { ...r, bonus: true, keyParagraph: "Updated key" }
-					: r,
-			),
-		);
-
-		// Save the item
-		await provider.save(updated);
-
-		// Verify the patch preserves top-level refs (not wiped out)
-		expect(capturedPatch).toBeDefined();
-		const patch = capturedPatch as Patch;
-		expect(patch.refs).toBeDefined();
-		expect(patch.refs).toHaveLength(2);
-
-		// Verify refs are saved to top-level (backward compatible)
-		expect(patch.refs?.[0]?.url).toBe("https://legacy.ref/doc1");
-		expect(patch.refs?.[0]?.bonus).toBe(true); // User edit preserved
-		expect(patch.refs?.[0]?.keyExcerpt).toBe("Updated key"); // User edit preserved
-		expect(patch.refs?.[1]?.url).toBe("https://legacy.ref/doc2");
-		expect(patch.refs?.[1]?.bonus).toBe(true);
-
-		// Verify refs are ALSO in history[1] for multi-turn compatibility
-		const patchHistory = patch.history as ApiItem["history"];
-		expect(patchHistory).toBeDefined();
-		expect(patchHistory?.[1]?.refs).toBeDefined();
-		expect(patchHistory?.[1]?.refs).toHaveLength(2);
+		it("keeps true multi-turn refs out of top-level compatibility fields", async () => {
+			const apiItem = makeApiItem({
+				history: [
+					{ role: "user", msg: "Question" },
+					{
+						role: "assistant",
+						msg: "Answer",
+						refs: [
+							{
+								url: "https://turn.ref",
+								content: "Turn content",
+								bonus: false,
+							},
+						],
+					},
+				],
+				refs: [],
+			});
+			let capturedPatch: Patch | undefined;
+			mockUpdateAssignedGroundTruth.mockImplementation(
+				async (
+					_dataset: string,
+					_bucket: string,
+					_id: string,
+					patch: Patch,
+				) => {
+					capturedPatch = patch;
+					return apiItem;
+				},
+			);
+			mockGetMyAssignments.mockResolvedValue([apiItem]);
+			const provider = new ApiProvider();
+			const { items } = await provider.list();
+			await provider.save(items[0]);
+			const patch = capturedPatch as Patch;
+			const patchHistory = patch.history as ApiItem["history"];
+			expect(patch.refs).toHaveLength(0);
+			expect(patchHistory?.[1]?.refs).toHaveLength(1);
+			expect(patchHistory?.[1]?.refs?.[0]?.url).toBe("https://turn.ref");
+		});
 	});
 
-	it("save does not include turn refs in top-level for true multi-turn items", async () => {
-		// True multi-turn items (created with history) should NOT have turn refs
-		// saved to top-level, only to history[].refs
-		const apiItem = makeApiItem({
-			history: [
-				{ role: "user", msg: "Question" },
-				{
-					role: "assistant",
-					msg: "Answer",
-					refs: [
-						{
-							url: "https://turn.ref",
-							content: "Turn content",
-							bonus: false,
-						},
-					],
+	describe("compat-migration write projections", () => {
+		it("preserves legacy top-level refs when saving a synthesized single-turn item", async () => {
+			const apiItem = makeApiItem({
+				synthQuestion: "What is X?",
+				answer: "X is Y",
+				refs: [
+					{
+						url: "https://legacy.ref/doc1",
+						content: "Legacy content",
+						keyExcerpt: "Key paragraph",
+						bonus: false,
+					},
+					{
+						url: "https://legacy.ref/doc2",
+						content: "Bonus content",
+						bonus: true,
+					},
+				],
+				history: undefined,
+			});
+			let capturedPatch: Patch | undefined;
+			mockUpdateAssignedGroundTruth.mockImplementation(
+				async (_dataset: string, _bucket: string, id: string, patch: Patch) => {
+					capturedPatch = patch;
+					return {
+						...apiItem,
+						id,
+						refs: (patch.refs as ApiItem["refs"]) ?? apiItem.refs,
+						status: (patch.status as ApiItem["status"]) ?? apiItem.status,
+					} as ApiItem;
 				},
-			],
-			refs: [], // No top-level refs
+			);
+			mockGetMyAssignments.mockResolvedValue([apiItem]);
+			const provider = new ApiProvider();
+			const { items } = await provider.list();
+			const legacyRefs = getItemReferences(items[0]);
+			const updated: GroundTruthItem = withUpdatedReferences(
+				items[0],
+				legacyRefs.map((ref) =>
+					ref.url === "https://legacy.ref/doc1"
+						? { ...ref, bonus: true, keyParagraph: "Updated key" }
+						: ref,
+				),
+			);
+			await provider.save(updated);
+			const patch = capturedPatch as Patch;
+			const patchHistory = patch.history as ApiItem["history"];
+			expect(patch.refs).toHaveLength(2);
+			expect(patch.refs?.[0]).toMatchObject({
+				url: "https://legacy.ref/doc1",
+				bonus: true,
+				keyExcerpt: "Updated key",
+			});
+			expect(patch.refs?.[1]).toMatchObject({
+				url: "https://legacy.ref/doc2",
+				bonus: true,
+			});
+			expect(patchHistory?.[1]?.refs).toHaveLength(2);
 		});
-
-		let capturedPatch: Patch | undefined;
-		mockUpdateAssignedGroundTruth.mockImplementation(
-			async (_dataset: string, _bucket: string, _id: string, patch: Patch) => {
-				capturedPatch = patch;
-				return apiItem;
-			},
-		);
-
-		mockGetMyAssignments.mockResolvedValue([apiItem]);
-		const provider = new ApiProvider();
-		const { items } = await provider.list();
-
-		// Save the item unchanged
-		await provider.save(items[0]);
-
-		expect(capturedPatch).toBeDefined();
-		const patch = capturedPatch as Patch;
-
-		// Top-level refs should be empty
-		expect(patch.refs).toHaveLength(0);
-
-		// Refs should be in history[1]
-		const patchHistory = patch.history as ApiItem["history"];
-		expect(patchHistory?.[1]?.refs).toHaveLength(1);
-		expect(patchHistory?.[1]?.refs?.[0]?.url).toBe("https://turn.ref");
 	});
 });

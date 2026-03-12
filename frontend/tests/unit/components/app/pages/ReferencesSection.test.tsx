@@ -1,84 +1,16 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import ReferencesSection from "../../../../../src/components/app/pages/ReferencesSection";
-import type { Reference } from "../../../../../src/models/groundTruth";
+import type {
+	GroundTruthItem,
+	Reference,
+} from "../../../../../src/models/groundTruth";
+import { getItemReferences } from "../../../../../src/models/groundTruth";
 
 const ref = (id: string): Reference => ({
 	id,
 	url: `http://x/${id}`,
 	title: `T-${id}`,
 });
-
-describe("ReferencesSection", () => {
-	it("runs search and adds refs from results", async () => {
-		const onRunSearch = vi.fn();
-		const onAddRefs = vi.fn();
-
-		render(
-			<ReferencesSection
-				query="hello"
-				setQuery={vi.fn()}
-				searching={false}
-				searchResults={[ref("1"), ref("2")]}
-				onRunSearch={onRunSearch}
-				onAddRefs={onAddRefs}
-				references={[]}
-				onUpdateReference={vi.fn()}
-				onRemoveReference={vi.fn()}
-				onOpenReference={vi.fn()}
-			/>,
-		);
-
-		// Switch to Selected and back via buttons
-		fireEvent.click(screen.getByRole("button", { name: /Selected \(/i }));
-		fireEvent.click(screen.getByRole("button", { name: /^Search$/i }));
-
-		// Select first, add selected
-		const cbs = screen.getAllByRole("checkbox");
-		fireEvent.click(cbs[0]);
-		fireEvent.click(
-			screen.getByRole("button", { name: /Add\s+1\s+to Selected/i }),
-		);
-		expect(onAddRefs).toHaveBeenCalled();
-
-		// Run search
-		await act(async () => {
-			fireEvent.click(screen.getAllByRole("button", { name: /Search/i })[1]);
-		});
-		expect(onRunSearch).toHaveBeenCalled();
-	});
-
-	it("confirms remove", () => {
-		const onRemoveReference = vi.fn();
-		vi.spyOn(window, "confirm").mockReturnValue(true);
-
-		render(
-			<ReferencesSection
-				query=""
-				setQuery={vi.fn()}
-				searching={false}
-				searchResults={[]}
-				onRunSearch={vi.fn()}
-				onAddRefs={vi.fn()}
-				references={[ref("x")]}
-				onUpdateReference={vi.fn()}
-				onRemoveReference={onRemoveReference}
-				onOpenReference={vi.fn()}
-			/>,
-		);
-
-		// Switch to Selected tab to expose remove
-		fireEvent.click(screen.getByRole("button", { name: /Selected \(/i }));
-		// Click the remove (trash) button which has title "Remove reference"
-		fireEvent.click(screen.getByTitle(/Remove reference/i));
-		expect(onRemoveReference).toHaveBeenCalled();
-	});
-});
-
-// ---------------------------------------------------------------------------
-// Phase 4: ReferencesSection as generic right pane
-// ---------------------------------------------------------------------------
-import type { GroundTruthItem } from "../../../../../src/models/groundTruth";
-import { getItemReferences } from "../../../../../src/models/groundTruth";
 
 const makeItem = (
 	overrides: Partial<GroundTruthItem> = {},
@@ -91,7 +23,7 @@ const makeItem = (
 	...overrides,
 });
 
-describe("ReferencesSection – generic right pane (Phase 4)", () => {
+describe("ReferencesSection", () => {
 	const noopProps = {
 		query: "",
 		setQuery: vi.fn(),
@@ -105,59 +37,90 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 		onOpenReference: vi.fn(),
 	};
 
-	it("shows TracePanel when item has toolCalls", () => {
+	it("runs search and adds refs from results on the compatibility search surface", async () => {
+		const onRunSearch = vi.fn();
+		const onAddRefs = vi.fn();
+
+		render(
+			<ReferencesSection
+				{...noopProps}
+				query="hello"
+				searchResults={[ref("1"), ref("2")]}
+				onRunSearch={onRunSearch}
+				onAddRefs={onAddRefs}
+				references={[]}
+				isMultiTurn={false}
+			/>,
+		);
+
+		const cbs = screen.getAllByRole("checkbox");
+		fireEvent.click(cbs[0]);
+		fireEvent.click(
+			screen.getByRole("button", { name: /Attach 1 selected result/i }),
+		);
+		expect(onAddRefs).toHaveBeenCalled();
+
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: /^Search$/i }));
+		});
+		expect(onRunSearch).toHaveBeenCalled();
+	});
+
+	it("confirms remove from the evidence review surface", () => {
+		const onRemoveReference = vi.fn();
+		vi.spyOn(window, "confirm").mockReturnValue(true);
+
+		render(
+			<ReferencesSection
+				{...noopProps}
+				references={[ref("x")]}
+				onRemoveReference={onRemoveReference}
+				isMultiTurn={false}
+			/>,
+		);
+
+		fireEvent.click(screen.getByTitle(/Remove reference/i));
+		expect(onRemoveReference).toHaveBeenCalled();
+	});
+
+	it("shows generic evidence panel when item has toolCalls", () => {
 		const item = makeItem({
 			toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		// TracePanel renders "Trace Data" heading (wireframe v2.2 layout)
-		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 	});
 
-	it("shows RAG compat panel when in single-turn mode", () => {
+	it("shows host-owned search only in single-turn compatibility mode", () => {
 		render(
 			<ReferencesSection {...noopProps} item={null} isMultiTurn={false} />,
 		);
-		// Search tab should be visible (RAG compat surface)
-		const searchBtns = screen.getAllByRole("button", { name: /Search/i });
-		expect(searchBtns.length).toBeGreaterThan(0);
+		expect(screen.getByText(/Search Evidence/i)).toBeInTheDocument();
 	});
 
-	it("shows empty state when multi-turn mode and no evidence or references", () => {
-		const item = makeItem(); // no toolCalls, no traceIds, etc.
-		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		// No references, no evidence data → empty state
+	it("shows review-only guidance when multi-turn mode has no generic evidence", () => {
+		render(
+			<ReferencesSection
+				{...noopProps}
+				references={[{ ...ref("t1"), turnId: "turn-agent-1" }]}
+				isMultiTurn
+			/>,
+		);
+		expect(screen.queryByText(/Search Evidence/i)).toBeNull();
 		expect(
-			screen.getByText(/No evidence or references available/i),
+			screen.getByText(/plugin-specific evidence surfaces/i),
 		).toBeInTheDocument();
 	});
 
-	it("shows TracePanel header when item has expectedTools", () => {
-		const item = makeItem({
-			expectedTools: {
-				required: [{ name: "search" }],
-			},
-			toolCalls: [],
-		});
+	it("shows empty state when no evidence or review surface is available", () => {
+		const item = makeItem();
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		// TracePanel shows header even with only expectedTools (no tool calls)
-		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
+		expect(
+			screen.getByText(/No evidence or review surfaces are available/i),
+		).toBeInTheDocument();
 	});
 
-	it("shows generic evidence for context-only items", () => {
-		const item = makeItem({
-			contextEntries: [
-				{ key: "customer_tier", value: "enterprise" },
-				{ key: "request", value: { region: "us" } },
-			],
-		});
-		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
-		// Context Entries is inside "More Details" collapsible
-		expect(screen.getByText(/More Details/i)).toBeInTheDocument();
-	});
-
-	it("shows generic plugin-owned details for plugin-only items", () => {
+	it("shows registry-backed evidence panel for plugin-only items", () => {
 		const item = makeItem({
 			plugins: {
 				"rag-compat": {
@@ -171,12 +134,11 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			},
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
-		// Plugin Details is inside "More Details" collapsible
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 		expect(screen.getByText(/More Details/i)).toBeInTheDocument();
 	});
 
-	it("shows only evidence panel when multi-turn item has references", () => {
+	it("keeps multi-turn references in review without restoring global tabs", () => {
 		const item = makeItem({
 			toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
 			plugins: {
@@ -201,8 +163,10 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 				isMultiTurn
 			/>,
 		);
-		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
-		// RAG references panel is hidden in multi-turn mode
-		expect(screen.queryByText(/Selected/i)).not.toBeInTheDocument();
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
+		expect(screen.queryByText(/^Search Evidence$/i)).toBeNull();
+		expect(
+			screen.getByText(/Review Attached Evidence \(1\)/i),
+		).toBeInTheDocument();
 	});
 });

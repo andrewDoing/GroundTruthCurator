@@ -5,7 +5,7 @@ from uuid import uuid4, UUID
 from datetime import datetime, timezone
 
 from app.container import container
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
 from app.domain.enums import GroundTruthStatus
 
 
@@ -16,7 +16,7 @@ class _InMemoryRepo:
 
     # ---- GroundTruthRepo protocol (minimal working set for this test) ----
     async def import_bulk_gt(
-        self, items: list[GroundTruthItem], buckets: int | None = None
+        self, items: list[AgenticGroundTruthEntry], buckets: int | None = None
     ):  # pragma: no cover
         raise NotImplementedError
 
@@ -30,7 +30,7 @@ class _InMemoryRepo:
         key = (dataset, str(bucket), item_id)
         return self.items.get(key)
 
-    async def upsert_gt(self, item: GroundTruthItem):  # type: ignore[override]
+    async def upsert_gt(self, item: AgenticGroundTruthEntry):  # type: ignore[override]
         # Simulate ETag update on write
         item.etag = (item.etag or "etag") + ":updated"
         key = (item.datasetName, str(item.bucket), item.id)
@@ -51,17 +51,17 @@ class _InMemoryRepo:
 
     async def query_unassigned_by_dataset_prefix(
         self, dataset_prefix: str, user_id: str, take: int, exclude_ids: list[str] | None = None
-    ) -> list[GroundTruthItem]:  # pragma: no cover
+    ) -> list[AgenticGroundTruthEntry]:  # pragma: no cover
         raise NotImplementedError
 
     async def query_unassigned_global(
         self, user_id: str, take: int, exclude_ids: list[str] | None = None
-    ) -> list[GroundTruthItem]:  # pragma: no cover
+    ) -> list[AgenticGroundTruthEntry]:  # pragma: no cover
         raise NotImplementedError
 
     async def sample_unassigned(
         self, user_id: str, limit: int, exclude_ids: list[str] | None = None
-    ) -> list[GroundTruthItem]:  # pragma: no cover
+    ) -> list[AgenticGroundTruthEntry]:  # pragma: no cover
         raise NotImplementedError
 
     async def list_gt_paginated(
@@ -87,7 +87,7 @@ class _InMemoryRepo:
     async def list_assigned(self, user_id: str):  # pragma: no cover
         raise NotImplementedError
 
-    async def upsert_assignment_doc(self, user_id: str, gt: GroundTruthItem):  # pragma: no cover
+    async def upsert_assignment_doc(self, user_id: str, gt: AgenticGroundTruthEntry):  # pragma: no cover
         raise NotImplementedError
 
     async def list_assignments_by_user(self, user_id: str):  # pragma: no cover
@@ -123,7 +123,7 @@ async def test_status_skipped_keeps_assignment(async_client, user_headers):
     repo = _InMemoryRepo()
     container.repo = repo
     try:
-        gt = GroundTruthItem(
+        gt = AgenticGroundTruthEntry(
             id=item_id,
             datasetName=dataset,
             bucket=bucket,

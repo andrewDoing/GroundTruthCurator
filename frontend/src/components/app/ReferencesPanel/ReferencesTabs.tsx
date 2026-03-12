@@ -1,16 +1,10 @@
 import type { RefObject } from "react";
-import { useEffect } from "react";
 import type { Reference } from "../../../models/groundTruth";
 import { cn } from "../../../models/utils";
 import SearchTab from "./SearchTab";
 import SelectedTab from "./SelectedTab";
 
-export type RightTab = "search" | "selected";
-
 type Props = {
-	rightTab: RightTab;
-	setRightTab: (tab: RightTab) => void;
-	// search tab props
 	query: string;
 	setQuery: (q: string) => void;
 	searching: boolean;
@@ -21,19 +15,15 @@ type Props = {
 	onAddSelectedFromResults: () => void;
 	onAddSingleResult: (ref: Reference) => void;
 	searchInputRef: RefObject<HTMLInputElement | null>;
-	// selected tab props
 	references: Reference[];
 	onUpdateReference: (refId: string, partial: Partial<Reference>) => void;
 	onRemoveReference: (refId: string) => void;
 	onOpenReference: (r: Reference) => void;
-	// multi-turn support
-	isMultiTurn?: boolean;
+	showSearch?: boolean;
 	readOnly?: boolean;
 };
 
 export default function ReferencesTabs({
-	rightTab,
-	setRightTab,
 	query,
 	setQuery,
 	searching,
@@ -48,116 +38,79 @@ export default function ReferencesTabs({
 	onUpdateReference,
 	onRemoveReference,
 	onOpenReference,
-	isMultiTurn = false,
+	showSearch = true,
 	readOnly = false,
 }: Props) {
-	useEffect(() => {
-		if (isMultiTurn && rightTab !== "selected") {
-			setRightTab("selected");
-		}
-	}, [isMultiTurn, rightTab, setRightTab]);
-
-	useEffect(() => {
-		function onKeyDown(e: KeyboardEvent) {
-			const target = e.target as HTMLElement | null;
-			const tag = (target?.tagName || "").toLowerCase();
-			if (tag === "input" || tag === "textarea" || target?.isContentEditable)
-				return;
-			const isMod = e.metaKey || e.ctrlKey;
-			if (!isMod) return;
-			if (e.key === "1" && !isMultiTurn) {
-				e.preventDefault();
-				setRightTab("search");
-			} else if (e.key === "2") {
-				e.preventDefault();
-				setRightTab("selected");
-			}
-		}
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [isMultiTurn, setRightTab]);
 	return (
 		<aside
 			className={cn(
-				"self-start h-[calc(100vh-5.5rem)] rounded-2xl border bg-white p-0 shadow-sm flex flex-col overflow-hidden",
+				"self-start h-[calc(100vh-5.5rem)] rounded-2xl border bg-white shadow-sm overflow-hidden",
 			)}
 		>
-			{/* Tabs Header */}
-			<div className="flex items-center gap-2 border-b p-2">
-				{!isMultiTurn && (
-					<button
-						type="button"
-						className={cn(
-							"rounded-lg px-3 py-1.5 text-sm",
-							rightTab === "search"
-								? "border border-violet-300 bg-violet-50"
-								: "hover:bg-violet-50",
-						)}
-						onClick={() => setRightTab("search")}
-						title="Search"
-					>
-						Search
-					</button>
-				)}
-				<button
-					type="button"
-					className={cn(
-						"rounded-lg px-3 py-1.5 text-sm",
-						rightTab === "selected"
-							? "border border-violet-300 bg-violet-50"
-							: "hover:bg-violet-50",
-					)}
-					onClick={() => setRightTab("selected")}
-					title="Selected references visible to the model"
-				>
-					Selected ({references.length})
-				</button>
-				{isMultiTurn && (
-					<div className="ml-auto text-xs text-slate-600">
-						Multi-turn mode: use per-turn modal
+			<div className="flex h-full flex-col overflow-hidden">
+				<div className="border-b px-4 py-3">
+					<div className="text-sm font-medium text-slate-800">
+						Evidence Review
 					</div>
-				)}
-			</div>
+					<p className="mt-1 text-xs text-slate-600">
+						Review attached evidence here. Search stays available only on
+						surfaces that still own retrieval acquisition.
+					</p>
+				</div>
 
-			{/* Tab Content */}
-			{isMultiTurn ? (
-				<>
-					<SelectedTab
-						references={references}
-						onUpdateReference={onUpdateReference}
-						onRemoveReference={onRemoveReference}
-						onOpenReference={onOpenReference}
-						readOnly={readOnly}
-					/>
-					<div className="mx-3 mb-3 rounded-lg border border-violet-200 bg-violet-50 p-3 text-[11px] text-violet-800">
-						Per-turn reference management enabled. Open an agent turn and click
-						"View References" to search & add references directly to that turn.
-					</div>
-				</>
-			) : rightTab === "search" ? (
-				<SearchTab
-					query={query}
-					setQuery={setQuery}
-					searching={searching}
-					results={searchResults}
-					selectedIds={searchSelected}
-					onRunSearch={onRunSearch}
-					onToggleSelect={onToggleSearchSelect}
-					onAddSelected={onAddSelectedFromResults}
-					onAddSingle={onAddSingleResult}
-					inputRef={searchInputRef}
-					existingReferences={references}
-					isMultiTurn={false}
-				/>
-			) : (
-				<SelectedTab
-					references={references}
-					onUpdateReference={onUpdateReference}
-					onRemoveReference={onRemoveReference}
-					onOpenReference={onOpenReference}
-					readOnly={readOnly}
-				/>
-			)}
+				<div className="flex-1 overflow-y-auto p-4 space-y-4">
+					{showSearch ? (
+						<section className="rounded-xl border border-slate-200 bg-slate-50">
+							<div className="border-b border-slate-200 px-4 py-3">
+								<div className="text-sm font-medium text-slate-800">
+									Search Evidence
+								</div>
+								<p className="mt-1 text-xs text-slate-600">
+									Search and attach sources for single-turn compatibility flows.
+								</p>
+							</div>
+							<SearchTab
+								query={query}
+								setQuery={setQuery}
+								searching={searching}
+								results={searchResults}
+								selectedIds={searchSelected}
+								onRunSearch={onRunSearch}
+								onToggleSelect={onToggleSearchSelect}
+								onAddSelected={onAddSelectedFromResults}
+								onAddSingle={onAddSingleResult}
+								inputRef={searchInputRef}
+								existingReferences={references}
+							/>
+						</section>
+					) : (
+						<div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs text-violet-800">
+							Retrieval search is owned by per-turn or plugin-specific evidence
+							surfaces for this workflow. This panel stays focused on evidence
+							review.
+						</div>
+					)}
+
+					<section className="rounded-xl border border-slate-200 bg-white">
+						<div className="border-b border-slate-200 px-4 py-3">
+							<div className="text-sm font-medium text-slate-800">
+								Review Attached Evidence ({references.length})
+							</div>
+							<p className="mt-1 text-xs text-slate-600">
+								Evidence can come from plugin-owned retrieval, per-turn
+								research, or compatibility projections.
+							</p>
+						</div>
+						<SelectedTab
+							references={references}
+							onUpdateReference={onUpdateReference}
+							onRemoveReference={onRemoveReference}
+							onOpenReference={onOpenReference}
+							readOnly={readOnly}
+						/>
+					</section>
+				</div>
+			</div>
 		</aside>
 	);
 }

@@ -20,7 +20,6 @@ type Props = {
 	onAddSingle: (ref: Reference) => void;
 	inputRef: React.RefObject<HTMLInputElement | null>;
 	existingReferences: Reference[];
-	isMultiTurn?: boolean;
 };
 
 export default function SearchTab({
@@ -35,23 +34,10 @@ export default function SearchTab({
 	onAddSingle,
 	inputRef,
 	existingReferences,
-	isMultiTurn = false,
 }: Props) {
-	const handleAddWithTurnSelection = (refs: Reference[]) => {
-		if (isMultiTurn) {
-			// In multi-turn mode, this feature is not available in this view
-			// References should be added via the per-turn modal
-			return;
-		}
-		// Not multi-turn, add directly
-		refs.forEach((ref) => {
-			onAddSingle(ref);
-		});
-	};
-
 	return (
-		<div className="flex h-full flex-col p-4">
-			<div className="mb-3 flex items-center gap-2">
+		<div className="flex flex-col gap-4 p-4">
+			<div className="flex items-center gap-2">
 				<SearchIcon className="h-4 w-4" />
 				<input
 					ref={inputRef}
@@ -65,7 +51,7 @@ export default function SearchTab({
 							onRunSearch();
 						}
 					}}
-					placeholder="Add references via AI Search…"
+					placeholder="Search for supporting evidence…"
 					className="flex-1 rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
 				/>
 				<button
@@ -78,10 +64,15 @@ export default function SearchTab({
 				</button>
 			</div>
 
+			<div className="text-xs text-slate-600">
+				Use search when this host surface still owns retrieval. Multi-turn and
+				plugin workflows can attach their own acquisition UI elsewhere.
+			</div>
+
 			{results.length > 0 && (
-				<div className="mb-3 rounded-xl border bg-violet-50 p-3">
+				<div className="rounded-xl border bg-violet-50 p-3">
 					<div className="mb-2 text-sm font-medium">Search Results</div>
-					<div className="max-h-[60vh] space-y-2 overflow-auto pr-1">
+					<div className="max-h-[40vh] space-y-2 overflow-auto pr-1">
 						{results.map((r) => {
 							const already = existingReferences.some((x) => x.url === r.url);
 							return (
@@ -119,7 +110,6 @@ export default function SearchTab({
 											</span>
 										</label>
 									</div>
-									{/* Only show title and URL in search results */}
 									<div className="mt-2 flex gap-2">
 										<button
 											type="button"
@@ -129,12 +119,10 @@ export default function SearchTab({
 													? "cursor-not-allowed border-slate-200 text-slate-400"
 													: "border-violet-300 text-violet-700 hover:bg-violet-50",
 											)}
-											onClick={() =>
-												!already && handleAddWithTurnSelection([r])
-											}
+											onClick={() => !already && onAddSingle(r)}
 											disabled={already}
 										>
-											{already ? "Added" : "Add"}
+											{already ? "Added" : "Attach"}
 										</button>
 									</div>
 								</div>
@@ -142,34 +130,24 @@ export default function SearchTab({
 						})}
 					</div>
 					<div className="mt-2 text-xs text-slate-600">
-						Click “Add” or select multiple and use the sticky bar.
+						Attach evidence one row at a time or bulk-select multiple results.
 					</div>
 				</div>
 			)}
-
-			<div className="flex-1" />
 
 			<div className="sticky bottom-0 border-t bg-white/95 p-3 backdrop-blur">
 				<div className="flex items-center justify-end">
 					<button
 						type="button"
 						className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-600 px-3 py-2 text-sm text-white shadow hover:bg-violet-700 disabled:opacity-50"
-						onClick={() => {
-							if (isMultiTurn) {
-								const chosen = results.filter((r) => selectedIds.has(r.id));
-								handleAddWithTurnSelection(chosen);
-							} else {
-								onAddSelected();
-							}
-						}}
+						onClick={onAddSelected}
 						disabled={selectedIds.size === 0}
 					>
-						Add {selectedIds.size || 0} to Selected
+						Attach {selectedIds.size || 0} selected result
+						{selectedIds.size === 1 ? "" : "s"}
 					</button>
 				</div>
 			</div>
-
-			{/* Turn Selector Modal - Removed as it's not properly integrated */}
 		</div>
 	);
 }

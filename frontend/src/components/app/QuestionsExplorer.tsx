@@ -1,7 +1,7 @@
 import { Lock } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { GroundTruthItem } from "../../models/groundTruth";
-import { getQueuePreview } from "../../models/groundTruth";
+import { getLastAgentTurn, getQueuePreview } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
 import { getExplorerExtensions } from "../../registry/ExplorerExtensions";
 import { fetchAvailableDatasets } from "../../services/datasets";
@@ -1205,7 +1205,7 @@ export default function QuestionsExplorer({
 											</td>
 											{/* Has Answer */}
 											<td className="px-3 py-3 text-center text-sm font-medium hidden xl:table-cell">
-												{item.answer && item.answer.trim().length > 0 ? (
+												{getLastAgentTurn(item).trim().length > 0 ? (
 													<span className="text-emerald-700">Yes</span>
 												) : (
 													<span className="text-slate-400">No</span>

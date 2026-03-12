@@ -643,7 +643,6 @@ class TestBulkImportFailedCount:
         from app.core.auth import UserContext
         from app.container import container
         from app.api.v1.ground_truths import import_bulk
-        from app.domain.models import BulkImportError
 
         # Two invalid items; each produces at least one error via approval validation
         item1 = AgenticGroundTruthEntry(
@@ -678,7 +677,7 @@ class TestBulkImportFailedCount:
         from app.core.auth import UserContext
         from app.container import container
         from app.api.v1.ground_truths import import_bulk
-        from app.domain.models import BulkImportError, HistoryEntry
+        from app.domain.models import HistoryEntry
 
         # First item is valid (passes tag validation), second is approval-invalid
         item_valid = AgenticGroundTruthEntry(

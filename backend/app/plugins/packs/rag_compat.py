@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from app.plugins.base import PluginPack
+from app.plugins.base import ExplorerFieldDefinition, ExportTransform, PluginPack
 
 if TYPE_CHECKING:
     from app.domain.models import AgenticGroundTruthEntry, Reference
@@ -33,6 +33,273 @@ logger = logging.getLogger(__name__)
 # This MUST match AgenticGroundTruthEntry._RAG_COMPAT_PLUGIN.
 # validate_registration() enforces this at startup.
 _RAG_COMPAT_KIND: str = "rag-compat"
+
+_LEGACY_PLUGIN_FIELDS: tuple[str, ...] = (
+    "synthQuestion",
+    "editedQuestion",
+    "answer",
+    "refs",
+    "contextUsedForGeneration",
+    "contextSource",
+    "modelUsedForGeneration",
+    "semanticClusterNumber",
+    "weight",
+    "samplingBucket",
+    "questionLength",
+    "totalReferences",
+)
+
+_LEGACY_PLUGIN_FIELD_ALIASES: dict[str, str] = {
+    "synth_question": "synthQuestion",
+    "edited_question": "editedQuestion",
+    "context_used_for_generation": "contextUsedForGeneration",
+    "context_source": "contextSource",
+    "model_used_for_generation": "modelUsedForGeneration",
+    "semantic_cluster_number": "semanticClusterNumber",
+    "sampling_bucket": "samplingBucket",
+    "question_length": "questionLength",
+    "total_references": "totalReferences",
+}
+
+
+def _coerce_reference_list(raw_refs: Any) -> list[Any]:
+    if not isinstance(raw_refs, list):
+        return []
+
+    from app.domain.models import Reference
+
+    return [ref if isinstance(ref, Reference) else Reference.model_validate(ref) for ref in raw_refs]
+
+
+def _history_message(history: Any, role: str, *, reverse: bool = False) -> str | None:
+    if not isinstance(history, list):
+        return None
+    iterator = reversed(history) if reverse else history
+    for turn in iterator:
+        if hasattr(turn, "role") and hasattr(turn, "msg"):
+            current_role = str(getattr(turn, "role", "")).strip().lower()
+            current_msg = str(getattr(turn, "msg", "")).strip()
+        elif isinstance(turn, dict):
+            current_role = str(turn.get("role", "")).strip().lower()
+            current_msg = str(turn.get("msg") or turn.get("content") or "").strip()
+        else:
+            continue
+        if current_role == role and current_msg:
+            return current_msg
+    return None
+
+
+def rag_compat_data_from_payload(
+    payload: dict[str, Any], *, plugin_name: str = _RAG_COMPAT_KIND
+) -> dict[str, Any]:
+    plugins = payload.get("plugins")
+    if not isinstance(plugins, dict):
+        return {}
+    plugin = plugins.get(plugin_name)
+    if hasattr(plugin, "data"):
+        plugin_data = getattr(plugin, "data", None)
+        return dict(plugin_data) if isinstance(plugin_data, dict) else {}
+    if isinstance(plugin, dict):
+        plugin_data = plugin.get("data")
+        return dict(plugin_data) if isinstance(plugin_data, dict) else {}
+    return {}
+
+
+def normalize_legacy_payload_for_core_model(
+    value: object, *, plugin_name: str = _RAG_COMPAT_KIND
+) -> object:
+    if not isinstance(value, dict):
+        return value
+
+    data = dict(value)
+    data.pop("tags", None)
+    legacy_payload: dict[str, Any] = {}
+
+    for alias, canonical in _LEGACY_PLUGIN_FIELD_ALIASES.items():
+        if alias not in data:
+            continue
+        alias_value = data.pop(alias)
+        if canonical not in data:
+            data[canonical] = alias_value
+
+    for field_name in _LEGACY_PLUGIN_FIELDS:
+        if field_name in data:
+            legacy_payload[field_name] = data.pop(field_name)
+
+    if "refs" in legacy_payload:
+        legacy_payload["refs"] = _coerce_reference_list(legacy_payload["refs"])
+
+    history_value = data.get("history")
+    if isinstance(history_value, list):
+        normalized_history: list[dict[str, Any]] = []
+        history_annotations: list[dict[str, Any]] = []
+        saw_history_annotations = False
+        for raw_entry in history_value:
+            if hasattr(raw_entry, "model_dump"):
+                entry_dict = raw_entry.model_dump(by_alias=True, exclude_none=True)
+            elif isinstance(raw_entry, dict):
+                entry_dict = dict(raw_entry)
+            else:
+                normalized_history.append(raw_entry)
+                history_annotations.append({})
+                continue
+
+            annotation: dict[str, Any] = {}
+            if "refs" in entry_dict:
+                annotation["refs"] = _coerce_reference_list(entry_dict.pop("refs"))
+                saw_history_annotations = True
+            expected_behavior = entry_dict.pop(
+                "expectedBehavior", entry_dict.pop("expected_behavior", None)
+            )
+            if expected_behavior is not None:
+                annotation["expectedBehavior"] = expected_behavior
+                saw_history_annotations = True
+
+            message = entry_dict.get("msg")
+            if message is None and "content" in entry_dict:
+                message = entry_dict.pop("content")
+            normalized_history.append(
+                {
+                    "role": entry_dict.get("role", ""),
+                    "msg": message or "",
+                }
+            )
+            history_annotations.append(annotation)
+
+        data["history"] = normalized_history
+        if saw_history_annotations:
+            legacy_payload["historyAnnotations"] = history_annotations
+    elif history_value is None and (
+        legacy_payload.get("editedQuestion")
+        or legacy_payload.get("synthQuestion")
+        or legacy_payload.get("answer")
+    ):
+        generated_history: list[dict[str, Any]] = []
+        question_text = legacy_payload.get("editedQuestion") or legacy_payload.get("synthQuestion")
+        if question_text:
+            generated_history.append({"role": "user", "msg": question_text})
+        if legacy_payload.get("answer"):
+            generated_history.append({"role": "assistant", "msg": legacy_payload["answer"]})
+        data["history"] = generated_history
+
+    if not legacy_payload:
+        return data
+
+    plugins_payload = dict(data.get("plugins") or {})
+    existing_plugin = plugins_payload.get(plugin_name)
+    if hasattr(existing_plugin, "model_dump"):
+        plugin_dict = existing_plugin.model_dump(by_alias=True)
+    elif isinstance(existing_plugin, dict):
+        plugin_dict = dict(existing_plugin)
+    else:
+        plugin_dict = {"kind": plugin_name, "version": "1.0", "data": {}}
+    plugin_data_raw = plugin_dict.get("data")
+    plugin_data = dict(plugin_data_raw) if isinstance(plugin_data_raw, dict) else {}
+    plugin_data.update(legacy_payload)
+    plugin_dict["kind"] = plugin_dict.get("kind") or plugin_name
+    plugin_dict["version"] = plugin_dict.get("version") or "1.0"
+    plugin_dict["data"] = plugin_data
+    plugins_payload[plugin_name] = plugin_dict
+    data["plugins"] = plugins_payload
+    return data
+
+
+def compat_refs_from_payload(
+    payload: dict[str, Any], *, plugin_name: str = _RAG_COMPAT_KIND
+) -> list[Any]:
+    compat = rag_compat_data_from_payload(payload, plugin_name=plugin_name)
+    refs = _coerce_reference_list(compat.get("refs"))
+    if refs:
+        return refs
+
+    retrievals = compat.get("retrievals")
+    if not isinstance(retrievals, dict):
+        return []
+
+    from app.domain.models import Reference
+
+    tool_calls = payload.get("toolCalls") or payload.get("tool_calls") or []
+    step_by_tool_call_id: dict[str, int | None] = {}
+    if isinstance(tool_calls, list):
+        for tool_call in tool_calls:
+            if hasattr(tool_call, "id"):
+                tool_call_id = getattr(tool_call, "id", "")
+                step_number = getattr(tool_call, "step_number", None)
+            elif isinstance(tool_call, dict):
+                tool_call_id = str(tool_call.get("id") or "")
+                step_number = tool_call.get("stepNumber", tool_call.get("step_number"))
+            else:
+                continue
+            if tool_call_id:
+                step_by_tool_call_id[tool_call_id] = step_number if isinstance(step_number, int) else None
+
+    flattened: list[Reference] = []
+    for tool_call_id, bucket in retrievals.items():
+        if not isinstance(bucket, dict):
+            continue
+        candidates = bucket.get("candidates")
+        if not isinstance(candidates, list):
+            continue
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            candidate_tool_call_id = candidate.get("toolCallId") or (
+                tool_call_id if tool_call_id != RagCompatPack._UNASSOCIATED_KEY else None
+            )
+            flattened.append(
+                Reference(
+                    url=str(candidate.get("url") or ""),
+                    title=candidate.get("title"),
+                    content=candidate.get("chunk"),
+                    messageIndex=step_by_tool_call_id.get(str(candidate_tool_call_id))
+                    if candidate_tool_call_id
+                    else None,
+                )
+            )
+    return flattened
+
+
+def compat_total_references_from_payload(
+    payload: dict[str, Any], *, plugin_name: str = _RAG_COMPAT_KIND
+) -> int:
+    compat = rag_compat_data_from_payload(payload, plugin_name=plugin_name)
+    explicit_total = compat.get("totalReferences")
+    if isinstance(explicit_total, int):
+        return explicit_total
+
+    history_count = 0
+    history_annotations = compat.get("historyAnnotations")
+    if isinstance(history_annotations, list):
+        for annotation in history_annotations:
+            if isinstance(annotation, dict) and isinstance(annotation.get("refs"), list):
+                history_count += len(annotation["refs"])
+    if history_count:
+        return history_count
+    return len(compat_refs_from_payload(payload, plugin_name=plugin_name))
+
+
+def apply_export_projection(doc: dict[str, Any], *, plugin_name: str = _RAG_COMPAT_KIND) -> dict[str, Any]:
+    projected = dict(doc)
+    compat = rag_compat_data_from_payload(projected, plugin_name=plugin_name)
+    if not compat:
+        return projected
+
+    refs = compat_refs_from_payload(projected, plugin_name=plugin_name)
+    projected["refs"] = [ref.model_dump(by_alias=True, exclude_none=True) for ref in refs]
+    projected["totalReferences"] = len(refs)
+
+    if projected.get("synthQuestion") is None:
+        projected["synthQuestion"] = compat.get("synthQuestion") or _history_message(
+            projected.get("history"), "user"
+        )
+    if projected.get("editedQuestion") is None:
+        projected["editedQuestion"] = compat.get("editedQuestion") or projected.get("synthQuestion")
+    if projected.get("answer") is None:
+        projected["answer"] = compat.get("answer") or _history_message(
+            projected.get("history"), "assistant", reverse=True
+        )
+
+    return projected
 
 
 class RagCompatPack(PluginPack):
@@ -103,7 +370,7 @@ class RagCompatPack(PluginPack):
         - "expectedTools.required must include at least one tool…" — retrieval
           items may use reference attachment instead of classified tool calls.
         """
-        if item.totalReferences == 0:
+        if self.reference_count(item) == 0:
             return []
 
         waivers: list[str] = []
@@ -131,7 +398,34 @@ class RagCompatPack(PluginPack):
 
     def refs_from_item(self, item: AgenticGroundTruthEntry) -> list[Any]:
         """Return the references list projected from the rag-compat payload."""
-        return item.refs
+        return compat_refs_from_payload(
+            {
+                "plugins": item.plugins,
+                "toolCalls": item.tool_calls,
+                "history": item.history,
+            }
+        )
+
+    def reference_count(self, item: AgenticGroundTruthEntry) -> int:
+        refs = self.refs_from_item(item)
+        if refs:
+            return len(refs)
+
+        compat = self.rag_compat_data(item)
+        explicit_total = compat.get("totalReferences")
+        return explicit_total if isinstance(explicit_total, int) and explicit_total > 0 else 0
+
+    def replace_references(
+        self, item: AgenticGroundTruthEntry, refs: list[Reference]
+    ) -> AgenticGroundTruthEntry:
+        serialized = [ref.model_dump(by_alias=True, exclude_none=True) for ref in refs]
+        item._set_rag_compat_value("refs", serialized)
+        item._set_rag_compat_value("retrievals", None)
+        # Clear cached totalReferences so it will be recomputed from refs/historyAnnotations
+        if "totalReferences" in item.__dict__:
+            del item.__dict__["totalReferences"]
+        item._set_rag_compat_value("totalReferences", None)  # Remove from plugin storage too
+        return item
 
     def attach_reference(self, item: AgenticGroundTruthEntry, ref: Reference) -> AgenticGroundTruthEntry:
         """Attach a reference to an item via the rag-compat plugin payload.
@@ -147,10 +441,9 @@ class RagCompatPack(PluginPack):
         Returns:
             The same item (mutated in-place) for convenience.
         """
-        current = list(item.refs)
+        current = list(self.refs_from_item(item))
         current.append(ref)
-        item.refs = current
-        return item
+        return self.replace_references(item, current)
 
     def detach_reference(self, item: AgenticGroundTruthEntry, ref_url: str) -> AgenticGroundTruthEntry:
         """Detach a reference from an item by URL, using the rag-compat payload.
@@ -164,8 +457,8 @@ class RagCompatPack(PluginPack):
         Returns:
             The same item (mutated in-place) for convenience.
         """
-        item.refs = [r for r in item.refs if getattr(r, "url", None) != ref_url]
-        return item
+        remaining = [r for r in self.refs_from_item(item) if getattr(r, "url", None) != ref_url]
+        return self.replace_references(item, remaining)
 
     # ------------------------------------------------------------------
     # Per-tool-call retrieval state (Phase 6 — retrieval normalization)
@@ -254,6 +547,32 @@ class RagCompatPack(PluginPack):
                 "toolCallId": None,
             }
             for r in refs
+        ]
+
+    def get_explorer_fields(self) -> list[ExplorerFieldDefinition]:
+        return [
+            ExplorerFieldDefinition(
+                key="rag-compat:totalReferences",
+                label="References",
+                field_type="number",
+                sortable=True,
+                filterable=True,
+            ),
+            ExplorerFieldDefinition(
+                key="rag-compat:perCallRetrievals",
+                label="Per-Call Retrievals",
+                field_type="boolean",
+                filterable=True,
+            ),
+        ]
+
+    def get_export_transforms(self) -> list[ExportTransform]:
+        return [
+            ExportTransform(
+                name="rag-compat:project-legacy-export-fields",
+                description="Project rag-compat retrieval/reference fields into export payloads",
+                transform=apply_export_projection,
+            )
         ]
 
     def migrate_refs_to_per_call(

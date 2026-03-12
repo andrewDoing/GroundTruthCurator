@@ -87,6 +87,7 @@ type RetrievalBucket = {
 		relevance?: string;
 		toolCallId?: string | null;
 		messageIndex?: number;
+		turnId?: string;
 		keyParagraph?: string;
 		bonus?: boolean;
 		visitedAt?: string | null;
@@ -122,12 +123,24 @@ export function getRetrievalsMap(
 export function getItemReferences(item: GroundTruthItem): Reference[] {
 	const retrievals = getRetrievalsMap(item);
 	if (!retrievals) return [];
+	const history = ensureConversationTurnIdentity(item.history);
+	const indexByTurnId = getTurnIndexById(history);
 
 	const refs: Reference[] = [];
 	let refIndex = 0;
 	for (const [toolCallId, bucket] of Object.entries(retrievals)) {
 		if (!bucket?.candidates) continue;
 		for (const c of bucket.candidates) {
+			const storedTurnId = c.turnId;
+			const resolvedMessageIndex =
+				storedTurnId && indexByTurnId.has(storedTurnId)
+					? indexByTurnId.get(storedTurnId)
+					: c.messageIndex;
+			const resolvedTurnId =
+				storedTurnId ||
+				(typeof resolvedMessageIndex === "number"
+					? history[resolvedMessageIndex]?.turnId
+					: undefined);
 			refs.push({
 				id: `ref_${refIndex++}`,
 				title: c.title,
@@ -136,7 +149,8 @@ export function getItemReferences(item: GroundTruthItem): Reference[] {
 				visitedAt: c.visitedAt ?? null,
 				keyParagraph: c.keyParagraph,
 				bonus: c.bonus ?? false,
-				messageIndex: c.messageIndex,
+				messageIndex: resolvedMessageIndex,
+				turnId: resolvedTurnId,
 				toolCallId: toolCallId !== _UNASSOCIATED_KEY ? toolCallId : undefined,
 			});
 		}
@@ -165,7 +179,8 @@ export function withUpdatedReferences(
 			chunk: ref.snippet,
 			relevance: undefined,
 			toolCallId: ref.toolCallId || undefined,
-			messageIndex: ref.messageIndex,
+			messageIndex: ref.turnId ? undefined : ref.messageIndex,
+			turnId: ref.turnId,
 			keyParagraph: ref.keyParagraph,
 			bonus: ref.bonus,
 			visitedAt: ref.visitedAt,
@@ -195,6 +210,10 @@ export type ExpectedBehavior =
 	| "generation:out-of-domain";
 
 export type ConversationTurn = {
+	/** Stable identity for canonical multi-turn editing state. */
+	turnId?: string;
+	/** Stable workflow-step identity when a turn maps to a durable step. */
+	stepId?: string;
 	/** Free-form role string. "user" marks the human turn; any other value is a non-user (agent/assistant) turn.
 	 *  Common values: "user", "agent", "assistant", "output-agent", "orchestrator-agent". */
 	role: string;
@@ -214,17 +233,36 @@ export type Reference = {
 	bonus?: boolean;
 	// Which agent turn these refs belong to (optional, legacy association)
 	messageIndex?: number;
+	// Stable turn ownership for canonical multi-turn editing state.
+	turnId?: string;
 	// Which tool call these refs belong to (per-call retrieval state)
 	toolCallId?: string;
 };
 
+export function getTurnIndexById(
+	history?: ConversationTurn[],
+): Map<string, number> {
+	return new Map(
+		ensureConversationTurnIdentity(history)
+			.map((turn, index) =>
+				turn.turnId ? ([turn.turnId, index] as const) : null,
+			)
+			.filter((entry): entry is readonly [string, number] => entry !== null),
+	);
+}
+
+export function getReferenceMessageIndex(
+	ref: Pick<Reference, "messageIndex" | "turnId">,
+	history?: ConversationTurn[],
+): number | undefined {
+	if (ref.turnId) {
+		return getTurnIndexById(history).get(ref.turnId);
+	}
+	return ref.messageIndex;
+}
+
 export type GroundTruthItem = {
 	id: string;
-	// ---------------------------------------------------------------------------
-	// Legacy / backward-compat fields (kept for single-turn and mapper compat)
-	// ---------------------------------------------------------------------------
-	question: string;
-	answer: string;
 	// ---------------------------------------------------------------------------
 	// Generic schema fields (Phase 2+)
 	// ---------------------------------------------------------------------------
@@ -266,6 +304,10 @@ export type GroundTruthItem = {
 	datasetName?: string;
 	/** Optional storage bucket when sourced from API-backed provider. */
 	bucket?: string;
+	/** Legacy compatibility projection derived from history when absent. */
+	question?: string;
+	/** Legacy compatibility projection derived from history when absent. */
+	answer?: string;
 	/** ISO date string of the last review, when provided by the API. */
 	reviewedAt?: string | null;
 	/**
@@ -281,60 +323,128 @@ export type GroundTruthItem = {
 
 // Helper functions for multi-turn support
 
-/**
- * Returns the last user message from history, or falls back to item.question
- */
-export function getLastUserTurn(item: GroundTruthItem): string {
-	if (!item.history || item.history.length === 0) {
-		return item.question;
-	}
-	// Find the last user turn
-	for (let i = item.history.length - 1; i >= 0; i--) {
-		if (item.history[i].role === "user") {
-			return item.history[i].content;
-		}
-	}
-	return item.question;
+const LEGACY_HOST_DELETE_GATES = [
+	"stored-data audit completed",
+	"caller audit completed",
+	"import/export verification completed",
+] as const;
+
+export type LegacyHostDeleteGate = (typeof LEGACY_HOST_DELETE_GATES)[number];
+
+export function getLegacyHostDeleteGates(): LegacyHostDeleteGate[] {
+	return [...LEGACY_HOST_DELETE_GATES];
+}
+
+export function createConversationTurn(args: {
+	role: string;
+	content: string;
+	turnId?: string;
+	stepId?: string;
+	expectedBehavior?: ExpectedBehavior[];
+}): ConversationTurn {
+	return {
+		turnId: args.turnId || `turn_${Math.random().toString(36).slice(2, 10)}`,
+		stepId: args.stepId,
+		role: args.role,
+		content: args.content,
+		expectedBehavior: args.expectedBehavior,
+	};
+}
+
+export function ensureConversationTurnIdentity(
+	history?: ConversationTurn[],
+): ConversationTurn[] {
+	return (history || []).map((turn, index) => ({
+		...turn,
+		turnId: turn.turnId || turn.stepId || `turn_${index + 1}`,
+		stepId: turn.stepId || turn.turnId || `step_${index + 1}`,
+	}));
 }
 
 /**
- * Returns the last agent message from history, or falls back to item.answer.
+ * Returns the last user message from history.
+ */
+export function getLastUserTurn(item: GroundTruthItem): string {
+	if (!Array.isArray(item.history)) {
+		return item.question || "";
+	}
+	const history = ensureConversationTurnIdentity(item.history);
+	if (history.length === 0) {
+		return "";
+	}
+	// Find the last user turn
+	for (let i = history.length - 1; i >= 0; i--) {
+		if (history[i].role === "user") {
+			return history[i].content;
+		}
+	}
+	return "";
+}
+
+/**
+ * Returns the last agent message from history.
  * "Agent" is any turn whose role is not "user" (supports free-form roles).
  */
 export function getLastAgentTurn(item: GroundTruthItem): string {
-	if (!item.history || item.history.length === 0) {
-		return item.answer;
+	if (!Array.isArray(item.history)) {
+		return item.answer || "";
+	}
+	const history = ensureConversationTurnIdentity(item.history);
+	if (history.length === 0) {
+		return "";
 	}
 	// Find the last non-user turn (any agent/assistant/orchestrator role)
-	for (let i = item.history.length - 1; i >= 0; i--) {
-		if (item.history[i].role !== "user") {
-			return item.history[i].content;
+	for (let i = history.length - 1; i >= 0; i--) {
+		if (history[i].role !== "user") {
+			return history[i].content;
 		}
 	}
-	return item.answer;
+	return "";
 }
 
 /**
  * Returns the total number of turns in the conversation
  */
 export function getTurnCount(item: GroundTruthItem): number {
-	return item.history?.length || 0;
+	return ensureConversationTurnIdentity(item.history).length;
 }
 
 /**
  * Checks if the item is using multi-turn mode
  */
 export function isMultiTurn(item: GroundTruthItem): boolean {
-	return !!item.history && item.history.length > 0;
+	return ensureConversationTurnIdentity(item.history).length > 0;
 }
 
 /**
  * Returns a short preview string for queue display:
- * uses the first user turn from history, falling back to item.question.
+ * uses the first user turn from history.
  */
 export function getQueuePreview(item: GroundTruthItem): string {
-	const first = item.history?.find((t) => t.role === "user");
-	return first?.content || item.question || "(no message)";
+	if (!Array.isArray(item.history)) {
+		return item.question || "(no message)";
+	}
+	const first = ensureConversationTurnIdentity(item.history).find(
+		(t) => t.role === "user",
+	);
+	return first?.content || "(no message)";
+}
+
+export function withDerivedLegacyFields(
+	item: GroundTruthItem,
+): GroundTruthItem {
+	const history = Array.isArray(item.history)
+		? ensureConversationTurnIdentity(item.history)
+		: item.history;
+	const derivedItem = {
+		...item,
+		history,
+	};
+	return {
+		...derivedItem,
+		question: getLastUserTurn(derivedItem),
+		answer: getLastAgentTurn(derivedItem),
+	};
 }
 
 /**

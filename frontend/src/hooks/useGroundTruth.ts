@@ -9,7 +9,13 @@ import type {
 	Reference,
 } from "../models/groundTruth";
 import {
+	createConversationTurn,
+	ensureConversationTurnIdentity,
 	getItemReferences,
+	getLastAgentTurn,
+	getLastUserTurn,
+	getReferenceMessageIndex,
+	withDerivedLegacyFields,
 	withUpdatedReferences,
 } from "../models/groundTruth";
 import { canApproveCandidate } from "../models/gtHelpers";
@@ -132,16 +138,17 @@ function stateSignature(it: GroundTruthItem): string {
 			keyParagraph: (r.keyParagraph || "").trim(),
 			bonus: !!r.bonus,
 			messageIndex: r.messageIndex,
+			turnId: r.turnId,
 			toolCallId: r.toolCallId,
 		}))
 		.sort((a, b) => a.id.localeCompare(b.id));
 	return JSON.stringify({
 		id: it.id,
 		providerId: it.providerId,
-		question: (it.question || "").trim(),
-		answer: (it.answer || "").trim(),
+		question: getLastUserTurn(it).trim(),
+		answer: getLastAgentTurn(it).trim(),
 		comment: (it.comment ?? "").trim(),
-		history: it.history || [],
+		history: ensureConversationTurnIdentity(it.history),
 		references: refs,
 		manualTags: [...(it.manualTags || [])]
 			.map((t) => t.trim())
@@ -154,7 +161,7 @@ function stateSignature(it: GroundTruthItem): string {
 
 function chatReferencesToGroundTruth(
 	chatRefs: ChatReference[],
-	messageIndex: number,
+	targetTurn: ConversationTurn,
 ): Reference[] {
 	if (!chatRefs?.length) return [];
 	return chatRefs.map((ref) => ({
@@ -163,8 +170,67 @@ function chatReferencesToGroundTruth(
 		url: ref.url?.trim() || "",
 		snippet: ref.snippet?.trim() || undefined,
 		keyParagraph: ref.keyParagraph?.trim() || undefined,
-		messageIndex,
+		turnId: targetTurn.turnId,
 	}));
+}
+
+function ensureEditableHistory(item: GroundTruthItem): ConversationTurn[] {
+	return ensureConversationTurnIdentity(item.history);
+}
+
+function withCanonicalHistory(
+	item: GroundTruthItem,
+	history: ConversationTurn[],
+): GroundTruthItem {
+	return withDerivedLegacyFields({
+		...item,
+		history: ensureConversationTurnIdentity(history),
+	});
+}
+
+function pruneReferencesForHistory(
+	refs: Reference[],
+	history: ConversationTurn[],
+): Reference[] {
+	const nextTurnIds = new Set(
+		history.map((turn) => turn.turnId).filter(Boolean),
+	);
+	return refs
+		.map((ref) => {
+			if (ref.turnId) {
+				if (!nextTurnIds.has(ref.turnId)) {
+					return null;
+				}
+				return {
+					...ref,
+					messageIndex: undefined,
+				};
+			}
+			if (typeof ref.messageIndex !== "number") {
+				return ref;
+			}
+			if (ref.messageIndex < history.length) {
+				const turnId = history[ref.messageIndex]?.turnId;
+				return {
+					...ref,
+					messageIndex: turnId ? undefined : ref.messageIndex,
+					turnId,
+				};
+			}
+			return null;
+		})
+		.filter((ref): ref is Reference => ref !== null);
+}
+
+function getCompatExpectedBehaviorPrompt(
+	turn: ConversationTurn | undefined,
+): string {
+	return formatExpectedBehaviorForChat(turn?.expectedBehavior);
+}
+
+function withCanonicalItem(item: GroundTruthItem): GroundTruthItem {
+	const history = ensureEditableHistory(item);
+	return withCanonicalHistory(item, history);
 }
 
 function useGroundTruth(): UseGroundTruth {
@@ -179,7 +245,9 @@ function useGroundTruth(): UseGroundTruth {
 
 	// Search (delegated to sub-hook)
 	const { query, setQuery, searching, searchResults, runSearch, clearResults } =
-		useReferencesSearch({ getSeedQuery: () => current?.question });
+		useReferencesSearch({
+			getSeedQuery: () => (current ? getLastUserTurn(current) : undefined),
+		});
 
 	// Save idempotency
 	const [lastSavedStateFp, setLastSavedStateFp] = useState<string>("");
@@ -226,10 +294,15 @@ function useGroundTruth(): UseGroundTruth {
 				setSelectedId(first?.id ?? null);
 				if (first) {
 					// Prime the editor immediately so fields populate without waiting for a follow-up get()
-					const clone = JSON.parse(JSON.stringify(first)) as GroundTruthItem;
+					const clone = withCanonicalItem(
+						JSON.parse(JSON.stringify(first)) as GroundTruthItem,
+					);
 					setCurrent(clone);
-					qaBaseline.current = { q: first.question, a: first.answer };
-					setLastSavedStateFp(stateSignature(first));
+					qaBaseline.current = {
+						q: getLastUserTurn(first),
+						a: getLastAgentTurn(first),
+					};
+					setLastSavedStateFp(stateSignature(withCanonicalItem(first)));
 				}
 			} catch {
 				// Load errors are handled elsewhere via explicit actions.
@@ -257,19 +330,21 @@ function useGroundTruth(): UseGroundTruth {
 		(async () => {
 			const it = await p.get(selectedId);
 			if (!it) return;
-			const clone = JSON.parse(JSON.stringify(it)) as GroundTruthItem;
+			const clone = withCanonicalItem(
+				JSON.parse(JSON.stringify(it)) as GroundTruthItem,
+			);
 			setCurrent(clone);
-			qaBaseline.current = { q: it.question, a: it.answer };
+			qaBaseline.current = { q: getLastUserTurn(it), a: getLastAgentTurn(it) };
 			clearResults();
-			setLastSavedStateFp(stateSignature(it));
+			setLastSavedStateFp(stateSignature(withCanonicalItem(it)));
 		})();
 	}, [selectedId, clearResults, current?.id]);
 
 	const qaChanged = useMemo(() => {
 		if (!current) return false;
 		return (
-			current.question !== qaBaseline.current.q ||
-			current.answer !== qaBaseline.current.a
+			getLastUserTurn(current) !== qaBaseline.current.q ||
+			getLastAgentTurn(current) !== qaBaseline.current.a
 		);
 	}, [current]);
 
@@ -283,10 +358,42 @@ function useGroundTruth(): UseGroundTruth {
 	}, []);
 
 	const updateQuestion = useCallback((q: string) => {
-		setCurrent((prev) => (prev ? { ...prev, question: q } : prev));
+		setCurrent((prev) => {
+			if (!prev) return prev;
+			const history = ensureEditableHistory(prev);
+			let updated = false;
+			const nextHistory = [...history];
+			for (let i = nextHistory.length - 1; i >= 0; i--) {
+				if (nextHistory[i].role === "user") {
+					nextHistory[i] = { ...nextHistory[i], content: q };
+					updated = true;
+					break;
+				}
+			}
+			if (!updated) {
+				nextHistory.push(createConversationTurn({ role: "user", content: q }));
+			}
+			return withCanonicalHistory(prev, nextHistory);
+		});
 	}, []);
 	const updateAnswer = useCallback((a: string) => {
-		setCurrent((prev) => (prev ? { ...prev, answer: a } : prev));
+		setCurrent((prev) => {
+			if (!prev) return prev;
+			const history = ensureEditableHistory(prev);
+			let updated = false;
+			const nextHistory = [...history];
+			for (let i = nextHistory.length - 1; i >= 0; i--) {
+				if (nextHistory[i].role !== "user") {
+					nextHistory[i] = { ...nextHistory[i], content: a };
+					updated = true;
+					break;
+				}
+			}
+			if (!updated) {
+				nextHistory.push(createConversationTurn({ role: "agent", content: a }));
+			}
+			return withCanonicalHistory(prev, nextHistory);
+		});
 	}, []);
 	const updateComment = useCallback((v: string) => {
 		setCurrent((prev) => (prev ? { ...prev, comment: v } : prev));
@@ -299,10 +406,10 @@ function useGroundTruth(): UseGroundTruth {
 			const p = providerRef.current;
 			if (!current || !p || saving) return { ok: false, error: "Not ready" };
 
-			const candidate: GroundTruthItem = {
+			const candidate: GroundTruthItem = withCanonicalItem({
 				...current,
 				status: nextStatus || current.status,
-			};
+			});
 			const stateFp = stateSignature(candidate);
 			if (stateFp === lastSavedStateFp) {
 				return { ok: true, saved: current, message: "No changes" };
@@ -346,11 +453,17 @@ function useGroundTruth(): UseGroundTruth {
 						Object.assign(saved, withUpdatedReferences(saved, merged));
 					}
 				}
-				setItems((arr) => arr.map((i) => (i.id === saved.id ? saved : i)));
-				setCurrent(saved);
-				setLastSavedStateFp(stateSignature(saved));
+				const canonicalSaved = withCanonicalItem(saved);
+				setItems((arr) =>
+					arr.map((i) => (i.id === canonicalSaved.id ? canonicalSaved : i)),
+				);
+				setCurrent(canonicalSaved);
+				setLastSavedStateFp(stateSignature(canonicalSaved));
 				if (qaChanged)
-					qaBaseline.current = { q: saved.question, a: saved.answer };
+					qaBaseline.current = {
+						q: getLastUserTurn(canonicalSaved),
+						a: getLastAgentTurn(canonicalSaved),
+					};
 
 				// FR-002: Invalidate cache after successful save to ensure fresh data on next inspection
 				if (saved.datasetName && saved.bucket && saved.id) {
@@ -370,13 +483,13 @@ function useGroundTruth(): UseGroundTruth {
 				} catch {}
 				try {
 					const baseProps = {
-						providerId: saved.providerId,
-						itemId: saved.id,
-						status: saved.status,
-						selectedRefCount: getItemReferences(saved).length,
+						providerId: canonicalSaved.providerId,
+						itemId: canonicalSaved.id,
+						status: canonicalSaved.status,
+						selectedRefCount: getItemReferences(canonicalSaved).length,
 						durationMs: Date.now() - started,
 					};
-					if (nextStatus === "approved" || saved.status === "approved")
+					if (nextStatus === "approved" || canonicalSaved.status === "approved")
 						logEvent("gtc.approve", baseProps);
 					else logEvent("gtc.save_draft", baseProps);
 				} catch {}
@@ -437,11 +550,16 @@ function useGroundTruth(): UseGroundTruth {
 					return false;
 				}
 
-				const clone = JSON.parse(JSON.stringify(it)) as GroundTruthItem;
+				const clone = withCanonicalItem(
+					JSON.parse(JSON.stringify(it)) as GroundTruthItem,
+				);
 				setCurrent(clone);
-				qaBaseline.current = { q: it.question, a: it.answer };
+				qaBaseline.current = {
+					q: getLastUserTurn(it),
+					a: getLastAgentTurn(it),
+				};
 				clearResults();
-				setLastSavedStateFp(stateSignature(it));
+				setLastSavedStateFp(stateSignature(withCanonicalItem(it)));
 				setSelectedId(id);
 				return true;
 			} catch (error) {
@@ -480,7 +598,9 @@ function useGroundTruth(): UseGroundTruth {
 			const p = providerRef.current;
 			if (!current || !p) return { ok: false, error: "No current" };
 			try {
-				const saved = await p.save({ ...current, deleted: nextDeleted });
+				const saved = withCanonicalItem(
+					await p.save({ ...current, deleted: nextDeleted }),
+				);
 				setItems((arr) => arr.map((i) => (i.id === saved.id ? saved : i)));
 				setCurrent(saved);
 				setLastSavedStateFp(stateSignature(saved));
@@ -507,7 +627,9 @@ function useGroundTruth(): UseGroundTruth {
 			const it = items.find((i) => i.id === itemId);
 			if (!it) return { ok: false, error: "Item not found" };
 			try {
-				const saved = await p.save({ ...it, deleted: nextDeleted });
+				const saved = withCanonicalItem(
+					await p.save({ ...it, deleted: nextDeleted }),
+				);
 				setItems((arr) => arr.map((i) => (i.id === saved.id ? saved : i)));
 				if (current && current.id === saved.id) {
 					setCurrent(saved);
@@ -536,29 +658,7 @@ function useGroundTruth(): UseGroundTruth {
 	const updateHistory = useCallback((history: ConversationTurn[]) => {
 		setCurrent((prev) => {
 			if (!prev) return prev;
-
-			// Find last user and last non-user (agent) turn in single reverse iteration
-			let lastUser: ConversationTurn | undefined;
-			let lastAgent: ConversationTurn | undefined;
-
-			for (let i = history.length - 1; i >= 0; i--) {
-				const turn = history[i];
-				if (turn.role === "user" && !lastUser) {
-					lastUser = turn;
-				} else if (turn.role !== "user" && !lastAgent) {
-					lastAgent = turn;
-				}
-
-				// Early exit if both found
-				if (lastUser && lastAgent) break;
-			}
-
-			return {
-				...prev,
-				history,
-				question: lastUser?.content || prev.question,
-				answer: lastAgent?.content || prev.answer,
-			};
+			return withCanonicalHistory(prev, history);
 		});
 	}, []);
 
@@ -566,65 +666,35 @@ function useGroundTruth(): UseGroundTruth {
 		setCurrent((prev) => {
 			if (!prev) return prev;
 			const newHistory: ConversationTurn[] = [
-				...(prev.history || []),
-				{ role, content },
+				...ensureEditableHistory(prev),
+				createConversationTurn({ role, content }),
 			];
-			// Sync to question/answer
-			const lastUser = [...newHistory].reverse().find((t) => t.role === "user");
-			const lastAgent = [...newHistory]
-				.reverse()
-				.find((t) => t.role !== "user");
-			return {
-				...prev,
-				history: newHistory,
-				question: lastUser?.content || prev.question,
-				answer: lastAgent?.content || prev.answer,
-			};
+			return withCanonicalHistory(prev, newHistory);
 		});
 	}, []);
 
 	const deleteTurn = useCallback((messageIndex: number) => {
 		setCurrent((prev) => {
 			if (!prev) return prev;
-			const history = prev.history || [];
+			const history = ensureEditableHistory(prev);
 			if (messageIndex < 0 || messageIndex >= history.length) return prev;
 
+			const deletedTurnId = history[messageIndex]?.turnId;
 			// Remove the turn at the specified index
 			const newHistory = history.filter((_, i) => i !== messageIndex);
 
-			// Re-index references: shift down any references with messageIndex > deleted index
-			const currentRefs = getItemReferences(prev);
-			const updatedReferences = currentRefs
-				.map((ref) => {
-					if (typeof ref.messageIndex !== "number") return ref;
-
-					// Remove references for the deleted turn
-					if (ref.messageIndex === messageIndex) {
-						return null;
-					}
-
-					// Shift down references after the deleted turn
-					if (ref.messageIndex > messageIndex) {
-						return { ...ref, messageIndex: ref.messageIndex - 1 };
-					}
-
-					return ref;
-				})
-				.filter((ref): ref is Reference => ref !== null);
-
-			// Sync last user/non-user turns to question/answer for backward compatibility
-			const lastUser = [...newHistory].reverse().find((t) => t.role === "user");
-			const lastAgent = [...newHistory]
-				.reverse()
-				.find((t) => t.role !== "user");
+			const currentRefs = getItemReferences(prev).filter((ref) =>
+				ref.turnId
+					? ref.turnId !== deletedTurnId
+					: ref.messageIndex !== messageIndex,
+			);
+			const updatedReferences = pruneReferencesForHistory(
+				currentRefs,
+				newHistory,
+			);
 
 			return withUpdatedReferences(
-				{
-					...prev,
-					history: newHistory,
-					question: lastUser?.content || "",
-					answer: lastAgent?.content || "",
-				},
+				withCanonicalHistory(prev, newHistory),
 				updatedReferences,
 			);
 		});
@@ -674,31 +744,21 @@ function useGroundTruth(): UseGroundTruth {
 				const newMessageIndex = history.length;
 				setCurrent((prev) => {
 					if (!prev || prev.id !== targetId) return prev;
-					const prevHistory = prev.history
-						? [...prev.history]
-						: ([] as ConversationTurn[]);
-					const nextHistory: ConversationTurn[] = [
-						...prevHistory,
-						{ role: "agent", content: trimmed },
-					];
-					const lastUser = [...nextHistory]
-						.reverse()
-						.find((turn) => turn.role === "user");
-					const mappedRefs = chatReferencesToGroundTruth(
-						references,
-						newMessageIndex,
-					);
+					const prevHistory = ensureEditableHistory(prev);
+					const newTurn = createConversationTurn({
+						role: "agent",
+						content: trimmed,
+					});
+					const nextHistory: ConversationTurn[] = [...prevHistory, newTurn];
+					const mappedRefs = chatReferencesToGroundTruth(references, newTurn);
 					const currentRefs = getItemReferences(prev);
 					const filteredRefs = currentRefs.filter(
-						(ref) => ref.messageIndex !== newMessageIndex,
+						(ref) =>
+							getReferenceMessageIndex(ref, prevHistory) !== newMessageIndex &&
+							ref.turnId !== newTurn.turnId,
 					);
 					return withUpdatedReferences(
-						{
-							...prev,
-							history: nextHistory,
-							question: lastUser?.content || prev.question,
-							answer: trimmed,
-						},
+						withCanonicalHistory(prev, nextHistory),
 						[...filteredRefs, ...mappedRefs],
 					);
 				});
@@ -742,9 +802,7 @@ function useGroundTruth(): UseGroundTruth {
 				return { ok: false, error: "Conversation history is empty." };
 
 			// Append expected behavior if present
-			const expectedBehaviorStr = formatExpectedBehaviorForChat(
-				targetTurn.expectedBehavior,
-			);
+			const expectedBehaviorStr = getCompatExpectedBehaviorPrompt(targetTurn);
 			const messageWithBehavior = expectedBehaviorStr
 				? `${transcript}\n\n${expectedBehaviorStr}`
 				: transcript;
@@ -767,9 +825,8 @@ function useGroundTruth(): UseGroundTruth {
 					if (!prev || prev.id !== targetId) return prev;
 
 					// Optimize: only copy/update what changed
-					const updatedHistory = prev.history
-						? [...prev.history] // Still need to copy for immutability
-						: [];
+					const updatedHistory = [...ensureEditableHistory(prev)];
+					const targetTurnId = updatedHistory[messageIndex]?.turnId;
 
 					// Direct index update instead of map (O(1) vs O(n))
 					if (messageIndex < updatedHistory.length) {
@@ -782,30 +839,18 @@ function useGroundTruth(): UseGroundTruth {
 					// Filter refs for this turn only
 					const currentRefs = getItemReferences(prev);
 					const refsToKeep = currentRefs.filter(
-						(ref) => ref.messageIndex !== messageIndex,
+						(ref) =>
+							ref.messageIndex !== messageIndex && ref.turnId !== targetTurnId,
 					);
 
 					const mappedRefs = chatReferencesToGroundTruth(
 						references,
-						messageIndex,
+						updatedHistory[messageIndex],
 					);
-
-					// Find last non-user turn efficiently (reverse search, early exit)
-					let lastAgentContent = prev.answer;
-					for (let i = updatedHistory.length - 1; i >= 0; i--) {
-						if (updatedHistory[i].role !== "user") {
-							lastAgentContent = updatedHistory[i].content;
-							break;
-						}
-					}
 
 					// Single state update with all changes
 					return withUpdatedReferences(
-						{
-							...prev,
-							history: updatedHistory,
-							answer: lastAgentContent,
-						},
+						withCanonicalHistory(prev, updatedHistory),
 						[...refsToKeep, ...mappedRefs],
 					);
 				});
@@ -859,12 +904,15 @@ function useGroundTruth(): UseGroundTruth {
 		const p = providerRef.current;
 		if (!current || !p) return { ok: false as const, error: "No current" };
 		try {
-			const created = await p.duplicate(current);
+			const created = withCanonicalItem(await p.duplicate(current));
 			// Insert at top of list and select it
 			setItems((arr) => [created, ...arr]);
 			setSelectedId(created.id);
 			setCurrent(JSON.parse(JSON.stringify(created)) as GroundTruthItem);
-			qaBaseline.current = { q: created.question, a: created.answer };
+			qaBaseline.current = {
+				q: getLastUserTurn(created),
+				a: getLastAgentTurn(created),
+			};
 			setLastSavedStateFp(stateSignature(created));
 			try {
 				logEvent("gtc.duplicate_rephrase", {

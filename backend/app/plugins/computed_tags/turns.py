@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from app.plugins.base import ComputedTagPlugin
 
 if TYPE_CHECKING:
-    from app.domain.models import GroundTruthItem
+    from app.domain.models import AgenticGroundTruthEntry
 
 
 class MultiTurnPlugin(ComputedTagPlugin):
@@ -25,7 +25,7 @@ class MultiTurnPlugin(ComputedTagPlugin):
     def tag_key(self) -> str:
         return "turns:multiturn"
 
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         history = doc.history
         if not history or not isinstance(history, list):
             return None
@@ -43,7 +43,7 @@ class SingleTurnPlugin(ComputedTagPlugin):
     def tag_key(self) -> str:
         return "turns:singleturn"
 
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         history = doc.history
         if not history or not isinstance(history, list):
             return self.tag_key

@@ -62,6 +62,8 @@ export type ComponentRegistration = {
 export type FieldComponentRegistryAPI = {
 	/** Register a component for a discriminator.  Throws on duplicate. */
 	register(registration: ComponentRegistration): void;
+	/** Register only when a discriminator has not been claimed already. */
+	registerIfAbsent(registration: ComponentRegistration): void;
 	/**
 	 * Look up the viewer or editor for a discriminator string.
 	 * Returns `undefined` when no registration exists (caller should use fallback).

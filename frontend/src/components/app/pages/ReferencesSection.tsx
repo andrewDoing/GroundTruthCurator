@@ -1,19 +1,9 @@
 /**
- * ReferencesSection — generic right-pane container.
+ * ReferencesSection — generic evidence and review host.
  *
- * Phase 4 redesign: this component is now a generic right-pane host rather
- * than a purely retrieval-specific panel.  It renders:
- *
- *  1. Evidence & Trace panel (TracePanel) — always shown when the current item
- *     has generic agentic data (toolCalls, traceIds, metadata, feedback,
- *     expectedTools).  This is the primary Phase 4 evidence surface.
- *
- *  2. RAG compatibility panel (ReferencesTabs) — shown as an opt-in section
- *     when the item has references OR when in single-turn mode.  This surface
- *     keeps retrieval-specific review alive without it defining the host layout.
- *
- * Passing `item` is optional; when omitted only the ReferencesTabs section
- * is rendered (backward-compatible with the existing single-turn surface).
+ * The right pane now prioritizes generic evidence/review surfaces first, with
+ * retrieval search kept as an explicit compatibility surface instead of the
+ * host's defining mental model.
  */
 
 import { useRef, useState } from "react";
@@ -44,8 +34,6 @@ export default function ReferencesSection({
 	onUpdateContextEntries,
 	onUpdateExpectedTools,
 }: {
-	/** Optional: current ground truth item.  When present the evidence panel
-	 *  is rendered at the top of the right pane. */
 	item?: GroundTruthItem | null;
 	query: string;
 	setQuery: (q: string) => void;
@@ -61,16 +49,12 @@ export default function ReferencesSection({
 	onUpdateContextEntries?: (entries: ContextEntry[]) => void;
 	onUpdateExpectedTools?: (tools: ExpectedTools) => void;
 }) {
-	const [rightTab, setRightTab] = useState<"search" | "selected">("search");
 	const [searchSelected, setSearchSelected] = useState<Set<string>>(new Set());
 	const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-	// RAG compat surface: only show ReferencesTabs in single-turn mode.
-	// Multi-turn items manage references per-turn via the conversation editor.
-	const showRagCompat = !isMultiTurn;
-
-	// Evidence panel: show TracePanel when item has generic agentic data.
+	const showSearchSurface = !isMultiTurn;
 	const showEvidence = !!item && hasEvidenceData(item);
+	const showEvidenceReview = references.length > 0 || showSearchSurface;
 
 	async function runSearch() {
 		try {
@@ -112,32 +96,22 @@ export default function ReferencesSection({
 		searchInputRef.current?.focus();
 	}
 
-	// Nothing to show
-	if (!showEvidence && !showRagCompat) {
+	if (!showEvidence && !showEvidenceReview) {
 		return (
 			<aside className="self-start h-[calc(100vh-5.5rem)] rounded-2xl border bg-slate-50 p-4 flex items-center justify-center text-sm text-slate-400 shadow-sm">
-				No evidence or references available.
+				No evidence or review surfaces are available for this item.
 			</aside>
 		);
 	}
 
 	return (
-		<aside
-			className={cn(
-				"self-start flex flex-col overflow-hidden",
-				// When showing evidence, let TracePanel provide its own container styling.
-				// Only add border/bg when RAG panel is the primary surface.
-				showEvidence
-					? "max-h-[calc(100vh-5.5rem)]"
-					: "rounded-2xl border bg-white shadow-sm h-[calc(100vh-5.5rem)]",
-			)}
-		>
-			{/* Evidence & Trace panel (generic agentic data) */}
+		<aside className="self-start flex h-[calc(100vh-5.5rem)] flex-col gap-3 overflow-hidden">
 			{showEvidence && item && (
 				<div
 					className={cn(
-						"overflow-y-auto",
-						showRagCompat ? "flex-none border-b max-h-[50%]" : "flex-1",
+						showEvidenceReview
+							? "max-h-[55%] overflow-y-auto"
+							: "flex-1 overflow-y-auto",
 					)}
 				>
 					<TracePanel
@@ -148,40 +122,35 @@ export default function ReferencesSection({
 				</div>
 			)}
 
-			{/* RAG references panel — retrieval search and selected references */}
-			{showRagCompat && (
-				<div className="flex flex-col flex-1 min-h-0">
-					<div className="flex-1 min-h-0 overflow-hidden">
-						<ReferencesTabs
-							rightTab={rightTab}
-							setRightTab={setRightTab}
-							query={query}
-							setQuery={setQuery}
-							searching={searching}
-							searchResults={searchResults}
-							searchSelected={searchSelected}
-							onRunSearch={runSearch}
-							onToggleSearchSelect={toggleSelectSearchResult}
-							onAddSelectedFromResults={addSelectedFromResults}
-							onAddSingleResult={(ref) => addRefsFromResults([ref])}
-							searchInputRef={searchInputRef}
-							references={references}
-							onUpdateReference={onUpdateReference}
-							onRemoveReference={(refId) => {
-								const r = (references || []).find((x) => x.id === refId);
-								const name = r?.title || (r ? urlToTitle(r.url) : "reference");
-								if (
-									window.confirm(
-										`Remove reference "${name}"? You can Undo for 8s.`,
-									)
-								) {
-									onRemoveReference(refId);
-								}
-							}}
-							onOpenReference={onOpenReference}
-							isMultiTurn={isMultiTurn}
-						/>
-					</div>
+			{showEvidenceReview && (
+				<div className="min-h-0 flex-1 overflow-hidden">
+					<ReferencesTabs
+						query={query}
+						setQuery={setQuery}
+						searching={searching}
+						searchResults={searchResults}
+						searchSelected={searchSelected}
+						onRunSearch={runSearch}
+						onToggleSearchSelect={toggleSelectSearchResult}
+						onAddSelectedFromResults={addSelectedFromResults}
+						onAddSingleResult={(ref) => addRefsFromResults([ref])}
+						searchInputRef={searchInputRef}
+						references={references}
+						onUpdateReference={onUpdateReference}
+						onRemoveReference={(refId) => {
+							const r = (references || []).find((x) => x.id === refId);
+							const name = r?.title || (r ? urlToTitle(r.url) : "reference");
+							if (
+								window.confirm(
+									`Remove reference "${name}"? You can Undo for 8s.`,
+								)
+							) {
+								onRemoveReference(refId);
+							}
+						}}
+						onOpenReference={onOpenReference}
+						showSearch={showSearchSurface}
+					/>
 				</div>
 			)}
 		</aside>

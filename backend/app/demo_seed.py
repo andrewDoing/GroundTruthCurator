@@ -11,7 +11,7 @@ from app.domain.models import (
     AgenticGroundTruthEntry,
     DatasetCurationInstructions,
     ExpectedTools,
-    GroundTruthItem,
+    HistoryEntry,
     HistoryItem,
     Reference,
     ToolExpectation,
@@ -466,11 +466,11 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
 ]
 
 
-def _hydrate_history_with_refs(item: GroundTruthItem, refs: list[Reference]) -> None:
+def _hydrate_history_with_refs(item: AgenticGroundTruthEntry, refs: list[Reference]) -> None:
     if not item.history:
         return
 
-    enriched_history: list[HistoryItem] = []
+    enriched_history: list[HistoryEntry] = []
     last_turn_index = len(item.history) - 1
     for index, turn in enumerate(item.history):
         enriched_history.append(
@@ -503,7 +503,7 @@ def _build_demo_item(
     required_tools: list[str],
     reviewed_at: datetime | None = None,
     updated_by: str | None = None,
-) -> GroundTruthItem:
+) -> AgenticGroundTruthEntry:
     adapter = TraceExportAdapter(
         dataset_name=dataset,
         bucket=bucket,
@@ -511,7 +511,7 @@ def _build_demo_item(
         created_by="demo-seed",
     )
     adapted = adapter.adapt_payload({"trace_count": 1, "traces": [trace]})[0]
-    item = GroundTruthItem.model_validate(adapted.model_dump(by_alias=True))
+    item = AgenticGroundTruthEntry.model_validate(adapted.model_dump(by_alias=True))
 
     item.id = item_id
     item.scenario_id = scenario_id

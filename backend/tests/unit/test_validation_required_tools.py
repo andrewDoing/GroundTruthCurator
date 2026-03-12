@@ -10,9 +10,6 @@ from __future__ import annotations
 
 from app.domain.models import (
     AgenticGroundTruthEntry,
-    ExpectedTools,
-    ToolCallRecord,
-    ToolExpectation,
 )
 from app.plugins.base import PluginPackRegistry
 from app.plugins.packs.rag_compat import RagCompatPack

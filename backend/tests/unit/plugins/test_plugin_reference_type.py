@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.models import GroundTruthItem, Reference
+from app.domain.models import AgenticGroundTruthEntry, Reference
 from app.plugins.computed_tags.reference_type import (
     ReferenceTypeArticlePlugin,
     ReferenceTypeHelpcenterPlugin,
@@ -48,7 +48,7 @@ class TestReferenceTypePlugins:
 
     def test_no_refs_gets_no_tags(self):
         """Item with no refs should get neither tag."""
-        item = GroundTruthItem(
+        item = AgenticGroundTruthEntry(
             id="test-no-refs",
             datasetName="test-dataset",
             synthQuestion="Question",
@@ -58,7 +58,7 @@ class TestReferenceTypePlugins:
 
     def test_item_can_have_both_tags(self):
         """Item with both reference types should get both tags."""
-        item = GroundTruthItem(
+        item = AgenticGroundTruthEntry(
             id="test-both",
             datasetName="test-dataset",
             synthQuestion="Question",
@@ -72,7 +72,7 @@ class TestReferenceTypePlugins:
 
     def test_type_field_is_ignored(self):
         """Only URL matters, not the type field on Reference."""
-        item = GroundTruthItem(
+        item = AgenticGroundTruthEntry(
             id="test-type-ignored",
             datasetName="test-dataset",
             synthQuestion="Question",

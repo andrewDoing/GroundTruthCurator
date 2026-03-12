@@ -62,7 +62,18 @@ describe("useGroundTruth multi-turn flows", () => {
 		await act(async () => {
 			result.current.updateHistory(history);
 		});
-		expect(result.current.current?.history).toEqual(history);
+		expect(result.current.current?.history).toHaveLength(2);
+		expect(result.current.current?.history?.[0]).toMatchObject({
+			role: "user",
+			content: "New question",
+		});
+		expect(result.current.current?.history?.[1]).toMatchObject({
+			role: "agent",
+			content: "Fresh answer",
+		});
+		expect(
+			result.current.current?.history?.every((turn) => !!turn.turnId),
+		).toBe(true);
 		expect(result.current.current?.question).toBe("New question");
 		expect(result.current.current?.answer).toBe("Fresh answer");
 	});
@@ -107,14 +118,20 @@ describe("useGroundTruth multi-turn flows", () => {
 				},
 			],
 		});
+		let generatedResult:
+			| Awaited<ReturnType<typeof result.current.generateAgentTurn>>
+			| undefined;
 		await act(async () => {
-			const res = await result.current.generateAgentTurn(-1);
-			expect(res.ok).toBe(true);
-			expect(res).toMatchObject({ messageIndex: 1 });
+			generatedResult = await result.current.generateAgentTurn(-1);
 		});
+		expect(generatedResult?.ok).toBe(true);
+		if (!generatedResult) {
+			throw new Error("Expected generateAgentTurn result");
+		}
 		expect(callAgentChatMock).toHaveBeenCalledTimes(1);
 		const current = result.current.current as GroundTruthItem;
 		expect(current.history?.length).toBe(2);
+		expect(generatedResult).toMatchObject({ messageIndex: 1 });
 		expect(current.history?.[1]).toMatchObject({
 			role: "agent",
 			content: "Generated agent guidance",
@@ -184,7 +201,12 @@ describe("useGroundTruth multi-turn flows", () => {
 		expect(history[1]).toMatchObject({ content: "Updated agent answer" });
 		expect(history[0]).toMatchObject({ content: "Original Q" });
 		expect(history[2]).toMatchObject({ content: "Second Q" });
-		const refs = getItemReferences(result.current.current!);
+		const current = result.current.current;
+		expect(current).toBeTruthy();
+		if (!current) {
+			throw new Error("Expected current item");
+		}
+		const refs = getItemReferences(current);
 		const refsForTurn = refs.filter((r) => r.messageIndex === 1);
 		expect(refsForTurn).toHaveLength(1);
 		expect(refsForTurn[0].url).toBe("https://ref.example.com/new");
@@ -253,7 +275,12 @@ describe("useGroundTruth multi-turn flows", () => {
 			content: "Updated output answer",
 		});
 		expect(result.current.current?.answer).toBe("Updated output answer");
-		const refsForTurn = getItemReferences(result.current.current!).filter(
+		const current = result.current.current;
+		expect(current).toBeTruthy();
+		if (!current) {
+			throw new Error("Expected current item");
+		}
+		const refsForTurn = getItemReferences(current).filter(
 			(ref) => ref.messageIndex === 1,
 		);
 		expect(refsForTurn).toHaveLength(1);
@@ -263,7 +290,12 @@ describe("useGroundTruth multi-turn flows", () => {
 	it("stateSignature ignores visitedAt mutations for hasUnsaved", async () => {
 		const { result } = await setupHook();
 		const before = result.current.hasUnsaved;
-		const firstRef = getItemReferences(result.current.current!)[0];
+		const current = result.current.current;
+		expect(current).toBeTruthy();
+		if (!current) {
+			throw new Error("Expected current item");
+		}
+		const firstRef = getItemReferences(current)[0];
 		expect(firstRef).toBeTruthy();
 		await act(async () => {
 			if (firstRef) {
@@ -275,7 +307,12 @@ describe("useGroundTruth multi-turn flows", () => {
 
 	it("stateSignature changes when reference messageIndex updates", async () => {
 		const { result } = await setupHook();
-		const ref = getItemReferences(result.current.current!)[0];
+		const current = result.current.current;
+		expect(current).toBeTruthy();
+		if (!current) {
+			throw new Error("Expected current item");
+		}
+		const ref = getItemReferences(current)[0];
 		expect(ref).toBeTruthy();
 		await act(async () => {
 			if (ref) {

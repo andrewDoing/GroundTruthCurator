@@ -24,6 +24,13 @@ export class FieldComponentRegistry implements FieldComponentRegistryAPI {
 		this.store.set(registration.discriminator, registration);
 	}
 
+	registerIfAbsent(registration: ComponentRegistration): void {
+		if (this.has(registration.discriminator)) {
+			return;
+		}
+		this.store.set(registration.discriminator, registration);
+	}
+
 	resolve(
 		discriminator: string,
 		mode: "viewer" | "editor",

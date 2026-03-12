@@ -1,12 +1,9 @@
-"""Unit tests for RagCompatPack.
+"""Unit tests for RagCompatPack plugin contracts and migration helpers.
 
-Tests cover:
-- validate_registration() passes for valid config
-- validate_registration() fails if _RAG_COMPAT_PLUGIN constant drifts
-- collect_approval_errors() returns empty for generic items
-- collect_approval_errors() returns empty for RAG items (current behavior)
-- rag_compat_data() and refs_from_item() accessor helpers
-- Global pack registry singleton includes RagCompatPack
+Core-generic behavior stays covered elsewhere. This file focuses on:
+- runtime-backed pack registration and registry presence
+- stable helper contracts for retrieval/reference ownership
+- compat-migration helpers that still project legacy payloads while the shim exists
 """
 
 from __future__ import annotations
@@ -57,7 +54,7 @@ def test_validate_registration_fails_on_constant_mismatch(monkeypatch: pytest.Mo
 
 
 # ---------------------------------------------------------------------------
-# collect_approval_errors
+# Plugin-contract: approval hooks
 # ---------------------------------------------------------------------------
 
 
@@ -98,7 +95,7 @@ def test_collect_approval_errors_rag_item_empty():
 
 
 # ---------------------------------------------------------------------------
-# rag_compat_data accessor
+# Plugin-contract: helper accessors
 # ---------------------------------------------------------------------------
 
 
@@ -144,8 +141,43 @@ def test_refs_from_item_populated_for_rag_item():
     assert refs[0].url == "https://example.com/doc"
 
 
+def test_refs_from_item_flattens_per_call_retrieval_state():
+    pack = RagCompatPack()
+    item = AgenticGroundTruthEntry.model_validate(
+        {
+            "id": "rag-002",
+            "datasetName": "rag-dataset",
+            "toolCalls": [{"id": "tc-1", "name": "search", "callType": "tool", "stepNumber": 2}],
+            "plugins": {
+                "rag-compat": {
+                    "kind": "rag-compat",
+                    "data": {
+                        "retrievals": {
+                            "tc-1": {
+                                "candidates": [
+                                    {
+                                        "url": "https://example.com/candidate",
+                                        "title": "Candidate",
+                                        "chunk": "retrieved chunk",
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                }
+            },
+        }
+    )
+
+    refs = pack.refs_from_item(item)
+    assert len(refs) == 1
+    assert refs[0].url == "https://example.com/candidate"
+    assert refs[0].content == "retrieved chunk"
+    assert refs[0].messageIndex == 2
+
+
 # ---------------------------------------------------------------------------
-# attach_reference / detach_reference
+# Plugin-contract: reference ownership helpers
 # ---------------------------------------------------------------------------
 
 
@@ -191,8 +223,72 @@ def test_detach_reference_nonexistent_url_is_noop():
     assert len(pack.refs_from_item(item)) == before
 
 
+def test_replace_references_clears_per_call_retrieval_state():
+    pack = RagCompatPack()
+    item = AgenticGroundTruthEntry.model_validate(
+        {
+            "id": "rag-003",
+            "datasetName": "rag-dataset",
+            "plugins": {
+                "rag-compat": {
+                    "kind": "rag-compat",
+                    "data": {
+                        "retrievals": {
+                            "tc-1": {
+                                "candidates": [{"url": "https://example.com/old"}]
+                            }
+                        }
+                    },
+                }
+            },
+        }
+    )
+
+    pack.replace_references(item, [Reference(url="https://example.com/new")])
+
+    assert pack.has_per_call_state(item) is False
+    refs = pack.refs_from_item(item)
+    assert len(refs) == 1
+    assert refs[0].url == "https://example.com/new"
+
+
+def test_export_transform_projects_retrieval_candidates_to_refs():
+    pack = RagCompatPack()
+    transform = pack.get_export_transforms()[0].transform
+
+    projected = transform(
+        {
+            "id": "rag-004",
+            "datasetName": "rag-dataset",
+            "toolCalls": [{"id": "tc-1", "stepNumber": 1}],
+            "plugins": {
+                "rag-compat": {
+                    "kind": "rag-compat",
+                    "data": {
+                        "retrievals": {
+                            "tc-1": {
+                                "candidates": [
+                                    {
+                                        "url": "https://example.com/exported",
+                                        "title": "Exported",
+                                        "chunk": "retrieved chunk",
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                }
+            },
+        }
+    )
+
+    assert projected["totalReferences"] == 1
+    assert projected["refs"][0]["url"] == "https://example.com/exported"
+    assert projected["refs"][0]["messageIndex"] == 1
+
+
 # ---------------------------------------------------------------------------
-# Global pack registry singleton
+# Runtime-backed registry seam
 # ---------------------------------------------------------------------------
 
 

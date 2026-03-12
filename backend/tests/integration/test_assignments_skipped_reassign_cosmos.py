@@ -8,7 +8,8 @@ from httpx import AsyncClient
 from pydantic.type_adapter import TypeAdapter
 import pytest
 
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
+from tests.test_helpers import make_test_entry
 
 
 def make_skipped_item(dataset: str, assigned_to: str) -> dict[str, Any]:
@@ -48,7 +49,7 @@ async def test_self_serve_reassigns_skipped_and_lists_in_my(
     payload = cast(dict[str, Any], r.json())
     assert payload.get("assignedCount") == 1
 
-    assigned_items = TypeAdapter(list[GroundTruthItem]).validate_python(
+    assigned_items = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(
         payload.get("assigned") or []
     )
     assert len(assigned_items) == 1
@@ -63,7 +64,7 @@ async def test_self_serve_reassigns_skipped_and_lists_in_my(
     # /my should list the item now (since it filters by assignedTo == user and status == draft)
     r = await async_client.get("/v1/assignments/my", headers=user_headers)
     assert r.status_code == 200
-    my_items = TypeAdapter(list[GroundTruthItem]).validate_python(r.json())
+    my_items = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(r.json())
     assert len(my_items) == 1
     assert my_items[0].id == gt.id
     assert my_items[0].assignedTo == expected_user

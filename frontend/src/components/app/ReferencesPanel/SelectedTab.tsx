@@ -172,7 +172,8 @@ export default function SelectedTab({
 				})}
 				{references.length === 0 && (
 					<div className="rounded-lg border bg-white p-3 text-xs text-slate-600">
-						No references added yet. Use the Search tab to add references.
+						No evidence attached yet. Add sources from the search surface or
+						from a plugin-owned workflow panel.
 					</div>
 				)}
 			</div>

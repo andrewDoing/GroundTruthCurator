@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from app.domain.models import GroundTruthItem, BulkImportResult
+from app.domain.models import AgenticGroundTruthEntry, BulkImportResult
 from app.core.auth import UserContext
 
 
@@ -31,7 +31,7 @@ async def test_bulk_import_validates_tags(mock_container, mock_user):
     )
 
     items = [
-        GroundTruthItem(
+        AgenticGroundTruthEntry(
             id="test-1",
             datasetName="test",
             synthQuestion="What is Q?",
@@ -65,7 +65,7 @@ async def test_bulk_import_rejects_invalid_tags(mock_container, mock_user):
     )
 
     items = [
-        GroundTruthItem(
+        AgenticGroundTruthEntry(
             id="test-1", datasetName="test", synthQuestion="What is Q?", manualTags=["invalid:tag"]
         )
     ]
@@ -102,13 +102,13 @@ async def test_bulk_import_mixed_valid_invalid_tags(mock_container, mock_user):
     )
 
     items = [
-        GroundTruthItem(
+        AgenticGroundTruthEntry(
             id="test-1",
             datasetName="test",
             synthQuestion="Q1?",
             manualTags=["source:synthetic"],  # valid
         ),
-        GroundTruthItem(
+        AgenticGroundTruthEntry(
             id="test-2",
             datasetName="test",
             synthQuestion="Q2?",
@@ -149,7 +149,7 @@ async def test_bulk_import_no_tags(mock_container, mock_user):
     )
 
     items = [
-        GroundTruthItem(
+        AgenticGroundTruthEntry(
             id="test-1",
             datasetName="test",
             synthQuestion="What is Q?",
@@ -183,7 +183,7 @@ async def test_bulk_import_tag_validation_single_registry_fetch(mock_container, 
     )
 
     items = [
-        GroundTruthItem(
+        AgenticGroundTruthEntry(
             id=f"test-{i}",
             datasetName="test",
             synthQuestion=f"Q{i}?",

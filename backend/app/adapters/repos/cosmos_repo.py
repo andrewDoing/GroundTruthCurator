@@ -23,7 +23,6 @@ from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFo
 from app.adapters.repos.base import GroundTruthRepo
 from app.domain.models import (
     AgenticGroundTruthEntry,
-    GroundTruthItem,
     Stats,
     AssignmentDocument,
     DatasetCurationInstructions,
@@ -53,8 +52,10 @@ _CONTROL_CHAR_TRANSLATION = {
     ord("\u007f"): " ",
 }
 
-# Cosmos DB SELECT clause for most GroundTruthItem fields used in several functions
+# Cosmos DB SELECT clause for AgenticGroundTruthEntry fields used in several functions
 # list_gt_paginated, _list_gt_paginated_with_emulator, list_gt_by_dataset
+# Note: legacy fields like synthQuestion, editedQuestion are still selected for compatibility
+# during migration, but the model will access them via computed properties
 SELECT_CLAUSE_C = (
     "SELECT c.id, c.datasetName, c.bucket, c.status, c.docType, c.schemaVersion, "
     "c.synthQuestion, c.editedQuestion, c.answer, c.refs, c.tags, c.manualTags, c.computedTags, c.comment, c.plugins, "
@@ -390,14 +391,13 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             self._logger.error(f"Document missing datasetName: {item!r}")
             raise ValueError("Document must have datasetName")
 
-        # The domain model's model_validator computes totalReferences automatically.
-        # Trigger it now if the item was modified after initial validation.
-        if item.totalReferences == 0:
-            # Re-validate to ensure totalReferences is computed
-            item = GroundTruthItem.model_validate(item.model_dump(by_alias=True, exclude={"tags"}))
-
         # Dump in JSON mode so datetimes/enums are serialized to strings
         d = item.model_dump(mode="json", by_alias=True)
+
+        # Ensure totalReferences is computed and persisted for sorting/querying
+        # Use the property getter which handles both explicit values and plugin storage
+        d["totalReferences"] = item.totalReferences
+
         if d.get("bucket") is not None:
             d["bucket"] = str(d["bucket"])  # store UUID as string
         # Ensure updatedAt present as ISO string
@@ -407,19 +407,24 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         return d
 
     @staticmethod
-    def _from_doc(doc: dict[str, Any]) -> GroundTruthItem:
+    def _from_doc(doc: dict[str, Any]) -> AgenticGroundTruthEntry:
         # Normalize doc before validation
         normalized_doc = (
             _restore_unicode_from_cosmos(doc) if settings.COSMOS_DISABLE_UNICODE_ESCAPE else doc
         )
+        from app.plugins.packs.rag_compat import _LEGACY_PLUGIN_FIELDS
+
         allowed_keys = {
             field_name
-            for field_name in GroundTruthItem.model_fields
+            for field_name in AgenticGroundTruthEntry.model_fields
         } | {
             field.alias
-            for field in GroundTruthItem.model_fields.values()
+            for field in AgenticGroundTruthEntry.model_fields.values()
             if field.alias is not None
-        }
+        } | {
+            # Include computed_fields that need to be preserved from Cosmos documents
+            "totalReferences"  # Computed and persisted for sorting/querying
+        } | set(_LEGACY_PLUGIN_FIELDS)
         normalized_doc = {key: value for key, value in normalized_doc.items() if key in allowed_keys}
 
         plugins = normalized_doc.get("plugins")
@@ -448,13 +453,15 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         # Convert None to [] for history field (legacy data compatibility)
         if normalized_doc.get("history") is None:
             normalized_doc["history"] = []
-        if normalized_doc.get("refs") is None:
-            normalized_doc["refs"] = []
-        if normalized_doc.get("totalReferences") is None:
-            normalized_doc["totalReferences"] = 0
 
         # Pydantic will parse aliases automatically
-        item = GroundTruthItem.model_validate(normalized_doc)
+        item = AgenticGroundTruthEntry.model_validate(normalized_doc)
+
+        # IMPORTANT: totalReferences is a @computed_field, so Pydantic won't deserialize it
+        # from the document. We need to manually set it in __dict__ so the property getter
+        # can find it. This preserves the value we computed and persisted in _to_doc.
+        if "totalReferences" in normalized_doc:
+            item.__dict__["totalReferences"] = normalized_doc["totalReferences"]
 
         return item
 

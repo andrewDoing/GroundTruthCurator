@@ -18,16 +18,18 @@ export function canBypassRequiredToolsCheck(item: GroundTruthItem): boolean {
 	);
 }
 
-// Dedupe references by URL and messageIndex combination
-// In multi-turn contexts, the same URL can exist for different turns
-// In single-turn contexts (no messageIndex), dedupe by URL only
+// Dedupe references by canonical turn ownership first, then by compatibility
+// messageIndex when no stable turnId is present.
 export function dedupeReferences(
 	existing: Reference[],
 	chosen: Reference[],
 ): Reference[] {
-	// Create a composite key: URL + messageIndex (or URL only if no messageIndex)
 	const makeKey = (r: Reference) =>
-		r.messageIndex !== undefined ? `${r.url}::turn${r.messageIndex}` : r.url;
+		r.turnId
+			? `${r.url}::turn:${r.turnId}`
+			: r.messageIndex !== undefined
+				? `${r.url}::index:${r.messageIndex}`
+				: r.url;
 
 	const map = new Map(existing.map((r) => [makeKey(r), r] as const));
 	for (const r of chosen) {

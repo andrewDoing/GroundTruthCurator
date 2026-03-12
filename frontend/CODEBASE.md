@@ -76,21 +76,22 @@ Key concepts:
 - Provider abstraction: `Provider` with list/get/save/export. `ApiProvider` implements REST calls and ETag concurrency.
 - DEMO mode: `src/config/demo.ts` computes a boolean from `DEMO_MODE`/`VITE_DEMO_MODE`; when true, the app uses `JsonProvider` and mocks for search/LLM/stats.
 - Fingerprints: `itemVersionFingerprint` (content only) and `itemStateFingerprint` (content + status/deleted) drive idempotency and version bumping. Tags are part of content.
-- Approval constraints: `canApproveCandidate(item)` requires at least one selected reference AND that `refsApprovalReady(item)` passes (all refs visited; selected refs have ≥40 char key paragraph). Deleted items cannot be approved.
-- UX separation: Left queue, center editor (Question/Answer + actions), right references pane (Search vs Selected tabs), stats view, and modal overlays.
+- Approval constraints: generic multi-turn approval is conversation- and expected-tools-driven; reference visit/key-paragraph rules apply only when an active compatibility or plugin workflow opts into them. Deleted items cannot be approved.
+- UX separation: Left queue, center editor (conversation + actions), right evidence/review host, stats view, and modal overlays.
 
 ## Data Models (from `src/models/groundTruth.ts`)
 
-- Reference: { id, title?, url, snippet?, visitedAt?, keyParagraph?, selected? }
+- Reference: { id, title?, url, snippet?, visitedAt?, keyParagraph?, messageIndex?, turnId?, toolCallId? }. Treat `turnId` as the stable ownership contract; `messageIndex` remains a migration fallback only.
 - GroundTruthItem: {
-  id, question, answer,
-  references: Reference[],
+  id,
+  history?: ConversationTurn[] with stable `turnId` / optional `stepId`,
+  references: plugin-owned retrieval state projected as Reference[],
   status: "draft" | "approved" | "skipped",
   providerId, version, deleted?,
   tags?: string[],
   curationInstructions?: string
 }
-- Change category: previously required when Q/A changed; no longer enforced. A legacy `ChangeCategorySelector` component exists but is not wired into save logic.
+- Canonical editing state is `history[]`; display helpers like `getLastUserTurn()`, `getLastAgentTurn()`, and `getQueuePreview()` extract values from turns on-demand.
 
 ## Provider Contract (from `src/models/provider.ts`)
 
@@ -117,7 +118,7 @@ Providers:
 ## Validation (from `src/models/validators.ts` + `gtHelpers.ts`)
 
 - `refsApprovalReady(item)`
-  - If references exist: all must be visited; selected references must have keyParagraph length >= 40
+  - Transitional helper for RAG-compat workflows only. Do not treat it as the generic approval contract.
   - If no references: this primitive returns true, but is combined with:
 - `canApproveCandidate(item)` – requires at least one selected reference, `refsApprovalReady(item)` to pass, and item not deleted
 
@@ -129,7 +130,7 @@ High-level state:
 - selectedId: current item id; `current`: editable clone
 - qaChanged: computed against baseline
 - viewMode: "curate" (default) vs "questions" (list-level delete/restore) vs "stats"
-- right panel tab: "search" vs "selected"
+  - right evidence panel state: attached-evidence review surface with optional plugin-provided search capabilities
 - search state: query, results, selection set, searching flag
 - ref opening: marks visited and opens in a new tab (in-app iframe preview is removed)
 - saving and lastSavedStateFp: no-op and double-click idempotency
@@ -138,9 +139,9 @@ High-level state:
 Key flows:
 1) Load + select first item – provider initialized on mount; list loaded; selection deep-cloned; QA baseline and search reset; saved fingerprint captured.
 2) Edit Question/Answer – textareas bound to `current`; `qaChanged` reflects differences; change category is NOT required anymore.
-3) References – right panel
-  - Search tab: performs backend `searchReferences` (or `mockAiSearch` in demo), displays results, supports multi-select Add and individual Add; disabled when URL already present; de-dup by URL.
-  - Selected tab: lists references with selection toggle, visit/open (sets `visitedAt`), key paragraph with counter; Remove supports Undo (8s window).
+3) Evidence review surfaces
+   - Plugin-provided search surface: performs backend `searchReferences` (or `mockAiSearch` in demo) for workflows that expose host-owned retrieval acquisition via plugin extensions.
+   - Attached evidence review: lists retrieved or plugin-projected references, supports visit/open, key paragraph editing, and Remove with Undo (8s window).
 4) Generate Answer – opens modal listing selected references; on confirm, calls backend `callAgentChat`. UI currently applies the full answer at once.
 5) Save – computes state fingerprint; if unchanged: returns "No changes". If approving, validates `canApproveCandidate`. On success, updates `items`, `current`, and lastSavedStateFp. Status-only saves do not bump version. Content changes (Q/A/refs/tags) bump version (self-tests run in dev).
 6) Export – triggers backend snapshot download via `groundTruths.downloadSnapshot()`; no in-app JSON modal.
@@ -155,13 +156,13 @@ Self-tests: `runSelfTests()` asserts validator rules and provider bump rules in 
   - Inputs: items, selectedId, onSelect, onRefresh, onSelfServe
   - Shows id, status badge, version, and question (truncated); highlights deleted
 - ReferencesTabs
-  - Props split for SearchTab and SelectedTab; handles tab switch and counts selected refs
+  - Generic evidence/review host that shows plugin-provided search capabilities plus attached evidence review
 - SearchTab
   - Inputs: query, results, selection set, existingReferences, callbacks
-  - Buttons: Search, Add, open in new tab, sticky "Add N to Selected"
+  - Used only when the current workflow still exposes host-owned retrieval acquisition
 - SelectedTab
   - Inputs: references and callbacks (update/remove/open)
-  - Shows visit status, selection toggle, key paragraph with counter; Remove triggers confirmation and Undo toast
+  - Shows attached evidence from plugin-owned retrieval state or per-call candidates
 - TagsEditor
   - Inputs: selected tags; allows add/remove
 - InstructionsPane
@@ -198,9 +199,9 @@ Self-tests: `runSelfTests()` asserts validator rules and provider bump rules in 
   - Extend `models/validators.ts` and/or `gtHelpers.ts`
   - Enforce in `useGroundTruth.save` before invoking provider
 
-4) Add a new tab to the right panel
-  - Extend `ReferencesTabs.tsx` with a new discriminated union value and conditional render
-  - Keep props isolated per tab to avoid cross-tab dependencies
+4) Add a new evidence/review surface
+   - Prefer contributing plugin-owned panels through the registry/TracePanel path before expanding the shared host pane
+   - Plugin-provided search surfaces are isolated as optional extensions; the core UI works without them
 
 5) Export mechanics
   - UI uses backend snapshot download (`groundTruths.downloadSnapshot`). If you need in-app preview, reintroduce an `ExportModal` backed by `provider.export()` and/or the snapshot payload.
@@ -211,7 +212,7 @@ Self-tests: `runSelfTests()` asserts validator rules and provider bump rules in 
 ## Gotchas and Invariants
 
 - Version rules: only content changes bump version. Content includes Q/A, references, and tags. Do not bump for status-only or no-op saves. Fingerprints enforce this—self-tests run in development.
-- Approval gating: requires at least one selected reference; if references exist, all must be visited; selected refs require ≥ 40 chars key paragraph; deleted items cannot be approved.
+- Approval gating: generic approval follows conversation + expected-tools rules. Reference completeness is a compat/plugin gate, not the universal host contract. Deleted items cannot be approved.
 - Undo delete window: 8 seconds via toast action; ensure timers cleared on unmount in `useToasts`.
 - Deep clone on selection: ensures edits don’t mutate provider list until Save.
 - De-dup by URL when adding references from search.
@@ -234,8 +235,16 @@ Error modes
 
 Success criteria
 - No-op or status-only saves do not bump version
-- Approval only allowed when validator passes
+- Approval only allowed when the active generic or plugin-specific validator passes
 - Undo for ref deletion works within 8 seconds
+
+## Migration Completed
+
+The frontend has completed migration to canonical multi-turn state:
+- Editing state is `history[]` with stable `turnId` identity.
+- Registry-driven rendering and plugin-owned evidence surfaces are in production.
+- Display helpers extract user/agent messages from turns on-demand.
+- API compatibility projections live in `adapters/apiMapper.ts` boundary layer only.
 
 ## Running and Verifying
 
@@ -246,7 +255,7 @@ Success criteria
 
 Manual smoke test
 - Load app, verify first item selected
-- Toggle references visited and add key paragraphs; attempt Approve gating (requires ≥1 selected ref)
+- Toggle evidence visited state and key paragraphs on a compatibility item; attempt Approve gating and confirm plugin-specific rules only apply where expected
 - Run Search, add results, ensure de-dup by URL
 - Generate Answer populates answer text
 - Save Draft vs Approve follows version bump rules
