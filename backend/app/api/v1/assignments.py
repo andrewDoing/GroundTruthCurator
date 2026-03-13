@@ -33,6 +33,7 @@ from app.services.validation_service import (
     ApprovalValidationError,
     ValidationError,
 )
+from app.api.v1.update_models import HistoryEntryPatch
 
 
 router = APIRouter()
@@ -43,13 +44,6 @@ class SelfServeResponse(BaseModel):
     assigned: list[AgenticGroundTruthEntry]
     requested: int
     assignedCount: int
-
-
-class HistoryEntryPatch(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    role: str
-    msg: str | None = None
 
 
 class AssignmentUpdateRequest(BaseModel):

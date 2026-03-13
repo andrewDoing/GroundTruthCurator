@@ -2126,7 +2126,7 @@
 						"anyOf": [
 							{
 								"items": {
-									"$ref": "#/components/schemas/app__api__v1__assignments__HistoryEntryPatch"
+									"$ref": "#/components/schemas/HistoryEntryPatch"
 								},
 								"type": "array"
 							},
@@ -2634,7 +2634,7 @@
 						"anyOf": [
 							{
 								"items": {
-									"$ref": "#/components/schemas/app__api__v1__assignments__HistoryEntryPatch"
+									"$ref": "#/components/schemas/HistoryEntryPatch"
 								},
 								"type": "array"
 							},
@@ -2811,6 +2811,29 @@
 				"type": "object",
 				"required": ["role", "msg"],
 				"title": "HistoryEntry"
+			},
+			"HistoryEntryPatch": {
+				"properties": {
+					"role": {
+						"type": "string",
+						"title": "Role"
+					},
+					"msg": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						],
+						"title": "Msg"
+					}
+				},
+				"additionalProperties": true,
+				"type": "object",
+				"required": ["role"],
+				"title": "HistoryEntryPatch"
 			},
 			"ImportBulkResponse": {
 				"properties": {
@@ -3533,29 +3556,6 @@
 				"type": "object",
 				"required": ["total", "succeeded", "failed"],
 				"title": "ValidationSummary"
-			},
-			"app__api__v1__assignments__HistoryEntryPatch": {
-				"properties": {
-					"role": {
-						"type": "string",
-						"title": "Role"
-					},
-					"msg": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Msg"
-					}
-				},
-				"additionalProperties": true,
-				"type": "object",
-				"required": ["role"],
-				"title": "HistoryEntryPatch"
 			}
 		}
 	}

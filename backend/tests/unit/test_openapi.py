@@ -80,3 +80,23 @@ async def test_update_requests_do_not_advertise_nullable_expected_tools(async_cl
     assert ground_truth_expected_tools["$ref"] == "#/components/schemas/ExpectedTools"
     assert "anyOf" not in assignment_expected_tools
     assert "anyOf" not in ground_truth_expected_tools
+
+
+@pytest.mark.anyio
+async def test_update_requests_share_stable_history_patch_schema(async_client: AsyncClient):
+    r = await async_client.get("/v1/openapi.json")
+    assert r.status_code == 200
+
+    data = r.json()
+    schemas = data["components"]["schemas"]
+
+    assignment_history = schemas["AssignmentUpdateRequest"]["properties"]["history"]["anyOf"][0]["items"][
+        "$ref"
+    ]
+    ground_truth_history = schemas["GroundTruthUpdateRequest"]["properties"]["history"]["anyOf"][0][
+        "items"
+    ]["$ref"]
+
+    assert assignment_history == "#/components/schemas/HistoryEntryPatch"
+    assert ground_truth_history == "#/components/schemas/HistoryEntryPatch"
+    assert "HistoryEntryPatch" in schemas

@@ -33,6 +33,7 @@ from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.plugins import get_default_registry
 from app.container import container
 from app.exports.models import SnapshotExportRequest
+from app.api.v1.update_models import HistoryEntryPatch
 from app.services.ground_truth_update_service import (
     ETagMismatchError,
     ETagRequiredError,
@@ -116,13 +117,6 @@ class RecomputeTagsResponse(BaseModel):
     errors: list[str] = Field(default_factory=list, description="Error messages for failed items.")
     dry_run: bool = Field(description="Whether this was a dry run (no changes persisted).")
     duration_ms: int = Field(description="Operation duration in milliseconds.")
-
-
-class HistoryEntryPatch(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    role: str
-    msg: str | None = None
 
 
 class GroundTruthUpdateRequest(BaseModel):

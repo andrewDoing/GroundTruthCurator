@@ -725,7 +725,7 @@ export interface components {
             /** Etag */
             etag?: string | null;
             /** History */
-            history?: components["schemas"]["app__api__v1__assignments__HistoryEntryPatch"][] | null;
+            history?: components["schemas"]["HistoryEntryPatch"][] | null;
             /** Contextentries */
             contextEntries?: components["schemas"]["ContextEntry"][] | null;
             /** Toolcalls */
@@ -953,7 +953,7 @@ export interface components {
             /** Comment */
             comment?: string | null;
             /** History */
-            history?: components["schemas"]["app__api__v1__assignments__HistoryEntryPatch"][] | null;
+            history?: components["schemas"]["HistoryEntryPatch"][] | null;
             /** Contextentries */
             contextEntries?: components["schemas"]["ContextEntry"][] | null;
             /** Toolcalls */
@@ -998,6 +998,15 @@ export interface components {
             role: string;
             /** Msg */
             msg: string;
+        };
+        /** HistoryEntryPatch */
+        HistoryEntryPatch: {
+            /** Role */
+            role: string;
+            /** Msg */
+            msg?: string | null;
+        } & {
+            [key: string]: unknown;
         };
         /** ImportBulkResponse */
         ImportBulkResponse: {
@@ -1359,15 +1368,6 @@ export interface components {
              * @description Items that failed
              */
             failed: number;
-        };
-        /** HistoryEntryPatch */
-        app__api__v1__assignments__HistoryEntryPatch: {
-            /** Role */
-            role: string;
-            /** Msg */
-            msg?: string | null;
-        } & {
-            [key: string]: unknown;
         };
     };
     responses: never;
