@@ -63,7 +63,6 @@ echo "Auditing harness artifacts in: $target_path"
 echo
 
 check_file "AGENTS.md"
-check_file "PLANS.md"
 check_file "docs/ARCHITECTURE.md"
 check_file "docs/OBSERVABILITY.md"
 check_file "Makefile.harness"

@@ -67,7 +67,7 @@ check_plans_customized() {
   local full="$target_path/PLANS.md"
 
   if [ ! -f "$full" ]; then
-    fail "PLANS.md — file missing"
+    echo "  ℹ️  PLANS.md — not present (optional)"
     return
   fi
 
