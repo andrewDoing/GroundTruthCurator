@@ -64,6 +64,9 @@ export default function QuestionsExplorer({
 	className,
 }: QuestionsExplorerProps) {
 	const datasetFilterId = useId();
+	const itemIdFilterId = useId();
+	const referenceUrlFilterId = useId();
+	const keywordFilterId = useId();
 	const itemsPerPageId = useId();
 
 	// Use a ref to track the previous filter state to detect when filters change
@@ -489,7 +492,7 @@ export default function QuestionsExplorer({
 					<div className="min-w-0">
 						<div className="flex items-center gap-2 mb-2">
 							<label
-								htmlFor="itemIdFilter"
+								htmlFor={itemIdFilterId}
 								className="text-base font-semibold text-slate-800"
 							>
 								Item ID:
@@ -562,7 +565,7 @@ export default function QuestionsExplorer({
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
 							<input
-								id={useId()}
+								id={itemIdFilterId}
 								type="text"
 								value={itemIdFilter}
 								onChange={(e) => setItemIdFilter(e.target.value)}
@@ -586,7 +589,7 @@ export default function QuestionsExplorer({
 					<div className="min-w-0">
 						<div className="flex items-center gap-2 mb-2">
 							<label
-								htmlFor="referenceUrlFilter"
+								htmlFor={referenceUrlFilterId}
 								className="text-base font-semibold text-slate-800"
 							>
 								Reference URL:
@@ -643,7 +646,7 @@ export default function QuestionsExplorer({
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
 							<input
-								id={useId()}
+								id={referenceUrlFilterId}
 								type="text"
 								value={referenceUrlFilter}
 								onChange={(e) => setReferenceUrlFilter(e.target.value)}
@@ -668,7 +671,7 @@ export default function QuestionsExplorer({
 					<div className="min-w-0">
 						<div className="flex items-center gap-2 mb-2">
 							<label
-								htmlFor="keywordFilter"
+								htmlFor={keywordFilterId}
 								className="text-base font-semibold text-slate-800"
 							>
 								Keyword Search:
@@ -676,7 +679,7 @@ export default function QuestionsExplorer({
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
 							<input
-								id={useId()}
+								id={keywordFilterId}
 								type="text"
 								value={keywordFilter}
 								onChange={(e) => setKeywordFilter(e.target.value)}

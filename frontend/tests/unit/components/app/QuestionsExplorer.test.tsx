@@ -397,24 +397,24 @@ describe("QuestionsExplorer", () => {
 		it.each([
 			{
 				name: "item ID",
-				placeholder: "Enter item ID to search...",
+				label: "Item ID:",
 				value: "item-42",
 				expectedFilter: { itemId: "item-42" },
 			},
 			{
 				name: "reference URL",
-				placeholder: "Enter the reference URL to search...",
+				label: "Reference URL:",
 				value: "https://example.com/ref",
 				expectedFilter: { refUrl: "https://example.com/ref" },
 			},
 			{
 				name: "keyword",
-				placeholder: "Search questions, answers, and history...",
+				label: "Keyword Search:",
 				value: "agentic",
 				expectedFilter: { keyword: "agentic" },
 			},
 		])("should reset to page 1 when applying a $name filter from page 2", async ({
-			placeholder,
+			label,
 			value,
 			expectedFilter,
 		}) => {
@@ -430,7 +430,7 @@ describe("QuestionsExplorer", () => {
 				expect(screen.getByText("Page 2 of 3")).toBeInTheDocument();
 			});
 
-			fireEvent.change(screen.getByPlaceholderText(placeholder), {
+			fireEvent.change(screen.getByLabelText(label), {
 				target: { value },
 			});
 			fireEvent.click(screen.getByRole("button", { name: "Apply Filters" }));

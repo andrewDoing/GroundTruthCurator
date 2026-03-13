@@ -95,7 +95,7 @@ export async function filterExplorerResults(
 		.toBe(true);
 	await datasetSelect.selectOption(datasetName);
 
-	await page.getByPlaceholder("Enter item ID to search...").fill(itemId);
+	await page.getByLabel("Item ID:").fill(itemId);
 
 	if (status === "approved") {
 		await page.getByRole("button", { name: "Approved" }).click();

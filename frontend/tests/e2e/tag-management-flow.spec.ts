@@ -60,6 +60,18 @@ test("tag management persists manual tags and filters Explorer results", async (
 	await page.getByRole("button", { name: "Explorer" }).click();
 	await expect(page.getByText("Explore all ground truths")).toBeVisible();
 
+	const referenceUrlFilter = page.getByLabel("Reference URL:");
+	await expect(referenceUrlFilter).toBeVisible();
+	await referenceUrlFilter.fill("https://example.com/reference");
+	await expect(referenceUrlFilter).toHaveValue("https://example.com/reference");
+	await referenceUrlFilter.clear();
+
+	const keywordFilter = page.getByLabel("Keyword Search:");
+	await expect(keywordFilter).toBeVisible();
+	await keywordFilter.fill(manualTagValue);
+	await expect(keywordFilter).toHaveValue(manualTagValue);
+	await keywordFilter.clear();
+
 	await page
 		.getByRole("button", { name: /Expand tag filters|Collapse tag filters/ })
 		.click();
