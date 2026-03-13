@@ -146,6 +146,7 @@ See `docs/OBSERVABILITY.md` for field names, examples, and query patterns.
 
 ## Static Analysis And Quality Gates
 
+- Run `make -f Makefile.harness format` before committing code changes.
 - Run `make -f Makefile.harness check` before `make -f Makefile.harness test`.
 - Backend quality gate: `uv run ruff check app/` and `uv run ty check app/`.
 - Frontend quality gate: `npm run lint:check` and `npm run typecheck`.
