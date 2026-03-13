@@ -15,7 +15,8 @@ command -v npm >/dev/null 2>&1 || { echo 'ERROR: npm is required for frontend fo
 echo '==> Formatting backend'
 (
   cd "$root_dir/backend"
-  uv run black app tests scripts
+  uv run ruff format app tests scripts
+  uv run ruff check --fix app tests scripts
 )
 
 echo '==> Formatting frontend'
