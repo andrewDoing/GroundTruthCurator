@@ -4,8 +4,6 @@ import { useGroundTruthCache } from "../../hooks/useGroundTruthCache";
 import useModalKeys from "../../hooks/useModalKeys";
 import type { GroundTruthItem } from "../../models/groundTruth";
 import { getGroundTruth } from "../../services/groundTruths";
-import { getRuntimeConfig } from "../../services/runtimeConfig";
-import { validateReferenceUrl } from "../../utils/urlValidation";
 import MultiTurnEditor from "../app/editor/MultiTurnEditor";
 import type { QuestionsExplorerItem } from "../app/QuestionsExplorer";
 import TagChip from "../common/TagChip";
@@ -22,9 +20,6 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 	);
 	const [isLoading, setIsLoading] = useState(false);
 	const [loadError, setLoadError] = useState<string | null>(null);
-	const [trustedReferenceDomains, setTrustedReferenceDomains] = useState<
-		string[]
-	>([]);
 
 	const cache = useGroundTruthCache();
 
@@ -40,36 +35,35 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 		if (!isOpen || !item) {
 			setCompleteItem(null);
 			setLoadError(null);
+			setIsLoading(false);
 			return;
 		}
-
-		// Load trusted domains for reference opening
-		getRuntimeConfig()
-			.then((cfg) => {
-				setTrustedReferenceDomains(cfg.trustedReferenceDomains ?? []);
-			})
-			.catch(() => {
-				setTrustedReferenceDomains([]);
-			});
 
 		// Validate required fields before proceeding
 		if (!item.datasetName || !item.bucket || !item.id) {
 			setLoadError("Missing required item identifiers");
 			setCompleteItem(item);
+			setIsLoading(false);
 			return;
 		}
 
+		const { datasetName, bucket, id } = item;
+
 		// Check cache first (FR-001: in-memory session cache)
-		const cachedItem = cache.get(item.datasetName, item.bucket, item.id);
+		const cachedItem = cache.get(datasetName, bucket, id);
 
 		if (cachedItem) {
 			// Use cached data to avoid redundant network call
 			setCompleteItem(cachedItem);
+			setLoadError(null);
+			setIsLoading(false);
 			return;
 		}
 
 		// Fetch fresh data if not in cache
 		// (List endpoint returns truncated data for performance, but individual endpoint has complete history)
+		const controller = new AbortController();
+		setCompleteItem(null);
 		setIsLoading(true);
 		setLoadError(null);
 
@@ -77,10 +71,13 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 			try {
 				// Fetch complete item data from individual endpoint
 				const completeItemData = await getGroundTruth(
-					item.datasetName || "",
-					item.bucket || "",
-					item.id,
+					datasetName,
+					bucket,
+					id,
+					controller.signal,
 				);
+
+				if (controller.signal.aborted) return;
 
 				if (!completeItemData) {
 					setLoadError("Item not found");
@@ -89,15 +86,11 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 				}
 
 				// Store in cache for future inspections (FR-001)
-				cache.set(
-					item.datasetName || "",
-					item.bucket || "",
-					item.id,
-					completeItemData,
-				);
+				cache.set(datasetName, bucket, id, completeItemData);
 
 				setCompleteItem(completeItemData);
 			} catch (error) {
+				if (controller.signal.aborted) return;
 				const message =
 					error instanceof Error
 						? error.message
@@ -107,8 +100,14 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 				setCompleteItem(item);
 			}
 		})().finally(() => {
-			setIsLoading(false);
+			if (!controller.signal.aborted) {
+				setIsLoading(false);
+			}
 		});
+
+		return () => {
+			controller.abort();
+		};
 	}, [isOpen, item, cache]);
 
 	if (!isOpen || !item) return null;
@@ -142,7 +141,7 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 									ID
 								</div>
 								<div className="rounded-lg border bg-slate-50 p-2 font-mono text-sm text-slate-800">
-									{item.id}
+									{displayItem.id}
 								</div>
 							</div>
 							<div>
@@ -152,18 +151,18 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 								<div className="flex gap-2">
 									<span
 										className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${
-											item.status === "draft"
+											displayItem.status === "draft"
 												? "bg-amber-100 text-amber-900"
-												: item.status === "approved"
+												: displayItem.status === "approved"
 													? "bg-emerald-100 text-emerald-900"
-													: item.status === "skipped"
+													: displayItem.status === "skipped"
 														? "bg-slate-200 text-slate-800"
 														: "bg-rose-100 text-rose-900"
 										}`}
 									>
-										{item.status}
+										{displayItem.status}
 									</span>
-									{item.deleted && item.status !== "deleted" && (
+									{displayItem.deleted && displayItem.status !== "deleted" && (
 										<span className="inline-block rounded-full bg-rose-100 px-3 py-1 text-sm font-medium text-rose-900">
 											deleted
 										</span>
@@ -172,25 +171,25 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 							</div>
 						</div>
 						{/* Dataset and Bucket */}
-						{(item.datasetName || item.bucket) && (
+						{(displayItem.datasetName || displayItem.bucket) && (
 							<div className="grid grid-cols-2 gap-4">
-								{item.datasetName && (
+								{displayItem.datasetName && (
 									<div>
 										<div className="mb-1 text-xs font-medium text-slate-600">
 											Dataset
 										</div>
 										<div className="rounded-lg border bg-slate-50 p-2 text-sm text-slate-800">
-											{item.datasetName}
+											{displayItem.datasetName}
 										</div>
 									</div>
 								)}
-								{item.bucket && (
+								{displayItem.bucket && (
 									<div>
 										<div className="mb-1 text-xs font-medium text-slate-600">
 											Bucket
 										</div>
 										<div className="rounded-lg border bg-slate-50 p-2 text-sm text-slate-800">
-											{item.bucket}
+											{displayItem.bucket}
 										</div>
 									</div>
 								)}
@@ -201,16 +200,20 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 							<div className="mb-1 text-xs font-medium text-slate-600">
 								Conversation
 							</div>
+							{!isLoading && loadError && (
+								<div
+									role="alert"
+									className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+								>
+									{loadError}
+								</div>
+							)}
 							<div className="rounded-lg border bg-white min-h-[200px]">
 								{isLoading ? (
 									<div className="flex items-center justify-center p-8">
 										<div className="text-sm text-slate-600">
 											Loading complete conversation...
 										</div>
-									</div>
-								) : loadError ? (
-									<div className="flex items-center justify-center p-8">
-										<div className="text-sm text-red-600">{loadError}</div>
 									</div>
 								) : (
 									<MultiTurnEditor
@@ -219,85 +222,48 @@ export default function InspectItemModal({ isOpen, item, onClose }: Props) {
 										canEdit={false}
 										onUpdateHistory={() => {}}
 										onDeleteTurn={() => {}}
-										onGenerate={() =>
-											Promise.resolve({ ok: false, error: "Read-only mode" })
-										}
-										onUpdateReference={() => {}}
-										onRemoveReference={() => {}}
-										// Secure reference opening with validation and user confirmation
-										onOpenReference={(ref) => {
-											if (!validateReferenceUrl(ref.url)) {
-												alert(
-													"This reference contains an unsafe URL and cannot be opened.",
-												);
-												return;
-											}
-
-											// For external or untrusted URLs, show user confirmation
-											const parsedUrl = new URL(ref.url);
-											const hostname = parsedUrl.hostname.toLowerCase();
-											const sameOrigin = hostname === window.location.hostname;
-											const isTrusted =
-												trustedReferenceDomains.includes(hostname);
-											const isExternal = !sameOrigin && !isTrusted;
-
-											if (isExternal) {
-												const confirmed = confirm(
-													`You are about to visit an external website:\n\n${parsedUrl.hostname}\n\nDo you want to continue?`,
-												);
-												if (!confirmed) {
-													return;
-												}
-											}
-
-											// Open with security attributes
-											window.open(
-												ref.url,
-												"_blank",
-												"noopener,noreferrer,nofollow",
-											);
-										}}
 										onUpdateTags={() => {}}
 									/>
 								)}
 							</div>
 						</div>{" "}
 						{/* Tags */}
-						{((item.manualTags && item.manualTags.length > 0) ||
-							(item.computedTags && item.computedTags.length > 0)) && (
+						{((displayItem.manualTags && displayItem.manualTags.length > 0) ||
+							(displayItem.computedTags &&
+								displayItem.computedTags.length > 0)) && (
 							<div>
 								<div className="mb-1 text-xs font-medium text-slate-600">
 									Tags
 								</div>
 								<div className="flex flex-wrap gap-2">
-									{item.computedTags?.map((tag) => (
+									{displayItem.computedTags?.map((tag) => (
 										<TagChip key={`computed-${tag}`} tag={tag} isComputed />
 									))}
-									{item.manualTags?.map((tag) => (
+									{displayItem.manualTags?.map((tag) => (
 										<TagChip key={`manual-${tag}`} tag={tag} />
 									))}
 								</div>
 							</div>
 						)}
 						{/* Comment */}
-						{item.comment && (
+						{displayItem.comment && (
 							<div>
 								<div className="mb-1 text-xs font-medium text-slate-600">
 									Comment
 								</div>
 								<div className="rounded-lg border bg-white p-3 text-sm text-slate-700 whitespace-pre-wrap">
-									{item.comment}
+									{displayItem.comment}
 								</div>
 							</div>
 						)}
 						{/* Metadata */}
-						{item.reviewedAt && (
+						{displayItem.reviewedAt && (
 							<div>
 								<div className="mb-1 text-xs font-medium text-slate-600">
 									Reviewed At
 								</div>
 								<div className="rounded-lg border bg-slate-50 p-2 text-sm text-slate-800">
-									{new Date(item.reviewedAt).toLocaleString()}
+									{new Date(displayItem.reviewedAt).toLocaleString()}
 								</div>
 							</div>
 						)}

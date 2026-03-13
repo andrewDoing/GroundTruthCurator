@@ -9,36 +9,38 @@ This guide will help you create your first ground truth item.
 
 ## Start the Backend
 
-1. Navigate to the backend directory:
+1. From the repository root, start the backend:
    ```bash
-   cd backend
+   make -f Makefile.harness backend
    ```
 
-2. Start the development server:
-   ```bash
-   uv run uvicorn app.main:app --reload
-   ```
+    The API will be available at `http://localhost:8000`.
 
-   The API will be available at `http://localhost:8000`.
-
-3. Verify the backend is running:
+2. Verify the backend is running:
    ```bash
    curl http://localhost:8000/healthz
    ```
 
 ## Start the Frontend
 
-1. In a new terminal, navigate to the frontend directory:
+1. In a new terminal from the repository root, start the frontend:
    ```bash
-   cd frontend
+   make -f Makefile.harness frontend
    ```
 
-2. Start the development server:
-   ```bash
-   npm run dev
-   ```
+    The app will be available at `http://localhost:5173` by default.
 
-   The app will be available at `http://localhost:5173`.
+    To run both services from one terminal instead, use `make -f Makefile.harness dev`.
+
+    For agent-friendly background startup, use `make -f Makefile.harness dev-up` and later `make -f Makefile.harness dev-down`. Background logs and PID files are written to `.harness/dev/`.
+
+    To launch the demo experience with seeded data and a fixed local user, run:
+
+    ```bash
+    VITE_DEMO_MODE=true VITE_DEV_USER_ID=demo-user make dev-up
+    ```
+
+    This starts both services in the background, enables demo mode in the frontend, and sets the backend demo user identity to `demo-user`.
 
 ## Create Your First Ground Truth Item
 

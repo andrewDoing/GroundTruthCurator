@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from app.plugins.base import ComputedTagPlugin
 
 if TYPE_CHECKING:
-    from app.domain.models import GroundTruthItem
+    from app.domain.models import AgenticGroundTruthEntry
 
 
 class NoAnswerPlugin(ComputedTagPlugin):
@@ -29,7 +29,7 @@ class NoAnswerPlugin(ComputedTagPlugin):
     def tag_key(self) -> str:
         return "answer:no_answer"
 
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         if doc.answer and doc.answer.strip().casefold() == "no_answer":
             return self.tag_key
         return None

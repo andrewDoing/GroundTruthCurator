@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
 from app.plugins.base import ComputedTagPlugin, TagPluginRegistry
 from app.plugins.registry import (
     get_default_registry,
@@ -26,7 +26,7 @@ class TestTagPluginRegistry:
     def test_empty_registry_returns_empty_tags(self):
         """An empty registry should return no tags."""
         registry = TagPluginRegistry()
-        item = GroundTruthItem(id="test", datasetName="test", synthQuestion="Q")
+        item = AgenticGroundTruthEntry(id="test", datasetName="test", synthQuestion="Q")
         assert registry.compute_all(item) == []
         assert registry.get_all_keys() == set()
 
@@ -38,7 +38,7 @@ class TestTagPluginRegistry:
             def tag_key(self) -> str:
                 return "dup:key"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return self.tag_key
 
         class Plugin2(ComputedTagPlugin):
@@ -46,7 +46,7 @@ class TestTagPluginRegistry:
             def tag_key(self) -> str:
                 return "dup:key"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return self.tag_key
 
         registry = TagPluginRegistry()
@@ -80,7 +80,7 @@ class TestDynamicTagPrefixes:
             def tag_key(self) -> str:
                 return "dataset:_dynamic"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return f"dataset:{doc.datasetName}" if doc.datasetName else None
 
         registry = TagPluginRegistry()
@@ -96,7 +96,7 @@ class TestDynamicTagPrefixes:
             def tag_key(self) -> str:
                 return "turns:multiturn"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return self.tag_key
 
         class DynamicPlugin(ComputedTagPlugin):
@@ -104,7 +104,7 @@ class TestDynamicTagPrefixes:
             def tag_key(self) -> str:
                 return "dataset:_dynamic"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return f"dataset:{doc.datasetName}" if doc.datasetName else None
 
         registry = TagPluginRegistry()
@@ -122,7 +122,7 @@ class TestDynamicTagPrefixes:
             def tag_key(self) -> str:
                 return "turns:multiturn"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return self.tag_key
 
         registry = TagPluginRegistry()
@@ -139,7 +139,7 @@ class TestDynamicTagPrefixes:
             def tag_key(self) -> str:
                 return "dataset:_dynamic"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return f"dataset:{doc.datasetName}" if doc.datasetName else None
 
         registry = TagPluginRegistry()
@@ -160,7 +160,7 @@ class TestDynamicTagPrefixes:
             def tag_key(self) -> str:
                 return "turns:multiturn"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return self.tag_key
 
         registry = TagPluginRegistry()
@@ -183,7 +183,7 @@ class TestDynamicTagPrefixes:
             def tag_key(self) -> str:
                 return "dataset:_dynamic"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return f"dataset:{doc.datasetName}" if doc.datasetName else None
 
         registry = TagPluginRegistry()
@@ -204,7 +204,7 @@ class TestGroundTruthItemTagMerge:
 
     def test_computed_and_manual_tags_merge(self):
         """Verify computed and manual tags merge correctly and are sorted."""
-        item = GroundTruthItem(
+        item = AgenticGroundTruthEntry(
             id="merge-test",
             datasetName="test-dataset",
             synthQuestion="Test question",

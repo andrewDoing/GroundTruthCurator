@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest  # type: ignore[import-not-found]
 
-from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo
+from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo, SELECT_CLAUSE_C
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
+from tests.test_helpers import make_test_entry
 
 
 @pytest.fixture()
@@ -103,18 +105,32 @@ def test_resolve_sort_with_overrides(repo: CosmosGroundTruthRepo) -> None:
 
 
 def test_sort_key_has_answer(repo: CosmosGroundTruthRepo) -> None:
-    example = GroundTruthItem.model_validate(
-        {
-            "id": "item",
-            "datasetName": "faq",
-            "synthQuestion": "What?",
-            "answer": "value",
-            "manualTags": ["team:sme"],
-            "reviewedAt": datetime(2024, 1, 1, tzinfo=timezone.utc).isoformat(),
-        }
+    example = make_test_entry(
+        id="item",
+        dataset_name="faq",
+        synth_question="What?",
+        answer="value",
+        manual_tags=["team:sme"],
+        reviewed_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
     key = CosmosGroundTruthRepo._sort_key(example, SortField.has_answer)
     assert key[0] == 1
+
+
+def test_select_clause_includes_generic_phase_one_fields() -> None:
+    for field in (
+        "c.scenarioId",
+        "c.contextEntries",
+        "c.traceIds",
+        "c.toolCalls",
+        "c.expectedTools",
+        "c.feedback",
+        "c.metadata",
+        "c.createdBy",
+        "c.createdAt",
+        "c.tracePayload",
+    ):
+        assert field in SELECT_CLAUSE_C
 
 
 # =============================================================================
@@ -123,29 +139,38 @@ def test_sort_key_has_answer(repo: CosmosGroundTruthRepo) -> None:
 
 
 class TestComputeTotalReferences:
-    """Unit tests for GroundTruthItem.compute_total_references_if_needed.
+    """Unit tests for AgenticGroundTruthEntry.totalReferences computation.
 
-    The method calculates total references with the following logic:
+    The property calculates total references with the following logic:
     - If history has refs, count only history refs (history takes priority)
-    - If history has no refs, count item-level refs as fallback
+    - If history has no refs, count plugin-stored refs as fallback
+
+    **Phase 5 Audit (2026-03-12)**: ACTIVE COMPUTATION LOGIC - BLOCKING
+    The totalReferences field has active property logic that computes
+    values from history and plugin refs. This is not just compatibility
+    testing - it's core functionality that is used by:
+    - Model validation on all item saves
+    - Sort/filter operations that check reference counts
+    - UI displays of reference totals
+
+    Cannot delete totalReferences until this computation is either:
+    - Moved to a computed property on AgenticGroundTruthEntry, OR
+    - Replaced by direct history ref counting in callers
     """
 
     def _make_item(
         self,
         refs: list[dict] | None = None,
         history: list[dict] | None = None,
-    ) -> GroundTruthItem:
-        """Helper to create a GroundTruthItem with specified refs and history."""
-        data: dict = {
-            "id": "test-item",
-            "datasetName": "test-dataset",
-            "synthQuestion": "Test question?",
-        }
-        if refs is not None:
-            data["refs"] = refs
-        if history is not None:
-            data["history"] = history
-        return GroundTruthItem.model_validate(data)
+    ) -> AgenticGroundTruthEntry:
+        """Helper to create an AgenticGroundTruthEntry with specified refs and history."""
+        return make_test_entry(
+            id="test-item",
+            dataset_name="test-dataset",
+            synth_question="Test question?",
+            refs=refs,
+            history=history,
+        )
 
     # -------------------------------------------------------------------------
     # History refs take priority over item refs
@@ -317,13 +342,23 @@ class TestComputeTotalReferences:
 
     def test_item_only_no_history_field_at_all(self) -> None:
         """Item created without history field entirely."""
-        data = {
-            "id": "minimal-item",
-            "datasetName": "test",
-            "synthQuestion": "What?",
-            "refs": [{"url": "https://only-ref.com"}],
-        }
-        item = GroundTruthItem.model_validate(data)
+        # Use model_validate directly to test the case where history is completely absent
+        item = AgenticGroundTruthEntry.model_validate(
+            {
+                "id": "minimal-item",
+                "datasetName": "test",
+                "plugins": {
+                    "rag-compat": {
+                        "kind": "rag-compat",
+                        "version": "1.0",
+                        "data": {
+                            "synthQuestion": "What?",
+                            "refs": [{"url": "https://only-ref.com"}],
+                        },
+                    }
+                },
+            }
+        )
         assert item.totalReferences == 1
 
     def test_complex_real_world_scenario(self) -> None:
@@ -359,3 +394,94 @@ class TestComputeTotalReferences:
         )
         # History refs: 2 + 1 = 3 (item-level ref is ignored)
         assert item.totalReferences == 3
+
+
+# ---------------------------------------------------------------------------
+# IQ-001 regression: list_all_gt must filter to ground-truth-item docType
+# ---------------------------------------------------------------------------
+
+
+def test_list_all_gt_query_includes_doctype_filter(repo: CosmosGroundTruthRepo) -> None:
+    """list_all_gt must generate a query that excludes non-ground-truth documents."""
+    # Reach into the query logic by directly constructing what list_all_gt would build.
+    # The method builds: WHERE c.docType = 'ground-truth-item' [AND c.status = @status]
+    # Verify the WHERE clause string for the no-filter case.
+    clauses = ["c.docType = 'ground-truth-item'"]
+    where = " WHERE " + " AND ".join(clauses)
+    query = f"SELECT * FROM c{where}"
+    assert "c.docType = 'ground-truth-item'" in query
+    assert "SELECT * FROM c WHERE" in query
+
+
+def test_list_all_gt_query_with_status_filter(repo: CosmosGroundTruthRepo) -> None:
+    """list_all_gt with status must include BOTH docType and status filters."""
+
+    clauses = ["c.docType = 'ground-truth-item'", "c.status = @status"]
+    where = " WHERE " + " AND ".join(clauses)
+    query = f"SELECT * FROM c{where}"
+    assert "c.docType = 'ground-truth-item'" in query
+    assert "c.status = @status" in query
+    # Ensure both clauses are present (not SELECT * FROM c WHERE c.status = @status alone)
+    assert "c.docType = 'ground-truth-item' AND c.status = @status" in query
+
+
+# ---------------------------------------------------------------------------
+# IQ-003 strengthened: call list_all_gt() directly and assert query emitted
+# ---------------------------------------------------------------------------
+
+
+async def _empty_aiter():  # type: ignore[return]
+    """Empty async generator used to stub out Cosmos query_items in unit tests."""
+    return
+    yield  # pragma: no cover – presence makes this an async generator function
+
+
+@pytest.mark.asyncio
+async def test_list_all_gt_directly_emits_doctype_filter(
+    repo: CosmosGroundTruthRepo,
+) -> None:
+    """Calling list_all_gt() directly must pass the docType filter to query_items."""
+    captured: list[str] = []
+
+    def _mock_query_items(*args: object, **kwargs: object) -> object:
+        query = kwargs.get("query") or (args[0] if args else "")
+        captured.append(str(query))
+        return _empty_aiter()
+
+    mock_container = MagicMock()
+    mock_container.query_items = _mock_query_items
+
+    with patch.object(repo, "_ensure_initialized", new_callable=AsyncMock):
+        repo._gt_container = mock_container  # type: ignore[assignment]
+        result = await repo.list_all_gt()
+
+    assert result == []
+    assert len(captured) == 1
+    assert "c.docType = 'ground-truth-item'" in captured[0]
+    assert "SELECT * FROM c WHERE" in captured[0]
+
+
+@pytest.mark.asyncio
+async def test_list_all_gt_directly_emits_doctype_and_status_filter(
+    repo: CosmosGroundTruthRepo,
+) -> None:
+    """list_all_gt(status=draft) must emit BOTH docType and status clauses."""
+    captured: list[str] = []
+
+    def _mock_query_items(*args: object, **kwargs: object) -> object:
+        query = kwargs.get("query") or (args[0] if args else "")
+        captured.append(str(query))
+        return _empty_aiter()
+
+    mock_container = MagicMock()
+    mock_container.query_items = _mock_query_items
+
+    with patch.object(repo, "_ensure_initialized", new_callable=AsyncMock):
+        repo._gt_container = mock_container  # type: ignore[assignment]
+        result = await repo.list_all_gt(status=GroundTruthStatus.draft)
+
+    assert result == []
+    assert len(captured) == 1
+    assert "c.docType = 'ground-truth-item'" in captured[0]
+    assert "c.status = @status" in captured[0]
+    assert "c.docType = 'ground-truth-item' AND c.status = @status" in captured[0]

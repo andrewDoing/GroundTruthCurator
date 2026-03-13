@@ -10,7 +10,8 @@ router = APIRouter()
 
 @router.get("/ground-truths/stats")
 async def get_stats(user: UserContext = Depends(get_current_user)):
-    return await container.repo.stats()
+    base_stats = await container.repo.stats()
+    return container.plugin_pack_registry.collect_stats(base_stats.model_dump())
 
 
 # todo: add endpoint for all user stats

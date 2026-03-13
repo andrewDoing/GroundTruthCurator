@@ -12,7 +12,6 @@ from app.services.snapshot_service import SnapshotService
 from app.services.search_service import SearchService
 from app.services.curation_service import CurationService
 from app.services.tag_registry_service import TagRegistryService
-from app.services.chat_service import ChatService
 
 
 # Use pytest-asyncio "auto mode"/anyio; legacy markers in tests use anyio/anyio_backend
@@ -33,8 +32,6 @@ def configure_unit_test_settings():
     # Save original values
     orig_ezauth = settings.EZAUTH_ENABLED
     orig_auth_mode = settings.AUTH_MODE
-    orig_chat_enabled = settings.CHAT_ENABLED
-    orig_store_steps = settings.STORE_AGENT_STEPS
     orig_anon_paths = settings.EZAUTH_ALLOW_ANONYMOUS_PATHS
     orig_allowed_domains = settings.EZAUTH_ALLOWED_EMAIL_DOMAINS
     orig_allowed_object_ids = settings.EZAUTH_ALLOWED_OBJECT_IDS
@@ -43,8 +40,6 @@ def configure_unit_test_settings():
     settings.EZAUTH_ENABLED = False
     settings.AUTH_MODE = "dev"
     settings.EZAUTH_ALLOW_ANONYMOUS_PATHS = "/healthz"
-    settings.CHAT_ENABLED = True
-    settings.STORE_AGENT_STEPS = False
     settings.EZAUTH_ALLOWED_EMAIL_DOMAINS = None
     settings.EZAUTH_ALLOWED_OBJECT_IDS = None
 
@@ -53,8 +48,6 @@ def configure_unit_test_settings():
     # Restore on session teardown
     settings.EZAUTH_ENABLED = orig_ezauth
     settings.AUTH_MODE = orig_auth_mode
-    settings.CHAT_ENABLED = orig_chat_enabled
-    settings.STORE_AGENT_STEPS = orig_store_steps
     settings.EZAUTH_ALLOW_ANONYMOUS_PATHS = orig_anon_paths
     settings.EZAUTH_ALLOWED_EMAIL_DOMAINS = orig_allowed_domains
     settings.EZAUTH_ALLOWED_OBJECT_IDS = orig_allowed_object_ids
@@ -180,16 +173,11 @@ async def live_app(configure_unit_test_settings):
         processor_registry=container.export_processor_registry,
         formatter_registry=container.export_formatter_registry,
         default_processor_order=container.export_default_processor_order,
+        plugin_export_transforms=container.plugin_pack_registry.collect_export_transforms(),
     )
     container.search_service = SearchService()
     container.curation_service = CurationService(container.repo)
     container.tag_registry_service = TagRegistryService(_InMemoryTagsRepo())
-    container.inference_service = None  # No real agent in unit tests
-    container.chat_service = ChatService(
-        inference_service=None,
-        steps_store=None,
-        store_steps=False,
-    )
     # Import LifespanManager lazily so tests can still run without the
     # optional dev dependency installed. If missing, we yield the app and
     # rely on FastAPI's lifespan being a no-op (it will still run, but
@@ -250,26 +238,6 @@ def clear_db():
     if isinstance(cur, dict):
         cur.clear()
     yield
-
-
-@pytest.fixture(autouse=True)
-def reset_chat_state():
-    orig_service = container.chat_service
-    orig_inference = container.inference_service
-    orig_store = container.agent_steps_store
-    chat_enabled = settings.CHAT_ENABLED
-    store_steps = settings.STORE_AGENT_STEPS
-    yield
-    container.chat_service = orig_service
-    container.inference_service = orig_inference
-    container.agent_steps_store = orig_store
-    settings.CHAT_ENABLED = chat_enabled
-    settings.STORE_AGENT_STEPS = store_steps
-    try:
-        container.chat_service.set_store_steps(settings.STORE_AGENT_STEPS)
-        container.chat_service.set_steps_store(container.agent_steps_store)
-    except Exception:
-        pass
 
 
 # Optional: use uvloop for faster event loop if installed. This is safe to

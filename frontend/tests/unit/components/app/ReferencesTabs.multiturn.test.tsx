@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import type { RefObject } from "react";
 import type { RightTab } from "../../../../src/components/app/ReferencesPanel/ReferencesTabs";
 import ReferencesTabs from "../../../../src/components/app/ReferencesPanel/ReferencesTabs";
@@ -26,13 +26,35 @@ describe("ReferencesTabs multi-turn gating", () => {
 		isMultiTurn: false,
 	});
 
-	it("forces selected tab and hides search when multi-turn is active", () => {
+	it("forces selected tab and hides search when multi-turn is active", async () => {
 		const props = makeProps();
 		props.rightTab = "search";
 		props.isMultiTurn = true;
 		render(<ReferencesTabs {...props} />);
-		expect(props.setRightTab).toHaveBeenCalledWith("selected");
+		await waitFor(() => {
+			expect(props.setRightTab).toHaveBeenCalledWith("selected");
+		});
 		expect(screen.queryByRole("button", { name: /search/i })).toBeNull();
+	});
+
+	it("does not update parent state during render in multi-turn mode", () => {
+		const props = makeProps();
+		props.rightTab = "search";
+		props.isMultiTurn = true;
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => undefined);
+		render(<ReferencesTabs {...props} />);
+		expect(
+			consoleError.mock.calls.some((call) =>
+				call.some(
+					(value) =>
+						typeof value === "string" &&
+						value.includes("Cannot update a component while rendering"),
+				),
+			),
+		).toBe(false);
+		consoleError.mockRestore();
 	});
 
 	it("renders guidance banner in multi-turn mode", () => {

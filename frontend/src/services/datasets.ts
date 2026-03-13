@@ -17,11 +17,12 @@ let datasetsCache: { data: string[] | null; timestamp: number } = {
  */
 export async function getDatasetCurationInstructions(
 	datasetName: string,
+	signal?: AbortSignal,
 ): Promise<DatasetCurationInstructions | undefined> {
 	if (!datasetName) return undefined;
 	const { data, error } = await client.GET(
 		"/v1/datasets/{datasetName}/curation-instructions",
-		{ params: { path: { datasetName } } },
+		{ params: { path: { datasetName } }, signal },
 	);
 	if (error) throw error;
 	return data as unknown as DatasetCurationInstructions;
@@ -33,6 +34,7 @@ export async function getDatasetCurationInstructions(
  */
 export async function fetchAvailableDatasets(
 	forceRefresh = false,
+	signal?: AbortSignal,
 ): Promise<string[]> {
 	const now = Date.now();
 
@@ -46,7 +48,7 @@ export async function fetchAvailableDatasets(
 	}
 
 	try {
-		const { data, error } = await client.GET("/v1/datasets", {});
+		const { data, error } = await client.GET("/v1/datasets", { signal });
 		if (error) throw error;
 		const raw = Array.isArray(data) ? data : [];
 		const names = new Set<string>();
@@ -64,7 +66,10 @@ export async function fetchAvailableDatasets(
 		};
 
 		return datasets;
-	} catch {
+	} catch (error) {
+		if (signal?.aborted) {
+			throw error;
+		}
 		// On error, return cached data if available, otherwise empty array
 		return datasetsCache.data ?? [];
 	}

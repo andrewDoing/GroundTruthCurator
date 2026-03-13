@@ -4,33 +4,23 @@ import {
 	MessageCircle,
 	UserCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import type { AgentGenerationResult } from "../../../hooks/useGroundTruth";
-import { useReferencesSearch } from "../../../hooks/useReferencesSearch";
+import { useMemo, useState } from "react";
 import useTags from "../../../hooks/useTags";
 import type {
 	ConversationTurn,
-	ExpectedBehavior,
 	GroundTruthItem,
-	Reference,
 } from "../../../models/groundTruth";
 import { validateConversationPattern } from "../../../models/validators";
 import TagChip from "../../common/TagChip";
 import ConversationTurnComponent from "./ConversationTurn";
 import TagsModal from "./TagsModal";
-import TurnReferencesModal from "./TurnReferencesModal";
 
 type Props = {
 	current: GroundTruthItem | null;
 	readOnly?: boolean;
 	onUpdateHistory: (history: ConversationTurn[]) => void;
 	onDeleteTurn: (messageIndex: number) => void;
-	onGenerate: (messageIndex: number) => Promise<AgentGenerationResult>;
 	canEdit: boolean;
-	onUpdateReference: (refId: string, partial: Partial<Reference>) => void;
-	onRemoveReference: (refId: string) => void;
-	onOpenReference: (ref: Reference) => void;
-	onAddReferences?: (refs: Reference[]) => void;
 	onUpdateTags: (tags: string[]) => void;
 };
 
@@ -39,67 +29,26 @@ export default function MultiTurnEditor({
 	readOnly = false,
 	onUpdateHistory,
 	onDeleteTurn,
-	onGenerate,
 	canEdit,
-	onUpdateReference,
-	onRemoveReference,
-	onOpenReference,
-	onAddReferences,
 	onUpdateTags,
 }: Props) {
-	const [isGenerating, setIsGenerating] = useState(false);
-	const [generatingMessageIndex, setGeneratingMessageIndex] = useState<
-		number | null
-	>(null);
-	const [agentError, setAgentError] = useState<string | null>(null);
-	const [viewingReferencesForTurn, setViewingReferencesForTurn] = useState<
-		number | null
-	>(null);
 	const [managingGroundTruthTags, setManagingGroundTruthTags] = useState(false);
 
-	// Search functionality for references modal
-	const { query, setQuery, searching, searchResults, runSearch, clearResults } =
-		useReferencesSearch({
-			getSeedQuery: () => current?.question,
-		});
-
-	useEffect(() => {
-		if (!current) {
-			setAgentError(null);
-			setIsGenerating(false);
-			setGeneratingMessageIndex(null);
-			clearResults();
-			return;
-		}
-		setAgentError(null);
-		setIsGenerating(false);
-		setGeneratingMessageIndex(null);
-	}, [current, clearResults]);
-
 	const history = current?.history || [];
-	const references = current?.references || [];
+	const shouldLoadTags = canEdit && !readOnly;
 
-	// Backend-provided global tags (cached via useTags)
-	const { allTags: availableTags, refresh: refreshTags } = useTags();
+	// Backend-provided global tags (cached via the shared metadata service)
+	const { allTags: availableTags, refresh: refreshTags } = useTags({
+		enabled: shouldLoadTags,
+	});
 
-	// Calculate reference counts per turn
-	const referenceCounts = useMemo(() => {
-		const counts = new Map<number, number>();
-		references.forEach((ref) => {
-			if (typeof ref.messageIndex === "number") {
-				counts.set(ref.messageIndex, (counts.get(ref.messageIndex) || 0) + 1);
-			}
-		});
-		return counts;
-	}, [references]);
-
-	// Determine which turn types can be added next
-	const lastTurn = history.length > 0 ? history[history.length - 1] : null;
-	const canAddUser = !lastTurn || lastTurn.role === "agent";
-	const canAddAgent = lastTurn?.role === "user";
+	// Any turn type can be added at any position (agentic workflows allow
+	// consecutive agent turns such as orchestrator → sub-agent or RCA).
+	const canAddUser = true;
+	const canAddAgent = true;
 
 	const handleAddUserTurn = () => {
-		if (!canAddUser || isGenerating) return;
+		if (!canAddUser) return;
 		const newHistory: ConversationTurn[] = [
 			...history,
 			{ role: "user", content: "" },
@@ -108,8 +57,7 @@ export default function MultiTurnEditor({
 	};
 
 	const handleAddAgentTurn = () => {
-		if (!canAddAgent || isGenerating) return;
-		// Create empty agent turn placeholder - user will manually trigger generation
+		if (!canAddAgent) return;
 		const newHistory: ConversationTurn[] = [
 			...history,
 			{ role: "agent", content: "" },
@@ -123,72 +71,12 @@ export default function MultiTurnEditor({
 		onUpdateHistory(newHistory);
 	};
 
-	const handleUpdateExpectedBehavior = (
-		index: number,
-		expectedBehavior: ExpectedBehavior[],
-	) => {
-		const newHistory = [...history];
-		newHistory[index] = { ...newHistory[index], expectedBehavior };
-		onUpdateHistory(newHistory);
-	};
-
 	const handleRemoveTurn = (index: number) => {
-		if (isGenerating) return;
-
 		const turn = history[index];
 		if (!turn) return;
 
-		// Validation: Check if deleting this turn would break conversation flow
-		// If this is a user turn and the next turn is an agent turn, warn the user
-		if (turn.role === "user" && index < history.length - 1) {
-			const nextTurn = history[index + 1];
-			if (nextTurn?.role === "agent") {
-				if (
-					!window.confirm(
-						"Deleting this user turn will also require deleting the following agent turn to maintain conversation flow. Delete both turns?",
-					)
-				) {
-					return;
-				}
-				// Delete both the user turn and the following agent turn
-				onDeleteTurn(index);
-				// After deleting index, the next turn shifts down, so delete at same index
-				onDeleteTurn(index);
-				return;
-			}
-		}
-
-		// Standard confirmation for single turn deletion
 		if (window.confirm("Are you sure you want to delete this turn?")) {
 			onDeleteTurn(index);
-		}
-	};
-
-	const handleRegenerate = async (index: number) => {
-		if (isGenerating) return;
-
-		// Confirmation check
-		if (
-			!window.confirm(
-				"Run Agent will perform a full agent workflow with tools and search. This will replace both the answer and references for this turn. Continue?",
-			)
-		) {
-			return;
-		}
-
-		setAgentError(null);
-		setIsGenerating(true);
-		setGeneratingMessageIndex(index);
-		try {
-			const result = await onGenerate(index);
-			if (!result.ok && result.error) setAgentError(result.error);
-		} catch (err) {
-			const message =
-				err instanceof Error ? err.message : "Agent request failed.";
-			setAgentError(message);
-		} finally {
-			setIsGenerating(false);
-			setGeneratingMessageIndex(null);
 		}
 	};
 
@@ -239,69 +127,28 @@ export default function MultiTurnEditor({
 					{history.length === 0 ? (
 						<div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">
 							<p className="text-sm text-slate-600">
-								No conversation turns yet. Start by adding a user turn, then
-								alternate between user and agent turns.
+								No conversation turns yet. Start by adding a user turn.
 							</p>
 						</div>
 					) : (
-						history.map((turn, index) => (
-							<ConversationTurnComponent
-								// Use a composite key instead of the raw array index
-								key={`${turn.role}-${index}`}
-								turn={turn}
-								index={index}
-								isLast={index === history.length - 1}
-								onUpdate={(content) => handleUpdateTurn(index, content)}
-								onUpdateExpectedBehavior={
-									turn.role === "agent"
-										? (behaviors) =>
-												handleUpdateExpectedBehavior(index, behaviors)
-										: undefined
-								}
-								onDelete={() => handleRemoveTurn(index)}
-								onRegenerate={
-									turn.role === "agent"
-										? () => {
-												void handleRegenerate(index);
-											}
-										: undefined
-								}
-								isGenerating={isGenerating && generatingMessageIndex === index}
-								canEdit={canEdit && !readOnly}
-								referenceCount={
-									turn.role === "agent" ? referenceCounts.get(index) : undefined
-								}
-								onViewReferences={
-									turn.role === "agent"
-										? () => setViewingReferencesForTurn(index)
-										: undefined
-								}
-							/>
-						))
-					)}
-					{isGenerating && generatingMessageIndex === history.length && (
-						<ConversationTurnComponent
-							key={`pending-agent-${history.length}`}
-							turn={{ role: "agent", content: "" }}
-							index={history.length}
-							isLast
-							onUpdate={() => {}}
-							onDelete={() => {}}
-							canEdit={false}
-							isGenerating
-						/>
+						history.map((turn, idx) => {
+							const turnKey =
+								turn.turnId || turn.stepId || `${turn.role}-${String(idx)}`;
+							return (
+								<ConversationTurnComponent
+									key={turnKey}
+									turn={turn}
+									index={idx}
+									isLast={idx === history.length - 1}
+									onUpdate={(content) => handleUpdateTurn(idx, content)}
+									onDelete={() => handleRemoveTurn(idx)}
+									canEdit={canEdit && !readOnly}
+								/>
+							);
+						})
 					)}
 				</div>
 			</div>
-
-			{agentError && (
-				<div
-					className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"
-					role="alert"
-				>
-					{agentError}
-				</div>
-			)}
 
 			{/* Add turn buttons */}
 			{!readOnly && canEdit && (
@@ -309,12 +156,8 @@ export default function MultiTurnEditor({
 					<button
 						type="button"
 						onClick={handleAddUserTurn}
-						disabled={!canAddUser || isGenerating}
-						title={
-							!canAddUser
-								? "Can only add user turn after agent turn or as first turn"
-								: "Add a new user turn"
-						}
+						disabled={!canAddUser}
+						title="Add a new user turn"
 						className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-50"
 					>
 						<UserCircle className="h-4 w-4" />
@@ -323,12 +166,8 @@ export default function MultiTurnEditor({
 					<button
 						type="button"
 						onClick={handleAddAgentTurn}
-						disabled={!canAddAgent || isGenerating}
-						title={
-							!canAddAgent
-								? "Can only add agent turn after user turn"
-								: "Add a new agent turn"
-						}
+						disabled={!canAddAgent}
+						title="Add a new agent turn"
 						className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-violet-50"
 					>
 						<MessageCircle className="h-4 w-4" />
@@ -367,30 +206,6 @@ export default function MultiTurnEditor({
 						<p className="text-sm text-slate-500">No tags added yet</p>
 					)}
 				</div>
-			)}
-
-			{/* Turn References Modal */}
-			{viewingReferencesForTurn !== null && (
-				<TurnReferencesModal
-					isOpen={true}
-					onClose={() => setViewingReferencesForTurn(null)}
-					messageIndex={viewingReferencesForTurn}
-					references={references}
-					onUpdateReference={onUpdateReference}
-					onRemoveReference={onRemoveReference}
-					onOpenReference={onOpenReference}
-					readOnly={readOnly}
-					query={query}
-					setQuery={setQuery}
-					searching={searching}
-					searchResults={searchResults}
-					onRunSearch={runSearch}
-					onAddSearchResult={(ref) => {
-						if (onAddReferences) {
-							onAddReferences([ref]);
-						}
-					}}
-				/>
 			)}
 
 			{/* Ground Truth Tags Modal */}

@@ -22,10 +22,11 @@ from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFo
 
 from app.adapters.repos.base import GroundTruthRepo
 from app.domain.models import (
-    GroundTruthItem,
+    AgenticGroundTruthEntry,
     Stats,
     AssignmentDocument,
     DatasetCurationInstructions,
+    BulkImportPersistenceError,
     BulkImportResult,
     PaginationMetadata,
 )
@@ -51,12 +52,15 @@ _CONTROL_CHAR_TRANSLATION = {
     ord("\u007f"): " ",
 }
 
-# Cosmos DB SELECT clause for most GroundTruthItem fields used in several functions
+# Cosmos DB SELECT clause for AgenticGroundTruthEntry fields used in several functions
 # list_gt_paginated, _list_gt_paginated_with_emulator, list_gt_by_dataset
+# Note: legacy fields like synthQuestion, editedQuestion are still selected for compatibility
+# during migration, but the model will access them via computed properties
 SELECT_CLAUSE_C = (
     "SELECT c.id, c.datasetName, c.bucket, c.status, c.docType, c.schemaVersion, "
-    "c.curationInstructions, c.synthQuestion, c.editedQuestion, c.answer, c.refs, c.tags, c.manualTags, c.computedTags, c.comment, "
-    "c.history, "
+    "c.synthQuestion, c.editedQuestion, c.answer, c.refs, c.tags, c.manualTags, c.computedTags, c.comment, c.plugins, "
+    "c.scenarioId, c.history, c.contextEntries, c.traceIds, c.toolCalls, c.expectedTools, "
+    "c.feedback, c.metadata, c.createdBy, c.createdAt, c.tracePayload, "
     "c.contextUsedForGeneration, c.contextSource, c.modelUsedForGeneration, "
     "c.semanticClusterNumber, c.weight, c.samplingBucket, c.questionLength, "
     "c.assignedTo, c.assignedAt, c.totalReferences, c.updatedAt, c.updatedBy, c.reviewedAt, c._etag "
@@ -381,20 +385,19 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         except Exception:
             return sanitized
 
-    def _to_doc(self, item: GroundTruthItem) -> dict[str, Any]:
+    def _to_doc(self, item: AgenticGroundTruthEntry) -> dict[str, Any]:
         # Check if the doc has dataset and bucket fields, since they make the PK
         if not item.datasetName:
             self._logger.error(f"Document missing datasetName: {item!r}")
             raise ValueError("Document must have datasetName")
 
-        # The domain model's model_validator computes totalReferences automatically.
-        # Trigger it now if the item was modified after initial validation.
-        if item.totalReferences == 0:
-            # Re-validate to ensure totalReferences is computed
-            item = GroundTruthItem.model_validate(item.model_dump(by_alias=True))
-
         # Dump in JSON mode so datetimes/enums are serialized to strings
         d = item.model_dump(mode="json", by_alias=True)
+
+        # Ensure totalReferences is computed and persisted for sorting/querying
+        # Use the property getter which handles both explicit values and plugin storage
+        d["totalReferences"] = item.totalReferences
+
         if d.get("bucket") is not None:
             d["bucket"] = str(d["bucket"])  # store UUID as string
         # Ensure updatedAt present as ISO string
@@ -404,18 +407,70 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         return d
 
     @staticmethod
-    def _from_doc(doc: dict[str, Any]) -> GroundTruthItem:
+    def _from_doc(doc: dict[str, Any]) -> AgenticGroundTruthEntry:
         # Normalize doc before validation
         normalized_doc = (
             _restore_unicode_from_cosmos(doc) if settings.COSMOS_DISABLE_UNICODE_ESCAPE else doc
         )
+        from app.plugins.packs.rag_compat import _LEGACY_PLUGIN_FIELDS
+
+        allowed_keys = (
+            {field_name for field_name in AgenticGroundTruthEntry.model_fields}
+            | {
+                field.alias
+                for field in AgenticGroundTruthEntry.model_fields.values()
+                if field.alias is not None
+            }
+            | {
+                # Include computed_fields that need to be preserved from Cosmos documents
+                "totalReferences"  # Computed and persisted for sorting/querying
+            }
+            | set(_LEGACY_PLUGIN_FIELDS)
+        )
+        normalized_doc = {
+            key: value for key, value in normalized_doc.items() if key in allowed_keys
+        }
+
+        plugins = normalized_doc.get("plugins")
+        rag_plugin = plugins.get("rag-compat") if isinstance(plugins, dict) else None
+        rag_data = rag_plugin.get("data") if isinstance(rag_plugin, dict) else None
+        history_annotations = (
+            rag_data.get("historyAnnotations") if isinstance(rag_data, dict) else None
+        )
+        history = normalized_doc.get("history")
+        if isinstance(history, list) and isinstance(history_annotations, list):
+            merged_history: list[Any] = []
+            for index, entry in enumerate(history):
+                if isinstance(entry, dict):
+                    entry_dict = dict(entry)
+                    annotation = (
+                        history_annotations[index] if index < len(history_annotations) else None
+                    )
+                    if isinstance(annotation, dict):
+                        if "refs" in annotation and "refs" not in entry_dict:
+                            entry_dict["refs"] = annotation["refs"]
+                        if (
+                            "expectedBehavior" in annotation
+                            and "expectedBehavior" not in entry_dict
+                        ):
+                            entry_dict["expectedBehavior"] = annotation["expectedBehavior"]
+                    merged_history.append(entry_dict)
+                else:
+                    merged_history.append(entry)
+            normalized_doc["history"] = merged_history
 
         # Convert None to [] for history field (legacy data compatibility)
         if normalized_doc.get("history") is None:
             normalized_doc["history"] = []
 
         # Pydantic will parse aliases automatically
-        item = GroundTruthItem.model_validate(normalized_doc)
+        item = AgenticGroundTruthEntry.model_validate(normalized_doc)
+
+        # IMPORTANT: totalReferences is a @computed_field, so Pydantic won't deserialize it
+        # from the document. We need to manually set it in __dict__ so the property getter
+        # can find it. This preserves the value we computed and persisted in _to_doc.
+        if "totalReferences" in normalized_doc:
+            item.__dict__["totalReferences"] = normalized_doc["totalReferences"]
 
         return item
 
@@ -498,7 +553,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         return items
 
     async def import_bulk_gt(
-        self, items: list[GroundTruthItem], buckets: int | None = None
+        self, items: list[AgenticGroundTruthEntry], buckets: int | None = None
     ) -> BulkImportResult:
         await self._ensure_initialized()
         # Assign UUID buckets per dataset for items missing bucket
@@ -525,7 +580,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         assert gt is not None
         success = 0
         errors: list[str] = []
-        for it in items:
+        persistence_errors: list[BulkImportPersistenceError] = []
+        for persistence_index, it in enumerate(items):
             doc = self._to_doc(it)
 
             # Apply UTF-8 fix when using Cosmos emulator
@@ -544,8 +600,14 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                         if doc.get("refs")
                         else "unknown"
                     )
-                    errors.append(
-                        f"exists (article: {article_num}, id: {doc.get('id', 'unknown')})"
+                    message = f"exists (article: {article_num}, id: {doc.get('id', 'unknown')})"
+                    errors.append(message)
+                    persistence_errors.append(
+                        BulkImportPersistenceError(
+                            message=message,
+                            item_id=doc.get("id", "unknown"),
+                            persistence_index=persistence_index,
+                        )
                     )
                 else:
                     article_num = (
@@ -553,23 +615,37 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                         if doc.get("refs")
                         else "unknown"
                     )
-                    errors.append(
-                        f"create_failed (article: {article_num}, id: {doc.get('id', 'unknown')}): {getattr(e, 'message', str(e))}"
+                    message = (
+                        f"create_failed (article: {article_num}, id: {doc.get('id', 'unknown')}): "
+                        f"{getattr(e, 'message', str(e))}"
                     )
-        return BulkImportResult(imported=success, errors=errors)
+                    errors.append(message)
+                    persistence_errors.append(
+                        BulkImportPersistenceError(
+                            message=message,
+                            item_id=doc.get("id", "unknown"),
+                            persistence_index=persistence_index,
+                        )
+                    )
+        return BulkImportResult(
+            imported=success,
+            errors=errors,
+            persistence_errors=persistence_errors,
+        )
 
     async def list_all_gt(
         self, status: Optional[GroundTruthStatus] = None
-    ) -> list[GroundTruthItem]:
+    ) -> list[AgenticGroundTruthEntry]:
         await self._ensure_initialized()
-        # Cross-partition scan for all GT items; filter by status if provided
-        status_filter = ""
+        # Cross-partition scan for all GT items; exclude non-ground-truth documents (e.g. curation-instructions)
+        clauses: list[str] = ["c.docType = 'ground-truth-item'"]
         params: list[dict[str, Any]] = []
         if status is not None:
-            status_filter = " WHERE c.status = @status"
+            clauses.append("c.status = @status")
             params.append({"name": "@status", "value": status.value})
-        query = f"SELECT * FROM c{status_filter}"
-        items: list[GroundTruthItem] = []
+        where = " WHERE " + " AND ".join(clauses)
+        query = f"SELECT * FROM c{where}"
+        items: list[AgenticGroundTruthEntry] = []
         gt = self._gt_container
         assert gt is not None
         it = gt.query_items(query=query, parameters=params, enable_scan_in_query=True)  # type: ignore
@@ -671,7 +747,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         return field, direction
 
     @staticmethod
-    def _sort_key(item: GroundTruthItem, field: SortField) -> tuple[Any, ...]:
+    def _sort_key(item: AgenticGroundTruthEntry, field: SortField) -> tuple[Any, ...]:
         if field == SortField.id:
             return (item.id or "",)
 
@@ -709,7 +785,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         return "localhost" in self._endpoint or "127.0.0.1" in self._endpoint
 
     @staticmethod
-    def _item_matches_keyword(item: GroundTruthItem, keyword: str) -> bool:
+    def _item_matches_keyword(item: AgenticGroundTruthEntry, keyword: str) -> bool:
         """Check if item matches keyword search (case-insensitive substring match).
 
         Searches across:
@@ -790,7 +866,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         sort_order: SortOrder | None = None,
         page: int = 1,
         limit: int = 25,
-    ) -> tuple[list[GroundTruthItem], PaginationMetadata]:
+    ) -> tuple[list[AgenticGroundTruthEntry], PaginationMetadata]:
         await self._ensure_initialized()
 
         safe_limit = max(settings.PAGINATION_MIN_LIMIT, min(limit, settings.PAGINATION_MAX_LIMIT))
@@ -882,7 +958,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             enable_scan_in_query=True,
         )
 
-        items = [self._from_doc(doc) for doc in docs]
+        items: list[AgenticGroundTruthEntry] = [self._from_doc(doc) for doc in docs]
 
         # Get total count for pagination metadata
         total = await self._get_filtered_count(status, dataset, normalized_tags, item_id)
@@ -912,7 +988,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         sort_order: SortOrder | None,
         page: int,
         limit: int,
-    ) -> tuple[list[GroundTruthItem], PaginationMetadata]:
+    ) -> tuple[list[AgenticGroundTruthEntry], PaginationMetadata]:
         """Handle pagination for queries with tag and url_ref filters (requires in-memory filtering).
 
         Note: Due to Cosmos DB limitations with ARRAY_CONTAINS + ORDER BY, tag filtering
@@ -947,7 +1023,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         # Memory safeguard: limit maximum items to fetch to prevent DoS
         MAX_ITEMS_TO_FETCH = settings.PAGINATION_TAG_FETCH_MAX
 
-        raw_items: list[GroundTruthItem] = []
+        raw_items: list[AgenticGroundTruthEntry] = []
         it = gt.query_items(  # type: ignore
             query=query,
             parameters=filter_params,
@@ -978,7 +1054,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             "Filtering tags and ref_url in-memory due to Cosmos DB emulator limitations"
         )
         if tags:
-            filtered_items_tag: list[GroundTruthItem] = []
+            filtered_items_tag: list[AgenticGroundTruthEntry] = []
             tags_set = set(tags)
             for item in raw_items:
                 if item.tags and tags_set.issubset(set(item.tags)):
@@ -987,7 +1063,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
         # Filter excluded tags in-memory (items with ANY excluded tag are filtered out)
         if exclude_tags:
-            filtered_items_exclude: list[GroundTruthItem] = []
+            filtered_items_exclude: list[AgenticGroundTruthEntry] = []
             exclude_tags_set = set(exclude_tags)
             for item in raw_items:
                 # Keep item only if it has NO tags from the exclude list
@@ -998,7 +1074,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         # Filter by ref_url in-memory (EXISTS not supported by Cosmos DB emulator)
         if ref_url:
             start = time.time()
-            filtered_items_ref: list[GroundTruthItem] = []
+            filtered_items_ref: list[AgenticGroundTruthEntry] = []
             total_refs_checked = 0
 
             for item in raw_items:
@@ -1009,9 +1085,10 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 # Check history-level refs if no match yet
                 if not has_match and item.history:
                     for turn in item.history:
-                        if turn.refs:
-                            total_refs_checked += len(turn.refs)
-                            if any(ref_url in ref.url for ref in turn.refs):
+                        turn_refs = getattr(turn, "refs", None)
+                        if turn_refs:
+                            total_refs_checked += len(turn_refs)
+                            if any(ref_url in ref.url for ref in turn_refs):
                                 has_match = True
                                 break
                 if has_match:
@@ -1031,7 +1108,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         # Filter by keyword in-memory (case-insensitive substring match)
         if keyword:
             start = time.time()
-            filtered_items_keyword: list[GroundTruthItem] = []
+            filtered_items_keyword: list[AgenticGroundTruthEntry] = []
 
             for item in raw_items:
                 if self._item_matches_keyword(item, keyword):
@@ -1184,7 +1261,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
     async def list_gt_by_dataset(
         self, dataset: str, status: Optional[GroundTruthStatus] = None
-    ) -> list[GroundTruthItem]:
+    ) -> list[AgenticGroundTruthEntry]:
         await self._ensure_initialized()
         # Query across all buckets for this dataset by filtering datasetName
         status_filter = ""
@@ -1198,7 +1275,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             "FROM c WHERE c.datasetName = @ds AND (NOT IS_DEFINED(c.docType) OR c.docType != 'curation-instructions')"
             + status_filter
         )
-        items: list[GroundTruthItem] = []
+        items: list[AgenticGroundTruthEntry] = []
         gt = self._gt_container
         assert gt is not None
         it = gt.query_items(query=query, parameters=params, enable_scan_in_query=True)  # type: ignore
@@ -1207,7 +1284,9 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
         return items
 
-    async def get_gt(self, dataset: str, bucket: UUID, item_id: str) -> GroundTruthItem | None:
+    async def get_gt(
+        self, dataset: str, bucket: UUID, item_id: str
+    ) -> AgenticGroundTruthEntry | None:
         await self._ensure_initialized()
         # dataset and bucket comprise the hierarchical partition key
         try:
@@ -1290,7 +1369,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 raise ValueError("etag_mismatch")
             raise
 
-    async def upsert_gt(self, item: GroundTruthItem) -> GroundTruthItem:
+    async def upsert_gt(self, item: AgenticGroundTruthEntry) -> AgenticGroundTruthEntry:
         await self._ensure_initialized()
 
         doc = self._to_doc(item)
@@ -1550,7 +1629,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             names.append(name)
         return names
 
-    async def list_unassigned(self, limit: int) -> list[GroundTruthItem]:
+    async def list_unassigned(self, limit: int) -> list[AgenticGroundTruthEntry]:
         await self._ensure_initialized()
         if limit <= 0:
             return []
@@ -1570,7 +1649,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             enable_scan_in_query=True,
             max_item_count=min(limit, 200),
         )
-        res: list[GroundTruthItem] = []
+        res: list[AgenticGroundTruthEntry] = []
         async for doc in it:  # type: ignore
             res.append(self._from_doc(doc))
             if len(res) >= limit:
@@ -1584,7 +1663,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
     # we need to add these newly assigned docs into the assignments container with the relevant subset of fields and a link back to the ground truth item.
     async def sample_unassigned(
         self, user_id: str, limit: int, exclude_ids: list[str] | None = None
-    ) -> list[GroundTruthItem]:
+    ) -> list[AgenticGroundTruthEntry]:
         await self._ensure_initialized()
         if limit <= 0:
             self._logger.warning(
@@ -1601,7 +1680,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 "exclude_count": len(exclude_ids) if exclude_ids else 0,
             },
         )
-        results: list[GroundTruthItem] = await self.list_assigned(user_id)
+        results: list[AgenticGroundTruthEntry] = await self.list_assigned(user_id)
         seen_ids: set[str] = {it.id for it in results}
         # Add caller-provided excludes
         if exclude_ids:
@@ -1659,7 +1738,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         )
 
         # 4) Query each dataset up to its quota (single pass)
-        per_dataset_results: dict[str, list[GroundTruthItem]] = {}
+        per_dataset_results: dict[str, list[AgenticGroundTruthEntry]] = {}
         for ds, q in quotas.items():
             if q <= 0:
                 self._logger.debug(
@@ -1744,7 +1823,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
     async def query_unassigned_by_dataset_prefix(
         self, dataset_prefix: str, user_id: str, take: int, exclude_ids: list[str] | None = None
-    ) -> list[GroundTruthItem]:
+    ) -> list[AgenticGroundTruthEntry]:
         if take <= 0:
             return []
         await self._ensure_initialized()
@@ -1788,7 +1867,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             enable_scan_in_query=True,
             max_item_count=min(take, 200),
         )
-        res: list[GroundTruthItem] = []
+        res: list[AgenticGroundTruthEntry] = []
         async for doc in it:  # type: ignore
             res.append(self._from_doc(doc))
             if len(res) >= take:
@@ -1805,7 +1884,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
     async def query_unassigned_global(
         self, user_id: str, take: int, exclude_ids: list[str] | None = None
-    ) -> list[GroundTruthItem]:
+    ) -> list[AgenticGroundTruthEntry]:
         if take <= 0:
             return []
         await self._ensure_initialized()
@@ -1843,7 +1922,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             enable_scan_in_query=True,
             max_item_count=min(take, 200),
         )
-        res: list[GroundTruthItem] = []
+        res: list[AgenticGroundTruthEntry] = []
         async for doc in it:  # type: ignore
             res.append(self._from_doc(doc))
             if len(res) >= take:
@@ -2189,7 +2268,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             )
             return False
 
-    async def list_assigned(self, user_id: str) -> list[GroundTruthItem]:
+    async def list_assigned(self, user_id: str) -> list[AgenticGroundTruthEntry]:
         await self._ensure_initialized()
         query = "SELECT * FROM c WHERE c.assignedTo = @u AND c.status = 'draft'"
         gt = self._gt_container
@@ -2199,14 +2278,16 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             parameters=[{"name": "@u", "value": user_id}],
             enable_scan_in_query=True,
         )  # type: ignore
-        items: list[GroundTruthItem] = []
+        items: list[AgenticGroundTruthEntry] = []
         async for doc in it:  # type: ignore
             items.append(self._from_doc(doc))
         self._logger.debug("repo.list_assigned", extra={"count": len(items)})
         return items
 
     # Assignment documents APIs (assignments container)
-    async def upsert_assignment_doc(self, user_id: str, gt: GroundTruthItem) -> AssignmentDocument:
+    async def upsert_assignment_doc(
+        self, user_id: str, gt: AgenticGroundTruthEntry
+    ) -> AssignmentDocument:
         await self._ensure_initialized()
         doc_id = f"{gt.datasetName}|{str(gt.bucket)}|{gt.id}"
         ad = AssignmentDocument(

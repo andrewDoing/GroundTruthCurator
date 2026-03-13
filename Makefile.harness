@@ -1,0 +1,85 @@
+.PHONY: setup backend frontend dev dev-up dev-up-demo dev-down format smoke api-check test backend-integration-test lint typecheck check ci deploy verify observe
+
+setup:
+	@./scripts/harness/setup.sh
+
+backend:
+	@cd backend && uv run uvicorn app.main:app --reload
+
+frontend:
+	@cd frontend && npm run dev
+
+dev:
+	@backend_pid=''; frontend_pid=''; \
+	trap 'status=$$?; if [ -n "$$backend_pid" ]; then kill $$backend_pid 2>/dev/null || true; fi; if [ -n "$$frontend_pid" ]; then kill $$frontend_pid 2>/dev/null || true; fi; exit $$status' INT TERM EXIT; \
+	( cd backend && uv run uvicorn app.main:app --reload ) & backend_pid=$$!; \
+	( cd frontend && npm run dev ) & frontend_pid=$$!; \
+	while kill -0 $$backend_pid 2>/dev/null && kill -0 $$frontend_pid 2>/dev/null; do \
+		sleep 1; \
+	done; \
+	status=0; \
+	if ! kill -0 $$backend_pid 2>/dev/null; then \
+		wait $$backend_pid || status=$$?; \
+	fi; \
+	if ! kill -0 $$frontend_pid 2>/dev/null; then \
+		wait $$frontend_pid || status=$$?; \
+	fi; \
+	trap - INT TERM EXIT; \
+	kill $$backend_pid $$frontend_pid 2>/dev/null || true; \
+	wait $$backend_pid $$frontend_pid 2>/dev/null || true; \
+	exit $$status
+
+dev-up:
+	@./scripts/harness/dev_up.sh
+
+dev-up-demo:
+	@GTC_REPO_BACKEND=memory GTC_DEMO_MODE=true GTC_DEMO_USER_ID=demo-user VITE_DEMO_MODE=true VITE_DEV_USER_ID=demo-user ./scripts/harness/dev_up.sh
+
+dev-down:
+	@./scripts/harness/dev_down.sh
+
+format:
+	@./scripts/harness/format.sh
+
+smoke:
+	@./scripts/harness/smoke.sh
+
+api-check:
+	@./scripts/harness/api_check.sh
+
+test:
+	@./scripts/harness/test.sh
+
+backend-integration-test:
+	@./scripts/harness/backend_integration_test.sh
+
+lint:
+	@./scripts/harness/lint.sh
+
+typecheck:
+	@./scripts/harness/typecheck.sh
+
+check: lint typecheck
+
+ci: smoke check api-check test
+
+deploy:
+	@./scripts/harness/deploy_backend.sh
+
+# Agent verify loop: run checks + inspect runtime telemetry
+verify: ci
+	@echo "--- Runtime Errors ---"
+	@jq 'select(.level == "ERROR")' .harness/logs.jsonl 2>/dev/null | tail -5 || true
+	@echo "--- Slow Requests (>1s) ---"
+	@jq 'select(.duration_ms > 1000)' .harness/traces.jsonl 2>/dev/null | tail -5 || true
+
+# Quick observability check (no test run)
+observe:
+	@echo "=== Errors ==="
+	@jq -s 'map(select(.level == "ERROR")) | length' .harness/logs.jsonl 2>/dev/null || echo "0"
+	@echo "=== Slow (>500ms) ==="
+	@jq -s 'map(select(.duration_ms > 500)) | length' .harness/traces.jsonl 2>/dev/null || echo "0"
+	@echo "=== Log Lines ==="
+	@wc -l .harness/logs.jsonl 2>/dev/null | awk '{print $$1}' || echo "0"
+	@echo "=== Trace Lines ==="
+	@wc -l .harness/traces.jsonl 2>/dev/null | awk '{print $$1}' || echo "0"

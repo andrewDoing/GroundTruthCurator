@@ -1,15 +1,20 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import StatsPage from "../../../../../src/components/app/pages/StatsPage";
 import type { StatsPayload } from "../../../../../src/components/app/StatsView";
+import * as demoConfig from "../../../../../src/config/demo";
 import type { GroundTruthItem } from "../../../../../src/models/groundTruth";
 import * as statsSvc from "../../../../../src/services/stats";
 
 vi.mock("../../../../../src/services/stats");
+vi.mock("../../../../../src/config/demo", () => ({
+	shouldUseDemoProvider: vi.fn(() => false),
+}));
 
 describe("StatsPage", () => {
 	const items: GroundTruthItem[] = [] as GroundTruthItem[];
 
 	it("renders happy path stats", async () => {
+		vi.mocked(demoConfig.shouldUseDemoProvider).mockReturnValue(false);
 		(
 			statsSvc.getGroundTruthStats as unknown as {
 				mockResolvedValue: (v: StatsPayload) => void;
@@ -37,6 +42,7 @@ describe("StatsPage", () => {
 	});
 
 	it("falls back to zero on error", async () => {
+		vi.mocked(demoConfig.shouldUseDemoProvider).mockReturnValue(false);
 		(
 			statsSvc.getGroundTruthStats as unknown as {
 				mockRejectedValue: (e: unknown) => void;
@@ -51,6 +57,7 @@ describe("StatsPage", () => {
 	});
 
 	it("uses mock service when demoMode", async () => {
+		vi.mocked(demoConfig.shouldUseDemoProvider).mockReturnValue(true);
 		(
 			statsSvc.mockGetGroundTruthStats as unknown as {
 				mockResolvedValue: (v: StatsPayload) => void;
@@ -68,6 +75,7 @@ describe("StatsPage", () => {
 	});
 
 	it("calls onBack when Back clicked", async () => {
+		vi.mocked(demoConfig.shouldUseDemoProvider).mockReturnValue(true);
 		(
 			statsSvc.mockGetGroundTruthStats as unknown as {
 				mockResolvedValue: (v: StatsPayload) => void;
@@ -83,5 +91,23 @@ describe("StatsPage", () => {
 		await waitFor(() => screen.getByRole("button", { name: /Back/i }));
 		fireEvent.click(screen.getByRole("button", { name: /Back/i }));
 		expect(onBack).toHaveBeenCalled();
+	});
+
+	it("uses backend stats in API-backed demo mode", async () => {
+		vi.mocked(demoConfig.shouldUseDemoProvider).mockReturnValue(false);
+		(
+			statsSvc.getGroundTruthStats as unknown as {
+				mockResolvedValue: (v: StatsPayload) => void;
+			}
+		).mockResolvedValue({
+			total: { approved: 4, draft: 1, deleted: 0 },
+			perSprint: [],
+		});
+
+		render(<StatsPage demoMode items={items} onBack={vi.fn()} />);
+
+		await waitFor(() =>
+			expect(statsSvc.getGroundTruthStats).toHaveBeenCalled(),
+		);
 	});
 });

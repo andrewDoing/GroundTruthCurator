@@ -1,22 +1,22 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import AppHeader from "./components/app/AppHeader";
 import InstructionsPane from "./components/app/InstructionsPane";
+import EvidenceDrawer from "./components/app/layout/EvidenceDrawer";
+import SplitPaneLayout from "./components/app/layout/SplitPaneLayout";
 import CuratePane from "./components/app/pages/CuratePane";
 import ReferencesSection from "./components/app/pages/ReferencesSection";
-import StatsPage from "./components/app/pages/StatsPage";
 import type { QuestionsExplorerItem } from "./components/app/QuestionsExplorer";
-import QuestionsExplorer from "./components/app/QuestionsExplorer";
 import QueueSidebar from "./components/app/QueueSidebar";
 import Toasts from "./components/common/Toasts";
-import InspectItemModal from "./components/modals/InspectItemModal";
-import TagGlossaryModal from "./components/modals/TagGlossaryModal";
 import DEMO_MODE from "./config/demo";
 import { runSelfTests } from "./dev/self-tests";
 import useGlobalHotkeys from "./hooks/useGlobalHotkeys";
 import useGroundTruth from "./hooks/useGroundTruth";
+import { invalidateGroundTruthCache } from "./hooks/useGroundTruthCache";
 import { useToasts } from "./hooks/useToasts";
 import type { Reference } from "./models/groundTruth";
-import { cn, normalizeUrl } from "./models/utils";
+import { getItemReferences } from "./models/groundTruth";
+import { normalizeUrl } from "./models/utils";
 import {
 	assignItem,
 	requestAssignmentsSelfServe,
@@ -30,6 +30,105 @@ import { getCachedConfig, getRuntimeConfig } from "./services/runtimeConfig";
 import { fetchTagSchema } from "./services/tags";
 import { validateReferenceUrl } from "./utils/urlValidation";
 
+const DESKTOP_CURATE_QUERY = "(min-width: 1024px)";
+
+const StatsPage = lazy(() => import("./components/app/pages/StatsPage"));
+const QuestionsExplorer = lazy(
+	() => import("./components/app/QuestionsExplorer"),
+);
+const InspectItemModal = lazy(
+	() => import("./components/modals/InspectItemModal"),
+);
+const TagGlossaryModal = lazy(
+	() => import("./components/modals/TagGlossaryModal"),
+);
+
+function PageFallback({ label }: { label: string }) {
+	return (
+		<section className="flex flex-1 items-center justify-center rounded-2xl border bg-white p-4 text-sm text-slate-600 shadow-sm min-h-0 min-w-0">
+			{label}
+		</section>
+	);
+}
+
+function PanelFallback({ label }: { label: string }) {
+	return (
+		<div className="flex flex-1 items-center justify-center rounded-2xl border bg-white p-4 text-sm text-slate-600 shadow-sm min-h-0 min-w-0">
+			{label}
+		</div>
+	);
+}
+
+function ModalFallback({ label }: { label: string }) {
+	return (
+		<div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+			<div className="w-full max-w-md rounded-2xl border bg-white p-6 text-sm text-slate-600 shadow-xl">
+				{label}
+			</div>
+		</div>
+	);
+}
+
+function getMediaQueryMatch(query: string) {
+	if (typeof window === "undefined") {
+		return false;
+	}
+
+	return window.matchMedia(query).matches;
+}
+
+function useMediaQuery(query: string) {
+	const [matches, setMatches] = useState(() => getMediaQueryMatch(query));
+
+	useEffect(() => {
+		if (typeof window === "undefined") {
+			return;
+		}
+
+		const mediaQueryList = window.matchMedia(query);
+		const handleChange = () => {
+			setMatches(mediaQueryList.matches);
+		};
+
+		handleChange();
+		mediaQueryList.addEventListener("change", handleChange);
+
+		return () => {
+			mediaQueryList.removeEventListener("change", handleChange);
+		};
+	}, [query]);
+
+	return matches;
+}
+
+export function invalidateInspectCacheForExplorerItem(
+	item: Pick<QuestionsExplorerItem, "datasetName" | "bucket" | "id">,
+) {
+	if (item.datasetName && item.bucket && item.id) {
+		invalidateGroundTruthCache(item.datasetName, item.bucket, item.id);
+	}
+}
+
+export async function resolveExplorerAssignSelection(
+	itemId: string,
+	selectItem: (itemId: string) => Promise<boolean>,
+) {
+	const selected = await selectItem(itemId);
+	if (!selected) {
+		return {
+			switchToCurate: false,
+			toastKind: "info" as const,
+			toastMessage: `Assigned ${itemId}, but opening it in curate was cancelled or failed.`,
+		};
+	}
+
+	return {
+		switchToCurate: true,
+		toastKind: "success" as const,
+		toastMessage: `Assigned ${itemId} for curation`,
+	};
+}
+
 export default function GTAppDemo() {
 	const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
 	const [inspectItem, setInspectItem] = useState<QuestionsExplorerItem | null>(
@@ -41,15 +140,17 @@ export default function GTAppDemo() {
 		"curate",
 	);
 	const [selfServeBusy, setSelfServeBusy] = useState(false);
-	// Track the current editor mode (single-turn or multi-turn)
-	const [editorMode, setEditorMode] = useState<"single" | "multi">("single");
+	const [drawerOpen, setDrawerOpen] = useState(false);
+	const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+	const isDesktop = useMediaQuery(DESKTOP_CURATE_QUERY);
 
 	// Feature hook
 	const gt = useGroundTruth();
 
-	// Initialize runtime config on app startup
+	// Warm the runtime-config store on app startup. The service load is cached and
+	// idempotent, so this stays safe under StrictMode re-renders.
 	useEffect(() => {
-		getRuntimeConfig().catch((err) => {
+		void getRuntimeConfig().catch((err) => {
 			console.warn("Failed to load runtime config:", err);
 		});
 	}, []);
@@ -90,14 +191,6 @@ export default function GTAppDemo() {
 		if (!w) {
 			toast("info", "Popup blocked. Allow popups or click again.");
 		}
-	}
-
-	async function onGenerateAgentTurn(messageIndex: number) {
-		const result = await gt.generateAgentTurn(messageIndex);
-		if (!result.ok) {
-			toast("error", result.error);
-		}
-		return result;
 	}
 
 	async function onSave(nextStatus?: "draft" | "approved") {
@@ -149,6 +242,92 @@ export default function GTAppDemo() {
 		}
 	}
 
+	useEffect(() => {
+		if (isDesktop) {
+			closeDrawer();
+		}
+	}, [isDesktop, closeDrawer]);
+
+	const isMultiTurn = Boolean(gt.current?.history?.length);
+	const references = gt.current ? getItemReferences(gt.current) : [];
+
+	async function onDuplicate() {
+		const res = await gt.duplicateCurrent();
+		if (res.ok) {
+			toast("success", `Created rephrase ${res.created.id} and opened it.`);
+		} else {
+			toast("error", res.error || "Duplicate failed");
+		}
+	}
+
+	async function onSkip() {
+		if (!gt.current) return;
+		const res = await gt.save("skipped");
+		if (!res.ok) return;
+
+		const index = gt.items.findIndex((item) => item.id === res.saved.id);
+		const nextItem =
+			index >= 0 && index < gt.items.length - 1
+				? gt.items[index + 1]
+				: gt.items[0];
+		if (nextItem) {
+			void gt.selectItem(nextItem.id, { force: true });
+		}
+	}
+
+	function onAddRefs(refs: Reference[]) {
+		gt.addReferences(refs);
+		toast("success", `Added ${refs.length} reference(s)`);
+	}
+
+	function onRemoveReference(refId: string) {
+		gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
+			toast("info", "Reference removed.", {
+				duration: timeoutMs,
+				actionLabel: "Undo",
+				onAction: undo,
+			});
+		});
+	}
+
+	const curatePane = (
+		<CuratePane
+			className={isDesktop ? "h-full overflow-y-auto" : "min-h-0"}
+			current={gt.current}
+			canApprove={gt.canApprove}
+			saving={gt.saving}
+			onUpdateComment={(v) => gt.updateComment(v)}
+			onUpdateTags={(tags) => gt.updateTags(tags)}
+			onUpdateHistory={(history) => gt.updateHistory(history)}
+			onDeleteTurn={(messageIndex) => gt.deleteTurn(messageIndex)}
+			onSaveDraft={() => onSave("draft")}
+			onApprove={() => onSave("approved")}
+			onDuplicate={onDuplicate}
+			onSkip={onSkip}
+			onDelete={() => toggleDeletedFlag(true)}
+			onRestore={() => toggleDeletedFlag(false)}
+		/>
+	);
+
+	const referencesPane = (
+		<ReferencesSection
+			item={gt.current}
+			query={gt.query}
+			setQuery={gt.setQuery}
+			searching={gt.searching}
+			searchResults={gt.searchResults}
+			onRunSearch={gt.runSearch}
+			onAddRefs={onAddRefs}
+			references={references}
+			onUpdateReference={(id, partial) => gt.updateReference(id, partial)}
+			onRemoveReference={onRemoveReference}
+			onOpenReference={onOpenRef}
+			isMultiTurn={isMultiTurn}
+			onUpdateContextEntries={gt.updateContextEntries}
+			onUpdateExpectedTools={gt.updateExpectedTools}
+		/>
+	);
+
 	return (
 		<div className="flex h-screen w-screen flex-col overflow-hidden bg-gradient-to-b from-violet-50 via-white to-white text-slate-900">
 			{/* Top accent bar */}
@@ -175,11 +354,13 @@ export default function GTAppDemo() {
 
 			<main className="mx-auto flex w-full max-w-none flex-1 flex-col gap-4 p-4 min-h-0">
 				{viewMode === "stats" && (
-					<StatsPage
-						demoMode={DEMO_MODE}
-						items={gt.items}
-						onBack={() => setViewMode("curate")}
-					/>
+					<Suspense fallback={<PageFallback label="Loading stats…" />}>
+						<StatsPage
+							demoMode={DEMO_MODE}
+							items={gt.items}
+							onBack={() => setViewMode("curate")}
+						/>
+					</Suspense>
 				)}
 
 				{viewMode === "questions" && (
@@ -190,98 +371,112 @@ export default function GTAppDemo() {
 							markdown={`\n### Reviewing Questions\n\n- Scan for duplicates, out-of-scope, or low-quality questions.\n- Use Delete to soft-delete; you can restore later.\n- Open an item to curate details.\n`}
 						/>
 						<div className="flex flex-1 min-h-0 min-w-0">
-							<QuestionsExplorer
-								onAssign={async (item) => {
-									try {
-										// Validate the item has required information
-										if (!item.datasetName || !item.bucket) {
+							<Suspense fallback={<PanelFallback label="Loading questions…" />}>
+								<QuestionsExplorer
+									onAssign={async (item) => {
+										try {
+											// Validate the item has required information
+											if (!item.datasetName || !item.bucket) {
+												toast(
+													"error",
+													"Item missing dataset or bucket information",
+												);
+												return;
+											}
+
+											// Call the assign endpoint
+											await assignItem(item.datasetName, item.bucket, item.id);
+
+											// Refresh the list to get the updated item
+											await gt.refreshList();
+
+											const selectionResult =
+												await resolveExplorerAssignSelection(
+													item.id,
+													(selectedItemId) => gt.selectItem(selectedItemId),
+												);
+											if (selectionResult.switchToCurate) {
+												setViewMode("curate");
+											}
 											toast(
-												"error",
-												"Item missing dataset or bucket information",
+												selectionResult.toastKind,
+												selectionResult.toastMessage,
 											);
-											return;
+										} catch (error) {
+											const message =
+												error instanceof Error
+													? error.message
+													: "Failed to assign item";
+											toast("error", message);
 										}
+									}}
+									onInspect={(item) => {
+										// Show the item in the inspect modal
+										setInspectItem(item);
+									}}
+									onDelete={async (item) => {
+										try {
+											const isDeleted =
+												item.deleted || item.status === "deleted";
 
-										// Call the assign endpoint
-										await assignItem(item.datasetName, item.bucket, item.id);
+											// Validate required metadata
+											if (!item.datasetName) {
+												throw new Error(
+													`Item ${item.id} is missing datasetName metadata`,
+												);
+											}
+											if (!item.bucket) {
+												throw new Error(
+													`Item ${item.id} is missing bucket metadata`,
+												);
+											}
 
-										// Refresh the list to get the updated item
-										await gt.refreshList();
-
-										// Set the item as selected and switch to curate mode
-										await gt.selectItem(item.id);
-										setViewMode("curate");
-
-										toast("success", `Assigned ${item.id} for curation`);
-									} catch (error) {
-										const message =
-											error instanceof Error
-												? error.message
-												: "Failed to assign item";
-										toast("error", message);
-									}
-								}}
-								onInspect={(item) => {
-									// Show the item in the inspect modal
-									setInspectItem(item);
-								}}
-								onDelete={async (item) => {
-									try {
-										const isDeleted = item.deleted || item.status === "deleted";
-
-										// Validate required metadata
-										if (!item.datasetName) {
-											throw new Error(
-												`Item ${item.id} is missing datasetName metadata`,
-											);
+											if (isDeleted) {
+												// Restore: call the backend API directly
+												const itemWithEtag = item as typeof item & {
+													_etag?: string;
+												};
+												await restoreGroundTruth(
+													item.datasetName,
+													item.bucket,
+													item.id,
+													itemWithEtag._etag,
+												);
+												toast(
+													"success",
+													`Restored ${item.id} to draft status.`,
+												);
+											} else {
+												// Delete: use DELETE endpoint directly
+												await deleteGroundTruth(
+													item.datasetName,
+													item.bucket,
+													item.id,
+												);
+												toast("info", `Marked ${item.id} as deleted.`);
+											}
+											invalidateInspectCacheForExplorerItem(item);
+											await gt.refreshList();
+										} catch (error) {
+											const message =
+												error instanceof Error
+													? error.message
+													: "Failed to update item";
+											toast("error", message);
 										}
-										if (!item.bucket) {
-											throw new Error(
-												`Item ${item.id} is missing bucket metadata`,
-											);
-										}
-
-										if (isDeleted) {
-											// Restore: call the backend API directly
-											const itemWithEtag = item as typeof item & {
-												_etag?: string;
-											};
-											await restoreGroundTruth(
-												item.datasetName,
-												item.bucket,
-												item.id,
-												itemWithEtag._etag,
-											);
-											toast("success", `Restored ${item.id} to draft status.`);
-										} else {
-											// Delete: use DELETE endpoint directly
-											await deleteGroundTruth(
-												item.datasetName,
-												item.bucket,
-												item.id,
-											);
-											toast("info", `Marked ${item.id} as deleted.`);
-										}
-										await gt.refreshList();
-									} catch (error) {
-										const message =
-											error instanceof Error
-												? error.message
-												: "Failed to update item";
-										toast("error", message);
-									}
-								}}
-							/>
+									}}
+								/>
+							</Suspense>
 						</div>
 					</section>
 				)}
 
 				{viewMode === "curate" && (
-					<div className="grid grid-cols-1 md:grid-cols-12 gap-4 flex-1 min-h-0">
+					<div className="flex flex-1 gap-4 min-h-0">
 						{/* Left: Queue */}
 						{sidebarOpen && (
 							<QueueSidebar
-								className="hidden md:block col-span-1 md:col-span-4 lg:col-span-3"
+								className="hidden md:block flex-none w-64 lg:w-72"
 								items={gt.items}
 								selectedId={gt.selectedId}
 								onSelect={(id) => {
@@ -324,130 +519,56 @@ export default function GTAppDemo() {
 							/>
 						)}
 
-						{/* Center: Editor */}
-						<CuratePane
-							className={cn(
-								"col-span-1", // Mobile: full width
-								// In multi-turn mode (no references sidebar), take full remaining width
-								editorMode === "multi"
-									? sidebarOpen
-										? "md:col-span-8 lg:col-span-9"
-										: "md:col-span-12"
-									: sidebarOpen
-										? "md:col-span-8 lg:col-span-5"
-										: "md:col-span-12 lg:col-span-7",
-							)}
-							current={gt.current}
-							canApprove={gt.canApprove}
-							saving={gt.saving}
-							onUpdateQuestion={(v) => gt.updateQuestion(v)}
-							onUpdateAnswer={(v) => gt.updateAnswer(v)}
-							onUpdateComment={(v) => gt.updateComment(v)}
-							onUpdateTags={(tags) => gt.updateTags(tags)}
-							onUpdateHistory={(history) => gt.updateHistory(history)}
-							onDeleteTurn={(messageIndex) => gt.deleteTurn(messageIndex)}
-							onGenerateAgentTurn={onGenerateAgentTurn}
-							onEditorModeChange={setEditorMode}
-							onSaveDraft={() => onSave("draft")}
-							onApprove={() => onSave("approved")}
-							onUpdateReference={(refId, partial) =>
-								gt.updateReference(refId, partial)
-							}
-							onRemoveReference={(refId) => {
-								// In multi-turn mode, the modal shows its own toasts
-								gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
-									if (editorMode === "single") {
-										toast("info", "Reference removed.", {
-											duration: timeoutMs,
-											actionLabel: "Undo",
-											onAction: undo,
-										});
-									}
-								});
-							}}
-							onOpenReference={onOpenRef}
-							onAddReferences={(refs) => {
-								gt.addReferences(refs);
-								// Toast is shown in the modal for multi-turn context
-							}}
-							onDuplicate={async () => {
-								const res = await gt.duplicateCurrent();
-								if (res.ok) {
-									toast(
-										"success",
-										`Created rephrase ${res.created.id} and opened it.`,
-									);
-								} else {
-									toast("error", res.error || "Duplicate failed");
-								}
-							}}
-							onSkip={async () => {
-								if (!gt.current) return;
-								const r = await gt.save("skipped");
-								if (!r.ok) return;
-								const idx = gt.items.findIndex((i) => i.id === r.saved.id);
-								const next =
-									idx >= 0 && idx < gt.items.length - 1
-										? gt.items[idx + 1]
-										: gt.items[0];
-								if (next) void gt.selectItem(next.id, { force: true });
-							}}
-							onDelete={() => toggleDeletedFlag(true)}
-							onRestore={() => toggleDeletedFlag(false)}
-						/>
-
-						{/* Right: References (Tabbed) - Only show in single-turn mode */}
-						{editorMode === "single" && (
-							<div
-								className={cn(
-									"hidden lg:block col-span-1",
-									sidebarOpen ? "lg:col-span-4" : "lg:col-span-5",
-								)}
-							>
-								<ReferencesSection
-									query={gt.query}
-									setQuery={gt.setQuery}
-									searching={gt.searching}
-									searchResults={gt.searchResults}
-									onRunSearch={gt.runSearch}
-									onAddRefs={(refs) => {
-										gt.addReferences(refs);
-										toast("success", `Added ${refs.length} reference(s)`);
-									}}
-									references={gt.current?.references || []}
-									onUpdateReference={(id, partial) =>
-										gt.updateReference(id, partial)
-									}
-									onRemoveReference={(refId) =>
-										gt.removeReferenceWithUndo(refId, (undo, timeoutMs) => {
-											toast("info", "Reference removed.", {
-												duration: timeoutMs,
-												actionLabel: "Undo",
-												onAction: undo,
-											});
-										})
-									}
-									onOpenReference={onOpenRef}
-									isMultiTurn={
-										!!(gt.current?.history && gt.current.history.length > 0)
+						{/* Center + Right: split-pane on desktop, editor + drawer on mobile */}
+						<div className="flex-1 min-w-0 min-h-0">
+							{isDesktop ? (
+								<SplitPaneLayout
+									className="h-full w-full"
+									left={curatePane}
+									right={
+										<div className="h-full overflow-y-auto">
+											{referencesPane}
+										</div>
 									}
 								/>
-							</div>
-						)}
+							) : (
+								<>
+									<div className="mb-2 flex justify-end">
+										<button
+											type="button"
+											onClick={() => setDrawerOpen(true)}
+											className="inline-flex items-center gap-1.5 rounded-xl border bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-violet-50 hover:text-violet-700 shadow-sm"
+										>
+											📋 Evidence
+										</button>
+									</div>
+									<div className="min-h-0">{curatePane}</div>
+									<EvidenceDrawer open={drawerOpen} onClose={closeDrawer}>
+										{referencesPane}
+									</EvidenceDrawer>
+								</>
+							)}
+						</div>
 					</div>
 				)}
 			</main>
 
 			{/* Inspect Item Modal */}
-			<InspectItemModal
-				isOpen={!!inspectItem}
-				item={inspectItem}
-				onClose={() => setInspectItem(null)}
-			/>
+			{inspectItem && (
+				<Suspense fallback={<ModalFallback label="Loading item inspector…" />}>
+					<InspectItemModal
+						isOpen={true}
+						item={inspectItem}
+						onClose={() => setInspectItem(null)}
+					/>
+				</Suspense>
+			)}
 
 			{/* Tag Glossary Modal */}
 			{glossaryOpen && (
-				<TagGlossaryModal onClose={() => setGlossaryOpen(false)} />
+				<Suspense fallback={<ModalFallback label="Loading tag glossary…" />}>
+					<TagGlossaryModal onClose={() => setGlossaryOpen(false)} />
+				</Suspense>
 			)}
 
 			{/* Toasts */}

@@ -1,136 +1,43 @@
+import type {
+	ApiGroundTruth,
+	ApiHistoryEntry,
+	ApiReference,
+} from "../adapters/apiMapper";
+import { groundTruthFromApi } from "../adapters/apiMapper";
 import { client } from "../api/client";
 import type { components, operations } from "../api/generated";
 import type { GroundTruthItem } from "../models/groundTruth";
-import { urlToTitle } from "../models/utils";
 import { getApiBaseUrl, withDevUser } from "./http";
 import { logEvent } from "./telemetry";
 
-type GroundTruthItemOut = components["schemas"]["GroundTruthItem-Output"];
+type GroundTruthItemOut = Omit<
+	components["schemas"]["AgenticGroundTruthEntry-Output"],
+	"history"
+> & {
+	synthQuestion?: string | null;
+	editedQuestion?: string | null;
+	answer?: string | null;
+	refs?: ApiReference[];
+	totalReferences?: number;
+	tags?: string[];
+	comment?: string | null;
+	history?: ApiHistoryEntry[];
+};
 
 export type GroundTruthListPagination =
 	components["schemas"]["PaginationMetadata"];
 
+/**
+ * Maps an API ground truth payload to a domain GroundTruthItem.
+ * Delegates to the canonical groundTruthFromApi adapter to ensure
+ * both the provider path and the explorer/service path produce
+ * identical GroundTruthItem output for the same payload.
+ */
 export function mapGroundTruthFromApi(
 	api: GroundTruthItemOut,
 	providerId = "api",
 ): GroundTruthItem {
-	// Map history if present
-	let history: GroundTruthItem["history"];
-	if (api.history && api.history.length > 0) {
-		// History exists - use it as-is (don't overwrite with synthQuestion)
-		history = api.history.map((h) => ({
-			role: h.role === "assistant" ? "agent" : "user",
-			content: h.msg,
-			expectedBehavior:
-				h.expectedBehavior && h.expectedBehavior.length > 0
-					? h.expectedBehavior
-					: undefined,
-		}));
-	} else {
-		// ALWAYS convert single-turn items to multi-turn format
-		// Legacy single-turn item: create initial history from synthQuestion/editedQuestion
-		const initialQuestion = api.editedQuestion || api.synthQuestion || "";
-		if (initialQuestion) {
-			history = [
-				{
-					role: "user" as const,
-					content: initialQuestion,
-				},
-				{
-					role: "agent" as const,
-					content: api.answer || "", // Empty string if no answer
-				},
-			];
-		}
-	}
-
-	// For multi-turn items, use first user turn content; for single-turn items, use editedQuestion or synthQuestion
-	const question =
-		history && history.length > 0 && history[0].role === "user"
-			? history[0].content
-			: api.editedQuestion || api.synthQuestion || "";
-
-	// Map references from both top-level refs (single-turn) and history refs (multi-turn)
-	const refs: GroundTruthItem["references"] = [];
-
-	// Pre-calculate total reference count for better array allocation
-	const topLevelRefCount = api.refs?.length || 0;
-	const historyRefCount =
-		api.history?.reduce((sum, turn) => sum + (turn.refs?.length || 0), 0) || 0;
-	const totalRefCount = topLevelRefCount + historyRefCount;
-
-	// Pre-allocate array for better memory performance
-	if (totalRefCount > 0) {
-		refs.length = totalRefCount;
-		let refIndex = 0;
-
-		// Process top-level refs
-		if (api.refs?.length) {
-			for (let i = 0; i < api.refs.length; i++) {
-				const r = api.refs[i];
-				refs[refIndex] = {
-					id: `ref_${refIndex}`,
-					title: r.title || (r.url ? urlToTitle(r.url) : undefined),
-					url: r.url,
-					snippet: r.content ?? undefined,
-					keyParagraph: r.keyExcerpt ?? undefined,
-					visitedAt: null,
-					bonus: r.bonus === true,
-					messageIndex:
-						!api.history || api.history.length === 0 ? 1 : undefined,
-				};
-				refIndex++;
-			}
-		}
-
-		// Process history refs in single pass
-		if (api.history?.length) {
-			for (let turnIndex = 0; turnIndex < api.history.length; turnIndex++) {
-				const turn = api.history[turnIndex];
-				if (turn.refs?.length) {
-					for (let i = 0; i < turn.refs.length; i++) {
-						const r = turn.refs[i];
-						refs[refIndex] = {
-							id: `ref_${refIndex}`,
-							title: r.title || (r.url ? urlToTitle(r.url) : undefined),
-							url: r.url,
-							snippet: r.content ?? undefined,
-							keyParagraph: r.keyExcerpt ?? undefined,
-							visitedAt: null,
-							bonus: r.bonus === true,
-							messageIndex: turnIndex,
-						};
-						refIndex++;
-					}
-				}
-			}
-		}
-	}
-
-	const deleted = api.status === "deleted";
-	return {
-		id: api.id,
-		providerId,
-		question,
-		answer: api.answer ?? "",
-		history,
-		comment: api.comment ?? undefined,
-		references: refs,
-		status:
-			(deleted ? "draft" : (api.status as GroundTruthItem["status"])) ||
-			"draft",
-		deleted,
-		tags: api.tags || [],
-		manualTags: api.manualTags || [],
-		computedTags: api.computedTags || [],
-		datasetName: api.datasetName,
-		bucket: (api.bucket as string) || "0",
-		reviewedAt: api.reviewedAt ?? null,
-		totalReferences: api.totalReferences,
-		...({
-			_etag: api._etag,
-		} as Record<string, unknown>),
-	};
+	return groundTruthFromApi(api as ApiGroundTruth, providerId);
 }
 
 interface ListAllGroundTruthsParams {
@@ -154,6 +61,7 @@ interface ListAllGroundTruthsResult {
 
 export async function listAllGroundTruths(
 	params: ListAllGroundTruthsParams = {},
+	signal?: AbortSignal,
 ): Promise<ListAllGroundTruthsResult> {
 	const query: operations["list_all_ground_truths_v1_ground_truths_get"]["parameters"]["query"] =
 		{};
@@ -175,6 +83,7 @@ export async function listAllGroundTruths(
 		params: {
 			query: Object.keys(query).length ? query : undefined,
 		},
+		signal,
 	});
 	if (error) throw error;
 	const payload = (data as unknown as
@@ -192,10 +101,11 @@ export async function getGroundTruth(
 	datasetName: string,
 	bucket: string,
 	id: string,
+	signal?: AbortSignal,
 ): Promise<GroundTruthItem> {
 	const { data, error } = await client.GET(
 		"/v1/ground-truths/{datasetName}/{bucket}/{item_id}",
-		{ params: { path: { datasetName, bucket, item_id: id } } },
+		{ params: { path: { datasetName, bucket, item_id: id } }, signal },
 	);
 
 	if (error) {

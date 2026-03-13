@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.models import GroundTruthItem, Reference, HistoryItem
+from app.domain.models import AgenticGroundTruthEntry, Reference, HistoryItem
 from app.domain.enums import HistoryItemRole
 from app.plugins.computed_tags.retrieval_behavior import (
     RetrievalBehaviorNoRefsPlugin,
@@ -30,7 +30,7 @@ class TestRetrievalBehaviorPlugins:
     )
     def test_mutually_exclusive_classification(self, num_refs, expected_tag):
         """Each document gets exactly one retrieval behavior tag."""
-        item = GroundTruthItem(
+        item = AgenticGroundTruthEntry(
             id=f"test-{num_refs}-refs",
             datasetName="test-dataset",
             synthQuestion="Question",
@@ -52,7 +52,7 @@ class TestRetrievalBehaviorPlugins:
 
     def test_refs_in_history_are_counted(self):
         """References in history turns are included in the count."""
-        item = GroundTruthItem(
+        item = AgenticGroundTruthEntry(
             id="test-history-refs",
             datasetName="test-dataset",
             synthQuestion="Follow up question",

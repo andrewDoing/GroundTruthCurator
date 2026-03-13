@@ -31,6 +31,14 @@ class Settings(BaseSettings):
 
     # Repository backend selection
     REPO_BACKEND: str = "memory"  # memory|cosmos
+    DEMO_MODE: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("GTC_DEMO_MODE", "DEMO_MODE", "VITE_DEMO_MODE"),
+    )
+    DEMO_USER_ID: str = Field(
+        default="anonymous",
+        validation_alias=AliasChoices("GTC_DEMO_USER_ID", "DEMO_USER_ID", "VITE_DEV_USER_ID"),
+    )
 
     # Cosmos DB configuration (for cosmos backend)
     COSMOS_ENDPOINT: str | None = None
@@ -67,18 +75,6 @@ class Settings(BaseSettings):
     SEARCH_FIELD_URL: str = "url"
     SEARCH_FIELD_TITLE: str = "title"
     SEARCH_FIELD_CHUNK: str = "chunk"
-
-    # Agent chat settings (Azure AI Foundry Agent Service)
-    CHAT_ENABLED: bool = True
-    AZURE_AI_PROJECT_ENDPOINT: str | None = None
-    AZURE_AI_AGENT_ID: str | None = None
-    AGENT_TIMEOUT_SECONDS: int = 30
-    STORE_AGENT_STEPS: bool = False
-
-    # Retrieval service settings (for FunctionTool-based agent retrieval)
-    RETRIEVAL_URL: str | None = None
-    RETRIEVAL_PERMISSIONS_SCOPE: str | None = None
-    RETRIEVAL_TIMEOUT_SECONDS: int = 30
 
     # Optional static frontend serving
     FRONTEND_DIR: str | None = None  # Absolute path inside container (e.g., /app/frontend)
@@ -164,6 +160,7 @@ class Settings(BaseSettings):
         ),
     )
     SERVICE_NAME: str = "gtc-backend"
+    HARNESS_JSONL_ENABLED: bool = False
 
     # Azure Container Apps Easy Auth (ACA) settings
     # When enabled, we expect ACA to inject identity headers (X-MS-CLIENT-PRINCIPAL, etc.).

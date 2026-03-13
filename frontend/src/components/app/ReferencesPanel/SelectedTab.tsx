@@ -1,7 +1,8 @@
 import { ExternalLink, Trash2 } from "lucide-react";
 import type { Reference } from "../../../models/groundTruth";
 import { normalizeUrl, urlToTitle } from "../../../models/utils";
-import { getCachedConfig } from "../../../services/runtimeConfig";
+import { getReferenceApprovalRequirements } from "../../../models/validators";
+import { useRuntimeConfig } from "../../../services/runtimeConfig";
 
 type Props = {
 	references: Reference[];
@@ -18,9 +19,11 @@ export default function SelectedTab({
 	onOpenReference,
 	readOnly = false,
 }: Props) {
-	const config = getCachedConfig();
-	const requireVisit = config?.requireReferenceVisit ?? true;
-	const requireKeyPara = config?.requireKeyParagraph ?? false;
+	const runtimeConfig = useRuntimeConfig();
+	const {
+		requireReferenceVisit: requireVisit,
+		requireKeyParagraph: requireKeyPara,
+	} = getReferenceApprovalRequirements(runtimeConfig);
 
 	return (
 		<div className="flex h-full flex-col p-4">
@@ -172,7 +175,8 @@ export default function SelectedTab({
 				})}
 				{references.length === 0 && (
 					<div className="rounded-lg border bg-white p-3 text-xs text-slate-600">
-						No references added yet. Use the Search tab to add references.
+						No evidence attached yet. Add sources from the search surface or
+						from a plugin-owned workflow panel.
 					</div>
 				)}
 			</div>

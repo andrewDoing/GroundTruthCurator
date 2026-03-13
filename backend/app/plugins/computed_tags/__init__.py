@@ -11,13 +11,13 @@ To create a new plugin:
 
 Example:
     from app.plugins.base import ComputedTagPlugin
-    from app.domain.models import GroundTruthItem
+    from app.domain.models import AgenticGroundTruthEntry
 
     class MyPlugin(ComputedTagPlugin):
         @property
         def tag_key(self) -> str:
             return "my_group:my_value"
 
-        def compute(self, doc: GroundTruthItem) -> bool:
-            return some_condition(doc)
+        def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
+            return self.tag_key if some_condition(doc) else None
 """

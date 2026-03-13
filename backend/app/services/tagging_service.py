@@ -7,7 +7,7 @@ from app.domain.tags import RULES, TAG_SCHEMA, TagGroupSpec
 from app.plugins import get_default_registry, TagPluginRegistry
 
 if TYPE_CHECKING:
-    from app.domain.models import GroundTruthItem
+    from app.domain.models import AgenticGroundTruthEntry
 import logging
 
 logger = logging.getLogger(__name__)
@@ -122,7 +122,9 @@ def validate_tags_with_cache(tags: Iterable[str], valid_tags: set[str] | None) -
     return sorted(unique)
 
 
-def apply_computed_tags(item: GroundTruthItem, registry: TagPluginRegistry | None = None) -> None:
+def apply_computed_tags(
+    item: AgenticGroundTruthEntry, registry: TagPluginRegistry | None = None
+) -> None:
     """Compute and set the computed tags for an item.
 
     This mutates the item in place, setting:
@@ -130,7 +132,7 @@ def apply_computed_tags(item: GroundTruthItem, registry: TagPluginRegistry | Non
     - manual_tags: cleaned to remove any tags that are computed tag keys
 
     Args:
-        item: The GroundTruthItem to compute tags for.
+        item: The AgenticGroundTruthEntry to compute tags for.
         registry: Optional pre-fetched registry. If None, fetches default.
     """
     if registry is None:

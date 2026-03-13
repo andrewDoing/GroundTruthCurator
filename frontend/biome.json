@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.2.0/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.4.6/schema.json",
 	"formatter": {
 		"enabled": true
 	},
@@ -22,7 +22,10 @@
 			"**",
 			"!**/dist",
 			"!**/*.generated.js",
-			"!src/api/generated.ts"
+			"!src/api/generated.ts",
+			"!**/node_modules",
+			"!**/coverage",
+			"!**/build"
 		]
 	},
 	"vcs": {

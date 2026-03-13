@@ -8,6 +8,7 @@ from fastapi.responses import Response
 
 from app.adapters.repos.base import GroundTruthRepo
 from app.domain.enums import GroundTruthStatus
+from app.domain.models import AgenticGroundTruthEntry
 from app.exports.models import ExportFilters, SnapshotExportRequest
 from app.exports.pipeline import ExportPipeline
 from app.exports.registry import ExportFormatterRegistry, ExportProcessorRegistry
@@ -21,20 +22,21 @@ class SnapshotService:
         processor_registry: ExportProcessorRegistry,
         formatter_registry: ExportFormatterRegistry,
         default_processor_order: list[str],
+        plugin_export_transforms: list[Any] | None = None,
     ):
         self.repo = repo
         self.export_pipeline = export_pipeline
         self.processor_registry = processor_registry
         self.formatter_registry = formatter_registry
         self.default_processor_order = default_processor_order
+        self.plugin_export_transforms = plugin_export_transforms or []
 
-    async def collect_approved(self) -> list:
-        """Return all approved GroundTruthItems from the repository.
+    async def collect_approved(self) -> list[AgenticGroundTruthEntry]:
+        """Return all approved generic ground truth entries from the repository.
 
         Errors are allowed to surface to callers; no legacy fallbacks.
         """
-        items = await self.repo.list_all_gt(status=GroundTruthStatus.approved)
-        return items
+        return await self.repo.list_all_gt(status=GroundTruthStatus.approved)
 
     async def build_snapshot_payload(self) -> dict:
         """Build an in-memory JSON payload of approved items.
@@ -85,6 +87,9 @@ class SnapshotService:
         )
         for processor in processors:
             out_items = processor.process(out_items)
+        out_items = self.processor_registry.apply_transforms(
+            out_items, self.plugin_export_transforms
+        )
 
         filters_payload: dict[str, Any] = {"status": status_value}
         if dataset_names is not None:

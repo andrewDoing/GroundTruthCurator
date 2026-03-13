@@ -11,8 +11,14 @@ The backend uses pytest for unit and integration testing.
 ```bash
 cd backend
 
+# Run backend integration tests from the repo root
+make -f Makefile.harness backend-integration-test
+
 # Run all unit tests
 uv run pytest tests/unit/ -v
+
+# Run all integration tests directly
+uv run pytest tests/integration/ -v
 
 # Run specific test file
 uv run pytest tests/unit/test_dos_prevention.py -v

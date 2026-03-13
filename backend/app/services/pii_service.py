@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Any, Sequence
 
 from pydantic import BaseModel, Field
 
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
 
 
 class PIIWarning(BaseModel):
@@ -159,7 +159,7 @@ def scan_text_for_pii(text: str, field_name: str, item_id: str) -> list[PIIWarni
     return warnings
 
 
-def scan_item_for_pii(item: GroundTruthItem) -> list[PIIWarning]:
+def scan_item_for_pii(item: AgenticGroundTruthEntry) -> list[PIIWarning]:
     """Scan a ground truth item for PII in all relevant fields.
 
     Phase 1 scans:
@@ -177,6 +177,23 @@ def scan_item_for_pii(item: GroundTruthItem) -> list[PIIWarning]:
     """
     item_id = item.id or "(no ID)"
     warnings: list[PIIWarning] = []
+
+    def scan_nested_value(value: Any, field_name: str) -> None:
+        if value is None:
+            return
+        if isinstance(value, BaseModel):
+            scan_nested_value(value.model_dump(by_alias=True, exclude_none=True), field_name)
+            return
+        if isinstance(value, str):
+            warnings.extend(scan_text_for_pii(value, field_name, item_id))
+            return
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                scan_nested_value(nested, f"{field_name}.{key}")
+            return
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            for idx, nested in enumerate(value):
+                scan_nested_value(nested, f"{field_name}[{idx}]")
 
     # Scan primary text fields
     if item.synth_question:
@@ -197,10 +214,22 @@ def scan_item_for_pii(item: GroundTruthItem) -> list[PIIWarning]:
             if turn.msg:
                 warnings.extend(scan_text_for_pii(turn.msg, f"history[{idx}].msg", item_id))
 
+    if item.scenario_id:
+        warnings.extend(scan_text_for_pii(item.scenario_id, "scenarioId", item_id))
+
+    scan_nested_value(item.context_entries, "contextEntries")
+    scan_nested_value(item.tool_calls, "toolCalls")
+    scan_nested_value(item.expected_tools, "expectedTools")
+    scan_nested_value(item.feedback, "feedback")
+    scan_nested_value(item.metadata, "metadata")
+    scan_nested_value(item.plugins, "plugins")
+    scan_nested_value(item.trace_ids, "traceIds")
+    scan_nested_value(item.trace_payload, "tracePayload")
+
     return warnings
 
 
-def scan_bulk_items_for_pii(items: Sequence[GroundTruthItem]) -> list[PIIWarning]:
+def scan_bulk_items_for_pii(items: Sequence[AgenticGroundTruthEntry]) -> list[PIIWarning]:
     """Scan multiple ground truth items for PII.
 
     This is the main entry point for bulk import PII detection.

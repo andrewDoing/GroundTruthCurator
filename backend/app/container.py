@@ -11,9 +11,6 @@ from app.services.snapshot_service import SnapshotService
 from app.services.curation_service import CurationService
 from app.adapters.repos.tags_repo import CosmosTagsRepo
 from app.services.tag_registry_service import TagRegistryService
-from app.adapters.gtc_inference_adapter import GTCInferenceAdapter
-from app.services.chat_service import ChatService
-from app.adapters.agent_steps_store import AgentStepsStore
 from app.exports.formatters.json_items import JsonItemsFormatter
 from app.exports.formatters.json_snapshot_payload import JsonSnapshotPayloadFormatter
 from app.exports.pipeline import ExportPipeline
@@ -26,9 +23,34 @@ from app.exports.registry import (
 from app.exports.storage.base import ExportStorage
 from app.exports.storage.blob import BlobExportStorage
 from app.exports.storage.local import LocalExportStorage
+from app.plugins.pack_registry import get_default_pack_registry
+from app.plugins.base import PluginPackRegistry
+from app.adapters.repos.memory_repo import InMemoryGroundTruthRepo
+from app.adapters.search.demo_search import DemoSearchAdapter
+from app.demo_seed import DEMO_CURATION_INSTRUCTIONS, build_demo_items
 
 
 logger = logging.getLogger("gtc.container")
+
+
+class InMemoryTagsRepo:
+    def __init__(self) -> None:
+        self.tags: list[str] = []
+
+    async def get_global_tags(self) -> list[str]:
+        return list(self.tags)
+
+    async def save_global_tags(self, tags: list[str]) -> list[str]:
+        self.tags = sorted(set(tags))
+        return list(self.tags)
+
+    async def upsert_add(self, tags_to_add: list[str]) -> list[str]:
+        return await self.save_global_tags([*self.tags, *tags_to_add])
+
+    async def upsert_remove(self, tags_to_remove: list[str]) -> list[str]:
+        remove = {str(tag) for tag in tags_to_remove}
+        self.tags = [tag for tag in self.tags if tag not in remove]
+        return list(self.tags)
 
 
 class Container:
@@ -41,14 +63,12 @@ class Container:
     tag_registry_service: TagRegistryService
     tags_repo: CosmosTagsRepo
     tag_definitions_repo: Any  # CosmosTagDefinitionsRepo
-    inference_service: GTCInferenceAdapter | None
-    chat_service: ChatService
-    agent_steps_store: AgentStepsStore | None
     export_pipeline: ExportPipeline
     export_processor_registry: ExportProcessorRegistry
     export_formatter_registry: ExportFormatterRegistry
     export_storage: ExportStorage
     export_default_processor_order: list[str]
+    plugin_pack_registry: PluginPackRegistry
 
     def __init__(self) -> None:
         # Lazily initialize repo and services. Tests and app lifespan will call
@@ -62,18 +82,14 @@ class Container:
         self.tags_repo = cast(CosmosTagsRepo, None)
         self.tag_definitions_repo = cast(Any, None)
         self.tag_registry_service = cast(TagRegistryService, None)
-        self.inference_service = None  # Lazily initialized by init_chat()
-        self.agent_steps_store = cast(AgentStepsStore | None, None)
         self.export_storage = self._build_export_storage()
         self.export_processor_registry = self._build_export_processor_registry()
         self.export_formatter_registry = self._build_export_formatter_registry()
         self.export_pipeline = ExportPipeline(self.export_storage)
         self.export_default_processor_order = parse_processor_order(settings.EXPORT_PROCESSOR_ORDER)
-        self.chat_service = ChatService(
-            inference_service=None,
-            steps_store=self.agent_steps_store,
-            store_steps=settings.STORE_AGENT_STEPS,
-        )
+        # Plugin-pack registry — lazily populated on first use (startup_cosmos
+        # calls validate_all() to ensure all packs pass their startup checks).
+        self.plugin_pack_registry = get_default_pack_registry()
 
     def _build_default_credential(self) -> Any:
         """Create a DefaultAzureCredential for runtime use.
@@ -116,6 +132,16 @@ class Container:
             ),
         )
         return registry
+
+    def _build_snapshot_service(self, repo: GroundTruthRepo) -> SnapshotService:
+        return SnapshotService(
+            repo,
+            export_pipeline=self.export_pipeline,
+            processor_registry=self.export_processor_registry,
+            formatter_registry=self.export_formatter_registry,
+            default_processor_order=self.export_default_processor_order,
+            plugin_export_transforms=self.plugin_pack_registry.collect_export_transforms(),
+        )
 
     def init_cosmos_repo(self, db_name: str | None = None) -> None:
         """Create a Cosmos repo instance and wire services.
@@ -170,13 +196,7 @@ class Container:
         self.assignment_service = AssignmentService(self.repo)
         # Keep existing search service (may already be wired with adapter)
         self.search_service = self.search_service or SearchService()
-        self.snapshot_service = SnapshotService(
-            self.repo,
-            export_pipeline=self.export_pipeline,
-            processor_registry=self.export_processor_registry,
-            formatter_registry=self.export_formatter_registry,
-            default_processor_order=self.export_default_processor_order,
-        )
+        self.snapshot_service = self._build_snapshot_service(self.repo)
         self.curation_service = CurationService(self.repo)
         # Initialize tags repo and service (shares the same Cosmos account/db)
         self.tags_repo = CosmosTagsRepo(
@@ -199,6 +219,28 @@ class Container:
             container_name=settings.COSMOS_CONTAINER_TAG_DEFINITIONS,
             connection_verify=settings.COSMOS_CONNECTION_VERIFY,
             credential=credential,
+        )
+
+    def init_memory_repo(self, *, enable_demo_data: bool = False) -> None:
+        demo_items = build_demo_items(settings.DEMO_USER_ID) if enable_demo_data else []
+        demo_instructions = DEMO_CURATION_INSTRUCTIONS if enable_demo_data else []
+        self.repo = InMemoryGroundTruthRepo(
+            items=demo_items,
+            curation_instructions=demo_instructions,
+        )
+        self.assignment_service = AssignmentService(self.repo)
+        self.snapshot_service = self._build_snapshot_service(self.repo)
+        self.curation_service = CurationService(self.repo)
+        self.tags_repo = cast(CosmosTagsRepo, InMemoryTagsRepo())
+        self.tag_registry_service = TagRegistryService(self.tags_repo)
+        self.tag_definitions_repo = cast(Any, None)
+        self.search_service = (
+            SearchService(DemoSearchAdapter(demo_items)) if enable_demo_data else SearchService()
+        )
+        logger.info(
+            "Using InMemoryGroundTruthRepo (demo_mode=%s, items=%s)",
+            enable_demo_data,
+            len(demo_items),
         )
 
     async def startup_cosmos(self, db_name: str | None = None) -> None:
@@ -239,9 +281,26 @@ class Container:
         await self.tag_definitions_repo.validate_container()
         logger.info("Cosmos DB validation passed.")
 
+        # Step 4: Run plugin-pack startup validation so misconfigured packs
+        # fail here with an actionable error rather than silently at runtime.
+        logger.info("Running plugin-pack startup validation...")
+        self.plugin_pack_registry.validate_all()
+        logger.info(
+            "Plugin-pack validation passed. Registered packs: %s",
+            self.plugin_pack_registry.names(),
+        )
+
     def init_search(self) -> None:
         """Configure search adapter if Azure Search settings are present."""
         from app.adapters.search.azure_ai_search import AzureAISearchAdapter
+
+        if (
+            settings.REPO_BACKEND == "memory"
+            and settings.DEMO_MODE
+            and getattr(self.search_service, "adapter", None) is not None
+        ):
+            logger.info("Using demo search adapter for memory-backed demo mode")
+            return
 
         if settings.AZ_SEARCH_ENDPOINT and settings.AZ_SEARCH_INDEX:
             token_cred = None
@@ -268,72 +327,6 @@ class Container:
             # Keep default no-op search service to satisfy consumers and typing
             self.search_service = self.search_service or SearchService()
             logger.info("Search adapter not configured; using no-op SearchService")
-
-    def _build_sync_default_credential(self) -> Any:
-        """Create a sync DefaultAzureCredential for runtime use.
-        Used for GTCInferenceAdapter which requires sync credentials.
-        """
-        try:
-            from azure.identity import DefaultAzureCredential
-        except Exception as e:
-            raise RuntimeError(f"azure-identity not installed: {e}")
-        # Exclude shared cache for server scenarios to keep minimal surface
-        return DefaultAzureCredential(exclude_shared_token_cache_credential=True)
-
-    def init_chat(self) -> None:
-        """Configure chat inference service and chat service.
-
-        Validates that retrieval configuration is present when agent is configured.
-        Uses managed identity for both agent auth and retrieval token minting.
-        """
-        project_endpoint = settings.AZURE_AI_PROJECT_ENDPOINT
-        agent_id = settings.AZURE_AI_AGENT_ID
-        retrieval_url = settings.RETRIEVAL_URL
-        permissions_scope = settings.RETRIEVAL_PERMISSIONS_SCOPE
-
-        # Only build the inference service when fully configured.
-        if not project_endpoint or not agent_id:
-            self.inference_service = None
-        elif not retrieval_url or not permissions_scope:
-            logger.error(
-                "Agent is configured but retrieval settings missing. "
-                "Set GTC_RETRIEVAL_URL and GTC_RETRIEVAL_PERMISSIONS_SCOPE."
-            )
-            # Mark as not configured so we fail at runtime with 502
-            self.inference_service = None
-        else:
-            # Use sync DefaultAzureCredential for GTCInferenceAdapter
-            # (reused for both agent auth and retrieval token minting)
-            credential = self._build_sync_default_credential()
-
-            self.inference_service = GTCInferenceAdapter(
-                project_endpoint=project_endpoint,
-                agent_id=agent_id,
-                retrieval_url=retrieval_url,
-                permissions_scope=permissions_scope,
-                timeout_seconds=settings.RETRIEVAL_TIMEOUT_SECONDS,
-                credential=credential,
-            )
-
-        # Reuse any existing steps store instance (may be configured elsewhere)
-        store = getattr(self, "agent_steps_store", None)
-        self.chat_service = ChatService(
-            inference_service=self.inference_service,
-            steps_store=store,
-            store_steps=settings.STORE_AGENT_STEPS and bool(store),
-        )
-
-        if not settings.CHAT_ENABLED:
-            self.chat_service.set_store_steps(False)
-            logger.info("Chat service disabled via settings")
-        elif not self.inference_service:
-            logger.info("Chat service running in mock mode (agent not configured)")
-        else:
-            logger.info(
-                "Chat service configured with Azure AI Project (endpoint=%s, agent=%s)",
-                settings.AZURE_AI_PROJECT_ENDPOINT,
-                settings.AZURE_AI_AGENT_ID,
-            )
 
 
 container = Container()

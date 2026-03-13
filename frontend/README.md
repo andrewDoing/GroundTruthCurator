@@ -24,11 +24,12 @@ Welcome. This is the React + Vite + TypeScript frontend for Ground Truth Curatio
 
 2) Configure environment
 
-   - Copy `.env.example` to `.env.local` and adjust as needed:
-     - `VITE_API_BASE_URL` – backend base URL (default `http://localhost:8000`)
-     - `VITE_OPENAPI_URL` – OpenAPI spec URL used for type generation
-     - `VITE_DEV_USER_ID` – optional dev-only user id sent as `X-User-Id`
-     - `VITE_SELF_SERVE_LIMIT` – optional default for self-serve assignments
+    - Copy `.env.example` to `.env.local` and adjust as needed:
+      - `VITE_API_BASE_URL` – backend base URL (default `http://localhost:8000`)
+      - `VITE_APP_BASE_PATH` – optional virtual directory such as `/gtc/` for non-root hosting
+      - `VITE_OPENAPI_URL` – OpenAPI spec URL used for type generation
+      - `VITE_DEV_USER_ID` – optional dev-only user id sent as `X-User-Id`
+      - `VITE_SELF_SERVE_LIMIT` – optional default for self-serve assignments
 
 3) Start the app
 
@@ -44,6 +45,7 @@ This app calls the backend under the `/v1` path. In development, Vite is configu
 
 - Change the target host by editing `VITE_API_BASE_URL` in `.env.local`.
 - Keep frontend calls relative (e.g., `fetch('/v1/ground-truths')`) so the proxy works seamlessly.
+- If the app is hosted under a virtual directory such as `/gtc/`, set `VITE_APP_BASE_PATH=/gtc/` so built asset URLs and same-origin API calls include that prefix.
 - Optionally set `VITE_DEV_USER_ID` in `.env.local` to send an `X-User-Id` header for dev-only flows.
 
 More details: `CONNECT_TO_BACKEND.md`.
@@ -78,6 +80,14 @@ The UI includes a demo flow. You can toggle via env at startup:
 - `VITE_DEMO_MODE=1` to enable demo behavior
 
 The build injects `import.meta.env.DEMO_MODE` to match `VITE_DEMO_MODE` for client code.
+
+For the full local demo stack from the repository root, use:
+
+```bash
+VITE_DEMO_MODE=true VITE_DEV_USER_ID=demo-user make dev-up
+```
+
+`VITE_DEMO_MODE=true` enables the demo UI behavior, while `VITE_DEV_USER_ID=demo-user` gives the backend a stable dev/demo identity for assignment-backed flows.
 
 ## Telemetry (optional)
 

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from app.plugins.base import ComputedTagPlugin
 
 if TYPE_CHECKING:
-    from app.domain.models import GroundTruthItem
+    from app.domain.models import AgenticGroundTruthEntry
 
 
 class DatasetPlugin(ComputedTagPlugin):
@@ -28,5 +28,5 @@ class DatasetPlugin(ComputedTagPlugin):
     def tag_key(self) -> str:
         return "dataset:_dynamic"
 
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         return f"dataset:{doc.datasetName}" if doc.datasetName else None

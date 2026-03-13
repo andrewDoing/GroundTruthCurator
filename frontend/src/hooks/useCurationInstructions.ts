@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getDatasetCurationInstructions } from "../services/datasets";
+
+const instructionsCache = new Map<string, string>();
 
 /**
  * Hook to retrieve dataset-level curation instructions (markdown) with a per-session cache.
@@ -9,44 +11,89 @@ import { getDatasetCurationInstructions } from "../services/datasets";
  */
 function useCurationInstructions(datasetName?: string | null) {
 	const ds = (datasetName || "").trim();
-	const cacheRef = useRef<Record<string, string>>({});
+	const [markdown, setMarkdown] = useState<string | undefined>(() =>
+		ds ? instructionsCache.get(ds) : undefined,
+	);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [version, setVersion] = useState(0); // bump to force recompute when cache changes
+	const activeControllerRef = useRef<AbortController | null>(null);
+	const requestIdRef = useRef(0);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies(version): suppress dependency version
-	const value = useMemo(() => {
-		if (!ds) return undefined;
-		// Accessing ref doesn't need to be in deps; we trigger recompute by bumping version in state
-		return cacheRef.current[ds];
-	}, [ds, version]);
+	const loadInstructions = useCallback(
+		async (forceRefresh = false) => {
+			if (!ds) return;
+
+			const cached = instructionsCache.get(ds);
+			if (!forceRefresh && typeof cached !== "undefined") {
+				setMarkdown(cached);
+				setLoading(false);
+				setError(null);
+				return;
+			}
+
+			activeControllerRef.current?.abort();
+			const controller = new AbortController();
+			activeControllerRef.current = controller;
+			const requestId = ++requestIdRef.current;
+			setLoading(true);
+			setError(null);
+
+			try {
+				const doc = await getDatasetCurationInstructions(ds, controller.signal);
+				if (requestId !== requestIdRef.current || controller.signal.aborted) {
+					return;
+				}
+				const nextMarkdown = doc?.instructions || "";
+				instructionsCache.set(ds, nextMarkdown);
+				setMarkdown(nextMarkdown);
+			} catch (e) {
+				if (controller.signal.aborted) return;
+				const msg = e instanceof Error ? e.message : String(e);
+				setError(msg);
+			} finally {
+				if (requestId === requestIdRef.current && !controller.signal.aborted) {
+					setLoading(false);
+				}
+			}
+		},
+		[ds],
+	);
 
 	const refresh = useCallback(async () => {
-		if (!ds) return;
-		setLoading(true);
-		setError(null);
-		try {
-			const doc = await getDatasetCurationInstructions(ds);
-			const md = doc?.instructions || "";
-			cacheRef.current[ds] = md;
-			setVersion((v) => v + 1);
-		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e);
-			setError(msg);
-		} finally {
-			setLoading(false);
-		}
-	}, [ds]);
+		await loadInstructions(true);
+	}, [loadInstructions]);
 
-	// Auto fetch when dataset changes and not in cache yet
 	useEffect(() => {
-		if (!ds) return;
-		if (typeof cacheRef.current[ds] === "undefined") {
-			void refresh();
+		if (!ds) {
+			activeControllerRef.current?.abort();
+			setMarkdown(undefined);
+			setLoading(false);
+			setError(null);
+			return;
 		}
-	}, [ds, refresh]);
 
-	return { markdown: value, loading, error, refresh } as const;
+		const cached = instructionsCache.get(ds);
+		setMarkdown(cached);
+		if (typeof cached !== "undefined") {
+			setLoading(false);
+			setError(null);
+			return;
+		}
+
+		void loadInstructions();
+
+		return () => {
+			activeControllerRef.current?.abort();
+		};
+	}, [ds, loadInstructions]);
+
+	useEffect(() => {
+		return () => {
+			activeControllerRef.current?.abort();
+		};
+	}, []);
+
+	return { markdown, loading, error, refresh } as const;
 }
 
 export default useCurationInstructions;

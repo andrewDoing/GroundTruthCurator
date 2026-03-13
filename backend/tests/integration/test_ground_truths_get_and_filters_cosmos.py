@@ -7,7 +7,7 @@ import pytest
 from uuid import uuid4
 from httpx import AsyncClient
 
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
 
 
 def make_item(dataset: str, *, gid: Optional[str] = None) -> dict[str, Any]:
@@ -50,7 +50,7 @@ async def test_get_item_200_and_404(async_client: AsyncClient, user_headers: dic
         f"/v1/ground-truths/{dataset}/{bucket}/gt-200", headers=user_headers
     )
     assert res.status_code == 200
-    gt_item = TypeAdapter(GroundTruthItem).validate_python(res.json())
+    gt_item = TypeAdapter(AgenticGroundTruthEntry).validate_python(res.json())
     assert gt_item.id == "gt-200"
     assert gt_item.etag
 

@@ -507,23 +507,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/chat": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Chat */
-        post: operations["chat_v1_chat_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -532,6 +515,190 @@ export interface components {
         AddTagsRequest: {
             /** Tags */
             tags: string[];
+        };
+        /**
+         * AgenticGroundTruthEntry
+         * @description Generic agentic-first host model.
+         *
+         *     The core contract intentionally exposes only the generic schema in OpenAPI. Legacy
+         *     RAG-shaped payloads are translated into this shape when validating this base class so
+         *     existing data can be carried forward without remaining top-level contract fields.
+         */
+        "AgenticGroundTruthEntry-Input": {
+            /** Id */
+            id: string;
+            /** Datasetname */
+            datasetName: string;
+            /** Bucket */
+            bucket?: string | null;
+            /** @default draft */
+            status: components["schemas"]["GroundTruthStatus"];
+            /**
+             * Doctype
+             * @default ground-truth-item
+             */
+            docType: string;
+            /**
+             * Schemaversion
+             * @default v2
+             */
+            schemaVersion: string;
+            /** Manualtags */
+            manualTags?: string[];
+            /** Computedtags */
+            computedTags?: string[];
+            /**
+             * Comment
+             * @default
+             */
+            comment: string;
+            /** Assignedto */
+            assignedTo?: string | null;
+            /** Assignedat */
+            assignedAt?: string | null;
+            /**
+             * Updatedat
+             * Format: date-time
+             */
+            updatedAt?: string;
+            /** Updatedby */
+            updatedBy?: string | null;
+            /** Reviewedat */
+            reviewedAt?: string | null;
+            /** Etag */
+            _etag?: string | null;
+            /**
+             * Scenarioid
+             * @default
+             */
+            scenarioId: string;
+            /** History */
+            history?: components["schemas"]["HistoryEntry"][];
+            /** Contextentries */
+            contextEntries?: components["schemas"]["ContextEntry"][];
+            /** Traceids */
+            traceIds?: {
+                [key: string]: string;
+            } | null;
+            /** Toolcalls */
+            toolCalls?: components["schemas"]["ToolCallRecord"][];
+            expectedTools?: components["schemas"]["ExpectedTools"];
+            /** Feedback */
+            feedback?: components["schemas"]["FeedbackEntry"][];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Plugins */
+            plugins?: {
+                [key: string]: components["schemas"]["PluginPayload"];
+            };
+            /** Createdby */
+            createdBy?: string | null;
+            /** Createdat */
+            createdAt?: string | null;
+            /** Tracepayload */
+            tracePayload?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * AgenticGroundTruthEntry
+         * @description Generic agentic-first host model.
+         *
+         *     The core contract intentionally exposes only the generic schema in OpenAPI. Legacy
+         *     RAG-shaped payloads are translated into this shape when validating this base class so
+         *     existing data can be carried forward without remaining top-level contract fields.
+         */
+        "AgenticGroundTruthEntry-Output": {
+            /** Id */
+            id: string;
+            /** Datasetname */
+            datasetName: string;
+            /** Bucket */
+            bucket?: string | null;
+            /** @default draft */
+            status: components["schemas"]["GroundTruthStatus"];
+            /**
+             * Doctype
+             * @default ground-truth-item
+             */
+            docType: string;
+            /**
+             * Schemaversion
+             * @default v2
+             */
+            schemaVersion: string;
+            /** Manualtags */
+            manualTags?: string[];
+            /** Computedtags */
+            computedTags?: string[];
+            /**
+             * Comment
+             * @default
+             */
+            comment: string;
+            /** Assignedto */
+            assignedTo?: string | null;
+            /** Assignedat */
+            assignedAt?: string | null;
+            /**
+             * Updatedat
+             * Format: date-time
+             */
+            updatedAt?: string;
+            /** Updatedby */
+            updatedBy?: string | null;
+            /** Reviewedat */
+            reviewedAt?: string | null;
+            /** Etag */
+            _etag?: string | null;
+            /**
+             * Scenarioid
+             * @default
+             */
+            scenarioId: string;
+            /** History */
+            history?: components["schemas"]["HistoryEntry"][];
+            /** Contextentries */
+            contextEntries?: components["schemas"]["ContextEntry"][];
+            /** Traceids */
+            traceIds?: {
+                [key: string]: string;
+            } | null;
+            /** Toolcalls */
+            toolCalls?: components["schemas"]["ToolCallRecord"][];
+            expectedTools?: components["schemas"]["ExpectedTools"];
+            /** Feedback */
+            feedback?: components["schemas"]["FeedbackEntry"][];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Plugins */
+            plugins?: {
+                [key: string]: components["schemas"]["PluginPayload"];
+            };
+            /** Createdby */
+            createdBy?: string | null;
+            /** Createdat */
+            createdAt?: string | null;
+            /** Tracepayload */
+            tracePayload?: {
+                [key: string]: unknown;
+            };
+            /** Tags */
+            readonly tags: string[];
+            /** Synthquestion */
+            readonly synthQuestion: string | null;
+            /** Editedquestion */
+            readonly editedQuestion: string | null;
+            /** Answer */
+            readonly answer: string | null;
+            /** Refs */
+            readonly refs: components["schemas"]["Reference"][];
+            /** Totalreferences */
+            readonly totalReferences: number;
         };
         /**
          * AssignItemRequest
@@ -545,24 +712,12 @@ export interface components {
              */
             force: boolean;
         };
-        /**
-         * AssignmentUpdateRequest
-         * @description Payload for SME update (save draft / approve / skip / delete).
-         *
-         *     Using a Pydantic model allows camelCase -> snake_case alias handling. All fields optional; we
-         *     only mutate those explicitly provided (tracked via model_fields_set).
-         */
+        /** AssignmentUpdateRequest */
         AssignmentUpdateRequest: {
-            /** Editedquestion */
-            editedQuestion?: string | null;
-            /** Answer */
-            answer?: string | null;
             /** Comment */
             comment?: string | null;
             /** Status */
-            status?: components["schemas"]["GroundTruthStatus"] | string | null;
-            /** Refs */
-            refs?: components["schemas"]["Reference"][] | null;
+            status?: components["schemas"]["GroundTruthStatus"] | string;
             /** Manualtags */
             manualTags?: string[] | null;
             /** Approve */
@@ -570,16 +725,37 @@ export interface components {
             /** Etag */
             etag?: string | null;
             /** History */
-            history?: {
+            history?: components["schemas"]["HistoryEntryPatch"][] | null;
+            /** Contextentries */
+            contextEntries?: components["schemas"]["ContextEntry"][] | null;
+            /** Toolcalls */
+            toolCalls?: components["schemas"]["ToolCallRecord"][] | null;
+            /** Expectedtools */
+            expectedTools?: components["schemas"]["ExpectedTools"];
+            /** Feedback */
+            feedback?: components["schemas"]["FeedbackEntry"][] | null;
+            /** Metadata */
+            metadata?: {
                 [key: string]: unknown;
-            }[] | null;
+            } | null;
+            /** Plugins */
+            plugins?: {
+                [key: string]: components["schemas"]["PluginPayload"];
+            } | null;
+            /** Traceids */
+            traceIds?: {
+                [key: string]: string;
+            } | null;
+            /** Tracepayload */
+            tracePayload?: {
+                [key: string]: unknown;
+            } | null;
+            /** Scenarioid */
+            scenarioId?: string | null;
         } & {
             [key: string]: unknown;
         };
-        /**
-         * BulkImportError
-         * @description Structured error for bulk import failures.
-         */
+        /** BulkImportError */
         BulkImportError: {
             /**
              * Index
@@ -607,34 +783,12 @@ export interface components {
              */
             message: string;
         };
-        /** ChatReference */
-        ChatReference: {
-            /** Id */
-            id?: string | null;
-            /** Title */
-            title?: string | null;
-            /** Url */
-            url?: string | null;
-            /** Snippet */
-            snippet?: string | null;
-            /** Keyparagraph */
-            keyParagraph?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /** ChatRequest */
-        ChatRequest: {
-            /** Message */
-            message: string;
-            /** Context */
-            context?: string | null;
-        };
-        /** ChatResponse */
-        ChatResponse: {
-            /** Content */
-            content: string;
-            /** References */
-            references?: components["schemas"]["ChatReference"][];
+        /** ContextEntry */
+        ContextEntry: {
+            /** Key */
+            key: string;
+            /** Value */
+            value: unknown;
         };
         /** CurationInstructionsUpdate */
         CurationInstructionsUpdate: {
@@ -643,14 +797,7 @@ export interface components {
             /** Etag */
             _etag?: string | null;
         };
-        /**
-         * DatasetCurationInstructions
-         * @description Dataset-level curation instructions document (schemaVersion v1).
-         *
-         *     Stored in the same Cosmos container as ground-truth items using MultiHash PK
-         *     [/datasetName, /bucket] with bucket fixed to 0 and a stable id pattern
-         *     "curation-instructions|{datasetName}".
-         */
+        /** DatasetCurationInstructions */
         DatasetCurationInstructions: {
             /** Id */
             id: string;
@@ -722,18 +869,17 @@ export interface components {
             matchReason: string;
         };
         /**
-         * ExpectedBehavior
-         * @description Expected behavior tags for history items in ground truth evaluation.
-         *
-         *     These tags describe what the agent should do at each turn of a conversation:
-         *     - tool:search: Agent should perform a search/retrieval operation
-         *     - generation:answer: Agent should generate a direct answer
-         *     - generation:need-context: Agent should ask for more context
-         *     - generation:clarification: Agent should ask for clarification
-         *     - generation:out-of-domain: Agent should indicate the query is out of domain
-         * @enum {string}
+         * ExpectedTools
+         * @description Tool expectations. Tools are implicitly allowed unless listed here.
          */
-        ExpectedBehavior: "tool:search" | "generation:answer" | "generation:need-context" | "generation:clarification" | "generation:out-of-domain";
+        ExpectedTools: {
+            /** Required */
+            required?: components["schemas"]["ToolExpectation"][];
+            /** Optional */
+            optional?: components["schemas"]["ToolExpectation"][];
+            /** Notneeded */
+            notNeeded?: components["schemas"]["ToolExpectation"][];
+        };
         /** ExportDeliveryOptions */
         ExportDeliveryOptions: {
             /**
@@ -752,6 +898,18 @@ export interface components {
              * @default approved
              */
             status: string;
+        };
+        /** FeedbackEntry */
+        FeedbackEntry: {
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            };
         };
         /**
          * FrontendConfig
@@ -777,169 +935,10 @@ export interface components {
             /** Groups */
             groups: components["schemas"]["TagGroupGlossaryDTO"][];
         };
-        /**
-         * GroundTruthItem
-         * @description Canonical Ground Truth item aligned to wire schema (schemaVersion v1).
-         *
-         *     All fields with camelCase wire names use aliases; we accept both field names and aliases
-         *     on input (populate_by_name=True) and always serialize using by_alias.
-         */
-        "GroundTruthItem-Input": {
-            /** Id */
-            id: string;
-            /** Datasetname */
-            datasetName: string;
-            /** Bucket */
-            bucket?: string | null;
-            /** @default draft */
-            status: components["schemas"]["GroundTruthStatus"];
-            /**
-             * Doctype
-             * @default ground-truth-item
-             */
-            docType: string;
-            /**
-             * Schemaversion
-             * @default v2
-             */
-            schemaVersion: string;
-            /** Synthquestion */
-            synthQuestion: string;
-            /** Editedquestion */
-            editedQuestion?: string | null;
-            /** Answer */
-            answer?: string | null;
-            /** Refs */
-            refs?: components["schemas"]["Reference"][];
-            /** Manualtags */
-            manualTags?: string[];
-            /** Computedtags */
-            computedTags?: string[];
-            /** Comment */
-            comment?: string | null;
-            /** History */
-            history?: components["schemas"]["HistoryItem"][] | null;
-            /** Contextusedforgeneration */
-            contextUsedForGeneration?: string | null;
-            /** Contextsource */
-            contextSource?: string | null;
-            /** Modelusedforgeneration */
-            modelUsedForGeneration?: string | null;
-            /** Semanticclusternumber */
-            semanticClusterNumber?: number | null;
-            /** Weight */
-            weight?: number | null;
-            /** Samplingbucket */
-            samplingBucket?: number | null;
-            /** Questionlength */
-            questionLength?: number | null;
-            /** Assignedto */
-            assignedTo?: string | null;
-            /** Assignedat */
-            assignedAt?: string | null;
-            /**
-             * Updatedat
-             * Format: date-time
-             */
-            updatedAt?: string;
-            /** Updatedby */
-            updatedBy?: string | null;
-            /** Reviewedat */
-            reviewedAt?: string | null;
-            /** Etag */
-            _etag?: string | null;
-            /**
-             * Totalreferences
-             * @default 0
-             */
-            totalReferences: number;
-        };
-        /**
-         * GroundTruthItem
-         * @description Canonical Ground Truth item aligned to wire schema (schemaVersion v1).
-         *
-         *     All fields with camelCase wire names use aliases; we accept both field names and aliases
-         *     on input (populate_by_name=True) and always serialize using by_alias.
-         */
-        "GroundTruthItem-Output": {
-            /** Id */
-            id: string;
-            /** Datasetname */
-            datasetName: string;
-            /** Bucket */
-            bucket?: string | null;
-            /** @default draft */
-            status: components["schemas"]["GroundTruthStatus"];
-            /**
-             * Doctype
-             * @default ground-truth-item
-             */
-            docType: string;
-            /**
-             * Schemaversion
-             * @default v2
-             */
-            schemaVersion: string;
-            /** Synthquestion */
-            synthQuestion: string;
-            /** Editedquestion */
-            editedQuestion?: string | null;
-            /** Answer */
-            answer?: string | null;
-            /** Refs */
-            refs?: components["schemas"]["Reference"][];
-            /** Manualtags */
-            manualTags?: string[];
-            /** Computedtags */
-            computedTags?: string[];
-            /** Comment */
-            comment?: string | null;
-            /** History */
-            history?: components["schemas"]["HistoryItem"][] | null;
-            /** Contextusedforgeneration */
-            contextUsedForGeneration?: string | null;
-            /** Contextsource */
-            contextSource?: string | null;
-            /** Modelusedforgeneration */
-            modelUsedForGeneration?: string | null;
-            /** Semanticclusternumber */
-            semanticClusterNumber?: number | null;
-            /** Weight */
-            weight?: number | null;
-            /** Samplingbucket */
-            samplingBucket?: number | null;
-            /** Questionlength */
-            questionLength?: number | null;
-            /** Assignedto */
-            assignedTo?: string | null;
-            /** Assignedat */
-            assignedAt?: string | null;
-            /**
-             * Updatedat
-             * Format: date-time
-             */
-            updatedAt?: string;
-            /** Updatedby */
-            updatedBy?: string | null;
-            /** Reviewedat */
-            reviewedAt?: string | null;
-            /** Etag */
-            _etag?: string | null;
-            /**
-             * Totalreferences
-             * @default 0
-             */
-            totalReferences: number;
-            /**
-             * Tags
-             * @description Return a merged, sorted view of manual and computed tags.
-             */
-            readonly tags: string[];
-        };
         /** GroundTruthListResponse */
         GroundTruthListResponse: {
             /** Items */
-            items: components["schemas"]["GroundTruthItem-Output"][];
+            items: components["schemas"]["AgenticGroundTruthEntry-Output"][];
             pagination: components["schemas"]["PaginationMetadata"];
         };
         /**
@@ -947,32 +946,68 @@ export interface components {
          * @enum {string}
          */
         GroundTruthStatus: "draft" | "approved" | "deleted" | "skipped";
+        /** GroundTruthUpdateRequest */
+        GroundTruthUpdateRequest: {
+            /** Status */
+            status?: components["schemas"]["GroundTruthStatus"] | string;
+            /** Comment */
+            comment?: string | null;
+            /** History */
+            history?: components["schemas"]["HistoryEntryPatch"][] | null;
+            /** Contextentries */
+            contextEntries?: components["schemas"]["ContextEntry"][] | null;
+            /** Toolcalls */
+            toolCalls?: components["schemas"]["ToolCallRecord"][] | null;
+            /** Expectedtools */
+            expectedTools?: components["schemas"]["ExpectedTools"];
+            /** Feedback */
+            feedback?: components["schemas"]["FeedbackEntry"][] | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Plugins */
+            plugins?: {
+                [key: string]: components["schemas"]["PluginPayload"];
+            } | null;
+            /** Manualtags */
+            manualTags?: string[] | null;
+            /** Traceids */
+            traceIds?: {
+                [key: string]: string;
+            } | null;
+            /** Tracepayload */
+            tracePayload?: {
+                [key: string]: unknown;
+            } | null;
+            /** Scenarioid */
+            scenarioId?: string | null;
+            /** Etag */
+            etag?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /**
-         * HistoryItem
-         * @description Represents a single item in the multi-turn history.
-         */
-        HistoryItem: {
-            role: components["schemas"]["HistoryItemRole"];
+        /** HistoryEntry */
+        HistoryEntry: {
+            /** Role */
+            role: string;
             /** Msg */
             msg: string;
-            /** Refs */
-            refs?: components["schemas"]["Reference"][] | null;
-            /**
-             * Expectedbehavior
-             * @description Expected behavior(s) for this turn in the conversation (e.g., tool:search, generation:answer)
-             */
-            expectedBehavior?: components["schemas"]["ExpectedBehavior"][] | null;
         };
-        /**
-         * HistoryItemRole
-         * @enum {string}
-         */
-        HistoryItemRole: "user" | "assistant";
+        /** HistoryEntryPatch */
+        HistoryEntryPatch: {
+            /** Role */
+            role: string;
+            /** Msg */
+            msg?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** ImportBulkResponse */
         ImportBulkResponse: {
             /**
@@ -1040,10 +1075,7 @@ export interface components {
              */
             position: number;
         };
-        /**
-         * PaginationMetadata
-         * @description Pagination metadata for list responses.
-         */
+        /** PaginationMetadata */
         PaginationMetadata: {
             /**
              * Page
@@ -1075,6 +1107,20 @@ export interface components {
              * @description Whether there is a previous page
              */
             hasPrev: boolean;
+        };
+        /** PluginPayload */
+        PluginPayload: {
+            /** Kind */
+            kind: string;
+            /**
+             * Version
+             * @default 1.0
+             */
+            version: string;
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            };
         };
         /**
          * RecomputeTagsResponse
@@ -1119,9 +1165,7 @@ export interface components {
         };
         /**
          * Reference
-         * @description Wire reference object.
-         *
-         *     { url, title, content, keyExcerpt, type, bonus, messageIndex }
+         * @description Legacy RAG reference object retained for compatibility helpers and tests.
          */
         Reference: {
             /**
@@ -1156,7 +1200,7 @@ export interface components {
         /** SelfServeResponse */
         SelfServeResponse: {
             /** Assigned */
-            assigned: components["schemas"]["GroundTruthItem-Output"][];
+            assigned: components["schemas"]["AgenticGroundTruthEntry-Output"][];
             /** Requested */
             requested: number;
             /** Assignedcount */
@@ -1259,6 +1303,45 @@ export interface components {
             /** Groups */
             groups: components["schemas"]["TagGroupDTO"][];
         };
+        /** ToolCallRecord */
+        ToolCallRecord: {
+            /**
+             * Id
+             * @default
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Calltype
+             * @default tool
+             * @enum {string}
+             */
+            callType: "tool" | "subagent";
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            } | null;
+            /** Agent */
+            agent?: string | null;
+            /** Stepnumber */
+            stepNumber?: number | null;
+            /** Parallelgroup */
+            parallelGroup?: string | null;
+            /** Parentcallid */
+            parentCallId?: string | null;
+            /** Response */
+            response?: unknown;
+        };
+        /** ToolExpectation */
+        ToolExpectation: {
+            /** Name */
+            name: string;
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            } | string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1268,10 +1351,7 @@ export interface components {
             /** Error Type */
             type: string;
         };
-        /**
-         * ValidationSummary
-         * @description Summary statistics for bulk import.
-         */
+        /** ValidationSummary */
         ValidationSummary: {
             /**
              * Total
@@ -1418,7 +1498,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["GroundTruthItem-Input"][];
+                "application/json": components["schemas"]["AgenticGroundTruthEntry-Input"][];
             };
         };
         responses: {
@@ -1514,7 +1594,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GroundTruthItem-Output"][];
+                    "application/json": components["schemas"]["AgenticGroundTruthEntry-Output"][];
                 };
             };
             /** @description Validation Error */
@@ -1547,7 +1627,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GroundTruthItem-Output"];
+                    "application/json": components["schemas"]["AgenticGroundTruthEntry-Output"];
                 };
             };
             /** @description Validation Error */
@@ -1576,9 +1656,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["GroundTruthUpdateRequest"];
             };
         };
         responses: {
@@ -1588,7 +1666,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GroundTruthItem-Output"];
+                    "application/json": components["schemas"]["AgenticGroundTruthEntry-Output"];
                 };
             };
             /** @description Validation Error */
@@ -1723,7 +1801,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GroundTruthItem-Output"][];
+                    "application/json": components["schemas"]["AgenticGroundTruthEntry-Output"][];
                 };
             };
         };
@@ -1753,7 +1831,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GroundTruthItem-Output"];
+                    "application/json": components["schemas"]["AgenticGroundTruthEntry-Output"];
                 };
             };
             /** @description Validation Error */
@@ -1823,7 +1901,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GroundTruthItem-Output"];
+                    "application/json": components["schemas"]["AgenticGroundTruthEntry-Output"];
                 };
             };
             /** @description Validation Error */
@@ -2224,39 +2302,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    chat_v1_chat_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChatRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChatResponse"];
                 };
             };
             /** @description Validation Error */

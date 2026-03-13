@@ -3,7 +3,7 @@ from pydantic import TypeAdapter
 import pytest
 import uuid
 
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
 from app.container import container
 from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo
 
@@ -57,7 +57,7 @@ async def test_assigned_ground_truths_update_and_approve(async_client: AsyncClie
     assert r.status_code == 200
     data: dict = r.json()
     # mypy: data.get returns Optional[Any]; use default [] to ensure list type
-    adocs = TypeAdapter(list[GroundTruthItem]).validate_python(data.get("assigned") or [])
+    adocs = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(data.get("assigned") or [])
     assert adocs and len(adocs) >= 1
     gt_id = adocs[0].id
 
@@ -103,7 +103,7 @@ async def assigned_ground_truth(async_client: AsyncClient, user_headers):
     )
     assert r.status_code == 200
     data = r.json()
-    adocs = TypeAdapter(list[GroundTruthItem]).validate_python(data.get("assigned") or [])
+    adocs = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(data.get("assigned") or [])
     assert adocs and len(adocs) >= 1
     gt = adocs[0]
 
