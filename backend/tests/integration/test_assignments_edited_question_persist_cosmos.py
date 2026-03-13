@@ -31,12 +31,17 @@ def make_item(dataset: str, item_id: str) -> dict[str, Any]:
 async def test_assignments_put_persists_edited_question_camel_case(
     async_client: AsyncClient, user_headers: dict[str, str]
 ):
-    """Ensure that providing editedQuestion (camelCase) in the assignments PUT body
-    updates and persists the field (alias -> edited_question) and is reflected on
-    subsequent GET/list responses.
+    """Compat-migration coverage for the temporary editedQuestion alias path.
 
-    Regression coverage for previous bug where only snake_case 'edited_question'
-    was checked, causing the field to be dropped.
+    This test stays only while assignments updates still project legacy camelCase
+    question fields across the compatibility boundary. Delete it with the alias
+    retirement work in the hard-delete phase.
+    
+    **Phase 5 Audit (2026-03-12)**: MIGRATION TEST - INFORMATIONAL
+    This test validates that editedQuestion persists correctly through Cosmos
+    round-trips. The test is marked as temporary and should be deleted when
+    Phase 6 removes legacy field support. Not a delete blocker, but documents
+    current persistence contract.
     """
     dataset = f"editedq-{uuid4().hex[:6]}"
     item_id = "gt-1"

@@ -1,12 +1,17 @@
 import { render } from "@testing-library/react";
 import type React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ErrorBoundary from "../../src/components/common/ErrorBoundary";
 import * as telemetry from "../../src/services/telemetry";
 
 describe("ErrorBoundary", () => {
 	beforeEach(() => {
 		vi.spyOn(telemetry, "logException").mockImplementation(() => {});
+		vi.spyOn(console, "error").mockImplementation(() => {});
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
 	it("renders fallback on error and logs exception", () => {

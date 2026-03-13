@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import cast
 from app.adapters.repos.base import GroundTruthRepo
-from app.domain.models import AgenticGroundTruthEntry, AssignmentDocument, GroundTruthItem, HistoryItem
+from app.domain.models import AgenticGroundTruthEntry, AssignmentDocument, HistoryItem
 from app.plugins import get_default_registry
 from app.core.errors import AssignmentConflictError
 from app.core.config import get_sampling_allocation
@@ -640,7 +639,7 @@ class AssignmentService:
 
         # Apply computed tags based on the new item's properties
         registry = get_default_registry()
-        computed_tags = registry.compute_all(cast(GroundTruthItem, new_item))
+        computed_tags = registry.compute_all(new_item)
         new_item.computed_tags = computed_tags
         # Strip any computed tag keys from manual tags to prevent duplicates
         # Uses pattern-based matching for dynamic tags (e.g., dataset:*)

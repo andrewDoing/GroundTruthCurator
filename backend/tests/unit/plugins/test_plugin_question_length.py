@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
 from app.plugins.computed_tags.question_length import (
     QuestionLengthLongPlugin,
     QuestionLengthMediumPlugin,
@@ -31,7 +31,7 @@ class TestQuestionLengthPlugins:
     ):
         """Each document gets exactly one length tag."""
         question = " ".join([f"word{i}" for i in range(word_count)])
-        item = GroundTruthItem(
+        item = AgenticGroundTruthEntry(
             id="test-id",
             datasetName="test-dataset",
             synthQuestion=question,
@@ -55,7 +55,7 @@ class TestQuestionLengthPlugins:
 
     def test_edited_question_takes_precedence(self):
         """editedQuestion is used over synthQuestion when present."""
-        item = GroundTruthItem(
+        item = AgenticGroundTruthEntry(
             id="test-id",
             datasetName="test-dataset",
             synthQuestion="short",  # 1 word

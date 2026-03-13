@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from app.domain.models import AgenticGroundTruthEntry, GroundTruthItem
+    from app.domain.models import AgenticGroundTruthEntry
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ class ComputedTagPlugin(ABC):
             def tag_key(self) -> str:
                 return "length:long"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 content = doc.answer or ""
                 return self.tag_key if len(content) > 10000 else None
 
@@ -110,7 +110,7 @@ class ComputedTagPlugin(ABC):
             def tag_key(self) -> str:
                 return "dataset:_dynamic"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return f"dataset:{doc.datasetName}" if doc.datasetName else None
     """
 
@@ -125,12 +125,13 @@ class ComputedTagPlugin(ABC):
         pass
 
     @abstractmethod
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         """Compute the tag for this document.
 
         Args:
-            doc: The GroundTruthItem to evaluate.
-                 Contains fields like 'answer', 'synthQuestion', 'refs', 'history', etc.
+            doc: The AgenticGroundTruthEntry to evaluate.
+                 Contains fields like 'answer', 'history', 'refs', etc.
+                 Legacy fields like synthQuestion, editedQuestion are accessed via computed properties.
 
         Returns:
             The tag string if applicable, None otherwise.
@@ -178,14 +179,14 @@ class TagPluginRegistry:
         self._registered_keys.add(plugin.tag_key)
         self._plugins.append(plugin)
 
-    def compute_all(self, doc: GroundTruthItem) -> list[str]:
+    def compute_all(self, doc: AgenticGroundTruthEntry) -> list[str]:
         """Compute all applicable tags for a document.
 
         Iterates through all registered plugins and collects tags
         from plugins whose compute() method returns a tag string.
 
         Args:
-            doc: The GroundTruthItem to evaluate.
+            doc: The AgenticGroundTruthEntry to evaluate.
 
         Returns:
             A list of computed tag keys that apply to this document.

@@ -9,6 +9,12 @@ from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validat
 from app.domain.enums import GroundTruthStatus
 from app.domain.validators import GroundTruthItemTagValidators
 
+LEGACY_HOST_FIELD_DELETE_GATES = (
+    "stored-data audit completed",
+    "caller audit completed",
+    "import/export verification completed",
+)
+
 
 class Reference(BaseModel):
     """Legacy RAG reference object retained for compatibility helpers and tests."""
@@ -261,121 +267,46 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
     # stored Cosmos DB documents may still carry top-level RAG fields (synthQuestion,
     # editedQuestion, answer, refs, etc.). They transparently relocate those fields into
     # plugins["rag-compat"] on read and re-expose them for internal code that still
-    # accesses .synth_question, .answer, .refs, .totalReferences. Remove once all stored
-    # documents have been migrated to the plugin-packed format.
+    # accesses .synth_question, .answer, .refs, .totalReferences.
+    #
+    # Hard-delete only after all LEGACY_HOST_FIELD_DELETE_GATES are satisfied. Until then,
+    # these accessors are migration projections, not long-term host ownership.
 
     @model_validator(mode="before")
     @classmethod
     def translate_legacy_payload_for_core_model(cls, value: object) -> object:
-        if cls is not AgenticGroundTruthEntry or not isinstance(value, dict):
+        if cls is not AgenticGroundTruthEntry:
             return value
+        from app.plugins.packs.rag_compat import normalize_legacy_payload_for_core_model
 
-        data = dict(value)
-        data.pop("tags", None)
-        legacy_payload: dict[str, Any] = {}
+        return normalize_legacy_payload_for_core_model(value, plugin_name=cls._RAG_COMPAT_PLUGIN)
 
-        for field_name in (
-            "synthQuestion",
-            "editedQuestion",
-            "answer",
-            "refs",
-            "contextUsedForGeneration",
-            "contextSource",
-            "modelUsedForGeneration",
-            "semanticClusterNumber",
-            "weight",
-            "samplingBucket",
-            "questionLength",
-            "totalReferences",
-        ):
-            if field_name in data:
-                legacy_payload[field_name] = data.pop(field_name)
+    @model_validator(mode="after")
+    def restore_history_annotations(self) -> "AgenticGroundTruthEntry":
+        history_annotations = self._rag_compat_data().get("historyAnnotations")
+        if not isinstance(history_annotations, list) or not self.history:
+            return self
 
-        if "refs" in legacy_payload and isinstance(legacy_payload["refs"], list):
-            legacy_payload["refs"] = [
-                ref if isinstance(ref, Reference) else Reference.model_validate(ref)
-                for ref in legacy_payload["refs"]
-            ]
+        merged_history: list[HistoryEntry] = []
+        changed = False
+        for index, entry in enumerate(self.history):
+            annotation = history_annotations[index] if index < len(history_annotations) else None
+            if not isinstance(annotation, dict) or not annotation:
+                merged_history.append(entry)
+                continue
 
-        history_value = data.get("history")
-        if isinstance(history_value, list):
-            normalized_history: list[dict[str, Any]] = []
-            history_annotations: list[dict[str, Any]] = []
-            saw_history_annotations = False
-            for raw_entry in history_value:
-                if isinstance(raw_entry, BaseModel):
-                    entry_dict = raw_entry.model_dump(by_alias=True, exclude_none=True)
-                elif isinstance(raw_entry, dict):
-                    entry_dict = dict(raw_entry)
-                else:
-                    normalized_history.append(raw_entry)
-                    history_annotations.append({})
-                    continue
+            entry_payload = entry.model_dump(by_alias=True)
+            if "refs" in annotation:
+                entry_payload["refs"] = annotation["refs"]
+                changed = True
+            if "expectedBehavior" in annotation:
+                entry_payload["expectedBehavior"] = annotation["expectedBehavior"]
+                changed = True
+            merged_history.append(HistoryItem.model_validate(entry_payload))
 
-                annotation: dict[str, Any] = {}
-                if "refs" in entry_dict:
-                    raw_refs = entry_dict.pop("refs")
-                    if isinstance(raw_refs, list):
-                        annotation["refs"] = [
-                            ref if isinstance(ref, Reference) else Reference.model_validate(ref)
-                            for ref in raw_refs
-                        ]
-                    else:
-                        annotation["refs"] = raw_refs
-                    saw_history_annotations = True
-                expected_behavior = entry_dict.pop(
-                    "expectedBehavior", entry_dict.pop("expected_behavior", None)
-                )
-                if expected_behavior is not None:
-                    annotation["expectedBehavior"] = expected_behavior
-                    saw_history_annotations = True
-
-                message = entry_dict.get("msg")
-                if message is None and "content" in entry_dict:
-                    message = entry_dict.pop("content")
-                normalized_history.append(
-                    {
-                        "role": entry_dict.get("role", ""),
-                        "msg": message or "",
-                    }
-                )
-                history_annotations.append(annotation)
-
-            data["history"] = normalized_history
-            if saw_history_annotations:
-                legacy_payload["historyAnnotations"] = history_annotations
-        elif history_value is None and (
-            legacy_payload.get("editedQuestion")
-            or legacy_payload.get("synthQuestion")
-            or legacy_payload.get("answer")
-        ):
-            generated_history: list[dict[str, Any]] = []
-            question_text = legacy_payload.get("editedQuestion") or legacy_payload.get("synthQuestion")
-            if question_text:
-                generated_history.append({"role": "user", "msg": question_text})
-            if legacy_payload.get("answer"):
-                generated_history.append({"role": "assistant", "msg": legacy_payload["answer"]})
-            data["history"] = generated_history
-
-        if legacy_payload:
-            plugins_payload = dict(data.get("plugins") or {})
-            existing_plugin = plugins_payload.get(cls._RAG_COMPAT_PLUGIN)
-            if isinstance(existing_plugin, PluginPayload):
-                plugin_dict = existing_plugin.model_dump(by_alias=True)
-            elif isinstance(existing_plugin, dict):
-                plugin_dict = dict(existing_plugin)
-            else:
-                plugin_dict = {"kind": cls._RAG_COMPAT_PLUGIN, "version": "1.0", "data": {}}
-            plugin_data_raw = plugin_dict.get("data")
-            plugin_data = dict(plugin_data_raw) if isinstance(plugin_data_raw, dict) else {}
-            plugin_data.update(legacy_payload)
-            plugin_dict["kind"] = plugin_dict.get("kind") or cls._RAG_COMPAT_PLUGIN
-            plugin_dict["version"] = plugin_dict.get("version") or "1.0"
-            plugin_dict["data"] = plugin_data
-            plugins_payload[cls._RAG_COMPAT_PLUGIN] = plugin_dict
-            data["plugins"] = plugins_payload
-
-        return data
+        if changed:
+            self.history = merged_history
+        return self
 
     @computed_field
     @property
@@ -499,16 +430,36 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
                 ref if isinstance(ref, Reference) else Reference.model_validate(ref)
                 for ref in direct_value
             ]
-        compat = self._rag_compat_data()
-        raw_refs = compat.get("refs") or []
-        return [ref if isinstance(ref, Reference) else Reference.model_validate(ref) for ref in raw_refs]
+        from app.plugins.packs.rag_compat import compat_refs_from_payload
+
+        return cast(
+            list[Reference],
+            compat_refs_from_payload(
+                {
+                    "plugins": self.plugins,
+                    "toolCalls": self.tool_calls,
+                    "history": self.history,
+                },
+                plugin_name=self._RAG_COMPAT_PLUGIN,
+            ),
+        )
 
     @refs.setter
-    def refs(self, value: list[Reference] | None) -> None:
+    def refs(self, value: list[Reference] | list[dict[str, Any]] | None) -> None:
         if "refs" in getattr(type(self), "model_fields", {}):
             self.__dict__["refs"] = list(value or [])
             return
-        serialized = [ref.model_dump(by_alias=True) for ref in (value or [])]
+        # Handle both Reference objects and dict representations
+        serialized = []
+        for ref in (value or []):
+            if isinstance(ref, Reference):
+                serialized.append(ref.model_dump(by_alias=True))
+            elif isinstance(ref, dict):
+                # Validate and convert dict to ensure it's a valid reference
+                validated_ref = Reference.model_validate(ref)
+                serialized.append(validated_ref.model_dump(by_alias=True))
+            else:
+                serialized.append(ref)
         self._set_rag_compat_value("refs", serialized)
 
     @property
@@ -516,18 +467,16 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
         direct_value = self.__dict__.get("totalReferences")
         if isinstance(direct_value, int):
             return direct_value
-        compat = self._rag_compat_data()
-        if isinstance(compat.get("totalReferences"), int):
-            return cast(int, compat["totalReferences"])
-        history_count = 0
-        history_annotations = compat.get("historyAnnotations")
-        if isinstance(history_annotations, list):
-            for annotation in history_annotations:
-                if isinstance(annotation, dict) and isinstance(annotation.get("refs"), list):
-                    history_count += len(annotation["refs"])
-        if history_count:
-            return history_count
-        return len(self.refs)
+        from app.plugins.packs.rag_compat import compat_total_references_from_payload
+
+        return compat_total_references_from_payload(
+            {
+                "plugins": self.plugins,
+                "toolCalls": self.tool_calls,
+                "history": self.history,
+            },
+            plugin_name=self._RAG_COMPAT_PLUGIN,
+        )
 
     @totalReferences.setter
     def totalReferences(self, value: int | None) -> None:
@@ -539,56 +488,11 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
     # NOTE: Informational RAG-era accessors (contextUsedForGeneration, contextSource,
     # modelUsedForGeneration, semanticClusterNumber, weight, samplingBucket, questionLength)
     # removed in Phase 7 legacy retirement. No callers accessed them via
-    # AgenticGroundTruthEntry; GroundTruthItem still has explicit fields for Cosmos
-    # backward-compat reads.
+    # AgenticGroundTruthEntry uses computed properties for legacy field access.
+    # Read paths extract these values from history and plugin data. Write paths
+    # normalize incoming payloads into canonical multi-turn structures.
 
 
-class GroundTruthItem(AgenticGroundTruthEntry):
-    """Legacy compatibility model used internally by existing services/tests.
-
-    This subclass keeps historical top-level RAG fields available for internal code while the
-    public API moves to AgenticGroundTruthEntry.
-    """
-
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
-
-    synth_question: str | None = Field(default=None, alias="synthQuestion")
-    edited_question: str | None = Field(default=None, alias="editedQuestion")
-    answer: str | None = None
-    refs: list[Reference] = Field(default_factory=list, alias="refs")
-    history: Optional[list[HistoryItem]] = None
-    contextUsedForGeneration: Optional[str] = None
-    contextSource: Optional[str] = None
-    modelUsedForGeneration: Optional[str] = None
-    semanticClusterNumber: Optional[int] = None
-    weight: Optional[float] = None
-    samplingBucket: Optional[int] = None
-    questionLength: Optional[int] = None
-    totalReferences: int = Field(default=0, alias="totalReferences")
-
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_legacy_response_payload(cls, value: object) -> object:
-        if not isinstance(value, dict):
-            return value
-
-        data = dict(value)
-        data.pop("tags", None)
-        data.pop("curationInstructions", None)
-        if data.get("history") is None:
-            data["history"] = []
-        if data.get("refs") is None:
-            data["refs"] = []
-        if data.get("totalReferences") is None:
-            data["totalReferences"] = 0
-        return data
-
-    @model_validator(mode="after")
-    def compute_total_references_if_needed(self) -> GroundTruthItem:
-        if self.totalReferences == 0:
-            history_refs = sum(len(turn.refs or []) for turn in (self.history or []))
-            self.totalReferences = history_refs if history_refs > 0 else len(self.refs or [])
-        return self
 
 
 class PaginationMetadata(BaseModel):

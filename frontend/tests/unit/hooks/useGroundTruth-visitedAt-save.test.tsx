@@ -133,7 +133,10 @@ describe("useGroundTruth visitedAt persistence on save (SA-232)", () => {
 		});
 		const current = result.current.current;
 		expect(current).toBeTruthy();
-		const currentRefs = getItemReferences(current!);
+		if (!current) {
+			throw new Error("Expected current item");
+		}
+		const currentRefs = getItemReferences(current);
 		if (!currentRefs[0]) {
 			throw new Error("Expected at least one reference");
 		}
@@ -144,8 +147,13 @@ describe("useGroundTruth visitedAt persistence on save (SA-232)", () => {
 		await act(async () => {
 			result.current.openReference(ref);
 		});
-		const afterOpenVisitedAt = getItemReferences(result.current.current!)[0]
-			?.visitedAt;
+		const afterOpenCurrent = result.current.current;
+		expect(afterOpenCurrent).toBeTruthy();
+		if (!afterOpenCurrent) {
+			throw new Error("Expected current item after opening reference");
+		}
+		const afterOpenVisitedAt =
+			getItemReferences(afterOpenCurrent)[0]?.visitedAt;
 		expect(afterOpenVisitedAt).toBeTruthy();
 
 		// Change answer so save is not a no-op
@@ -160,8 +168,13 @@ describe("useGroundTruth visitedAt persistence on save (SA-232)", () => {
 		});
 
 		// visitedAt should still be present
-		const afterSaveVisitedAt = getItemReferences(result.current.current!)[0]
-			?.visitedAt;
+		const afterSaveCurrent = result.current.current;
+		expect(afterSaveCurrent).toBeTruthy();
+		if (!afterSaveCurrent) {
+			throw new Error("Expected current item after save");
+		}
+		const afterSaveVisitedAt =
+			getItemReferences(afterSaveCurrent)[0]?.visitedAt;
 		expect(afterSaveVisitedAt).toBeTruthy();
 		// It should be exactly the same timestamp (we merge, not overwrite)
 		expect(afterSaveVisitedAt).toBe(afterOpenVisitedAt);

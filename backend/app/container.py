@@ -133,6 +133,16 @@ class Container:
         )
         return registry
 
+    def _build_snapshot_service(self, repo: GroundTruthRepo) -> SnapshotService:
+        return SnapshotService(
+            repo,
+            export_pipeline=self.export_pipeline,
+            processor_registry=self.export_processor_registry,
+            formatter_registry=self.export_formatter_registry,
+            default_processor_order=self.export_default_processor_order,
+            plugin_export_transforms=self.plugin_pack_registry.collect_export_transforms(),
+        )
+
     def init_cosmos_repo(self, db_name: str | None = None) -> None:
         """Create a Cosmos repo instance and wire services.
 
@@ -186,13 +196,7 @@ class Container:
         self.assignment_service = AssignmentService(self.repo)
         # Keep existing search service (may already be wired with adapter)
         self.search_service = self.search_service or SearchService()
-        self.snapshot_service = SnapshotService(
-            self.repo,
-            export_pipeline=self.export_pipeline,
-            processor_registry=self.export_processor_registry,
-            formatter_registry=self.export_formatter_registry,
-            default_processor_order=self.export_default_processor_order,
-        )
+        self.snapshot_service = self._build_snapshot_service(self.repo)
         self.curation_service = CurationService(self.repo)
         # Initialize tags repo and service (shares the same Cosmos account/db)
         self.tags_repo = CosmosTagsRepo(
@@ -225,13 +229,7 @@ class Container:
             curation_instructions=demo_instructions,
         )
         self.assignment_service = AssignmentService(self.repo)
-        self.snapshot_service = SnapshotService(
-            self.repo,
-            export_pipeline=self.export_pipeline,
-            processor_registry=self.export_processor_registry,
-            formatter_registry=self.export_formatter_registry,
-            default_processor_order=self.export_default_processor_order,
-        )
+        self.snapshot_service = self._build_snapshot_service(self.repo)
         self.curation_service = CurationService(self.repo)
         self.tags_repo = cast(CosmosTagsRepo, InMemoryTagsRepo())
         self.tag_registry_service = TagRegistryService(self.tags_repo)

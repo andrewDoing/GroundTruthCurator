@@ -1,17 +1,14 @@
-"""Unit tests for expanded PluginPack extension surfaces.
+"""Unit tests for runtime-backed PluginPack extension seams.
 
-Tests cover:
-- get_stats_contribution no-op default and registry aggregation
-- get_explorer_fields no-op default and registry aggregation with pack_name
-- get_import_transforms and get_export_transforms aggregation
-- collect_stats merges base_stats with pack contributions
+These assertions stay because the extension hooks are wired into runtime flows
+for stats, explorer fields, and import/export registration. They are not legacy
+migration coverage.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from app.domain.models import AgenticGroundTruthEntry
 from app.plugins.base import (
     ExplorerFieldDefinition,
     ExportTransform,

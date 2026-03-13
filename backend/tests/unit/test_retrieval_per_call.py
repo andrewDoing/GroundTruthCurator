@@ -1,9 +1,8 @@
 """Tests for RagCompatPack per-tool-call retrieval state (Phase 6)."""
 from __future__ import annotations
 
-import pytest
 
-from app.domain.models import AgenticGroundTruthEntry, Reference, ToolCallRecord
+from app.domain.models import AgenticGroundTruthEntry
 from app.plugins.packs.rag_compat import RagCompatPack
 
 

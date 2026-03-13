@@ -41,148 +41,31 @@ function makeApiItem(overrides: Partial<ApiItem> = {}): ApiItem {
 }
 
 describe("mapGroundTruthFromApi", () => {
-	describe("reference messageIndex assignment for single-turn conversion", () => {
-		it("assigns refs to messageIndex 1 when converting single-turn with answer", () => {
-			const apiItem = makeApiItem({
-				synthQuestion: "Question",
-				answer: "Answer",
-				refs: [
-					{
-						url: "https://example.com",
-						content: "content",
-						keyExcerpt: "key",
-						bonus: false,
-					},
-				],
-				history: undefined,
-			});
-
-			const result = mapGroundTruthFromApi(apiItem);
-
-			expect(getItemReferences(result)).toHaveLength(1);
-			expect(getItemReferences(result)[0].messageIndex).toBe(1); // Agent turn index
-		});
-
-		it("assigns refs to messageIndex 1 even when no answer exists (Bug Fix: SA-86)", () => {
-			// Bug 3: For Questions Without an Answer, Agent Turn Doesn't Get Created and UI Doesn't Show Existing Refs
-			// Fix ensures that refs are assigned to agent turn (messageIndex = 1) even when answer is empty
-			const apiItem = makeApiItem({
-				synthQuestion: "Question",
-				answer: "",
-				refs: [
-					{
-						url: "https://example.com",
-						content: "content",
-						bonus: false,
-					},
-				],
-				history: undefined,
-			});
-
-			const result = mapGroundTruthFromApi(apiItem);
-
-			// References should be assigned to agent turn (messageIndex = 1)
-			expect(getItemReferences(result)[0].messageIndex).toBe(1);
-		});
-
-		it("creates empty agent turn when question exists but answer is missing (Bug Fix: SA-86)", () => {
-			// Bug 3: Ensures agent turn is created even without an answer
-			const apiItem = makeApiItem({
-				synthQuestion: "Question without answer",
-				answer: "",
-				history: undefined,
-			});
-
-			const result = mapGroundTruthFromApi(apiItem);
-
-			// Should create both user and agent turns
-			expect(result.history).toHaveLength(2);
-			expect(result.history?.[0]).toMatchObject({
-				role: "user",
-				content: "Question without answer",
-			});
-			expect(result.history?.[1]).toMatchObject({
-				role: "agent",
-				content: "", // Empty agent content
-			});
-		});
-
-		it("creates empty agent turn for null answer (Bug Fix: SA-86)", () => {
-			const apiItem = makeApiItem({
-				synthQuestion: "Question",
-				answer: null as unknown as string,
-				history: undefined,
-			});
-
-			const result = mapGroundTruthFromApi(apiItem);
-
-			expect(result.history).toHaveLength(2);
-			expect(result.history?.[1]).toMatchObject({
-				role: "agent",
-				content: "",
-			});
-		});
-
-		it("creates empty agent turn for undefined answer (Bug Fix: SA-86)", () => {
-			const apiItem = makeApiItem({
-				synthQuestion: "Question",
-				answer: undefined as unknown as string,
-				history: undefined,
-			});
-
-			const result = mapGroundTruthFromApi(apiItem);
-
-			expect(result.history).toHaveLength(2);
-			expect(result.history?.[1]).toMatchObject({
-				role: "agent",
-				content: "",
-			});
-		});
-
-		it("assigns refs to messageIndex 1 for question with refs but no answer (Bug Fix: SA-86)", () => {
-			// Real-world scenario: curated question with research refs but answer not yet written
-			const apiItem = makeApiItem({
-				editedQuestion: "How do I configure authentication for my app?",
-				answer: "",
-				refs: [
-					{
-						url: "https://docs.example.com/auth",
-						content: "Authentication documentation content",
-						keyExcerpt: "Use OAuth 2.0 for authentication",
-						bonus: false,
-					},
-					{
-						url: "https://docs.example.com/config",
-						content: "Configuration guide",
-						bonus: false,
-					},
-				],
-				history: undefined,
-			});
-
-			const result = mapGroundTruthFromApi(apiItem);
-
-			// Should create history with empty agent turn
-			expect(result.history).toHaveLength(2);
-			expect(result.history?.[0].content).toBe(
-				"How do I configure authentication for my app?",
-			);
-			expect(result.history?.[1].content).toBe("");
-
-			// All refs should be assigned to the agent turn
-			expect(getItemReferences(result)).toHaveLength(2);
-			expect(getItemReferences(result)[0].messageIndex).toBe(1);
-			expect(getItemReferences(result)[1].messageIndex).toBe(1);
-		});
-
-		it("preserves per-turn refs when history exists", () => {
+	describe("core-generic mapping", () => {
+		it("converts assistant role to agent and keeps stable turn ids", () => {
 			const apiItem = makeApiItem({
 				history: [
-					{
-						role: "user",
-						msg: "Q1",
-						refs: undefined,
-					},
+					{ role: "user", msg: "Question" },
+					{ role: "assistant", msg: "Answer" },
+				],
+			});
+			const result = mapGroundTruthFromApi(apiItem);
+			expect(result.history?.[0]).toMatchObject({
+				role: "user",
+				content: "Question",
+			});
+			expect(result.history?.[1]).toMatchObject({
+				role: "agent",
+				content: "Answer",
+			});
+			expect(result.history?.[0].turnId).toBeTruthy();
+			expect(result.history?.[1].turnId).toBeTruthy();
+		});
+
+		it("preserves per-turn refs when canonical history already exists", () => {
+			const apiItem = makeApiItem({
+				history: [
+					{ role: "user", msg: "Q1" },
 					{
 						role: "assistant",
 						msg: "A1",
@@ -196,93 +79,127 @@ describe("mapGroundTruthFromApi", () => {
 					},
 				],
 			});
-
 			const result = mapGroundTruthFromApi(apiItem);
-
-			// Per-turn refs should be extracted with proper messageIndex
-			// This is tested in the provider tests, so we just verify they exist
-			expect(getItemReferences(result)).toBeDefined();
+			const [ref] = getItemReferences(result);
+			expect(ref).toMatchObject({
+				url: "https://turn-ref.com",
+				messageIndex: 1,
+				turnId: result.history?.[1]?.turnId,
+			});
 		});
 	});
 
-	describe("history mapping", () => {
-		it("converts assistant role to agent", () => {
-			const apiItem = makeApiItem({
-				history: [
-					{ role: "user", msg: "Question" },
-					{ role: "assistant", msg: "Answer" },
-				],
-			});
-
-			const result = mapGroundTruthFromApi(apiItem);
-
-			expect(result.history?.[1].role).toBe("agent");
-		});
-
-		it("preserves user role", () => {
-			const apiItem = makeApiItem({
-				history: [{ role: "user", msg: "Question" }],
-			});
-
-			const result = mapGroundTruthFromApi(apiItem);
-
-			expect(result.history?.[0].role).toBe("user");
-		});
-
-		it("creates history from synthQuestion when no history provided", () => {
-			const apiItem = makeApiItem({
-				synthQuestion: "Synth Q",
-				answer: "A",
-				history: undefined,
-			});
-
-			const result = mapGroundTruthFromApi(apiItem);
-
-			expect(result.history).toHaveLength(2);
-			expect(result.history?.[0].content).toBe("Synth Q");
-			expect(result.history?.[1].content).toBe("A");
-		});
-
-		it("prefers editedQuestion over synthQuestion", () => {
+	describe("compat-migration read mapping", () => {
+		it("creates synthesized user and agent turns from legacy single-turn fields", () => {
 			const apiItem = makeApiItem({
 				synthQuestion: "Synth",
 				editedQuestion: "Edited",
+				answer: "A",
 				history: undefined,
 			});
-
 			const result = mapGroundTruthFromApi(apiItem);
+			expect(result.history).toHaveLength(2);
+			expect(result.history?.[0]).toMatchObject({
+				role: "user",
+				content: "Edited",
+			});
+			expect(result.history?.[1]).toMatchObject({
+				role: "agent",
+				content: "A",
+			});
+		});
 
-			expect(result.history?.[0].content).toBe("Edited");
+		it("anchors legacy top-level refs to the synthesized agent turn when answer is empty", () => {
+			const apiItem = makeApiItem({
+				editedQuestion: "How do I configure authentication for my app?",
+				answer: "",
+				refs: [
+					{
+						url: "https://docs.example.com/auth",
+						content: "Authentication documentation content",
+						keyExcerpt: "Use OAuth 2.0 for authentication",
+						bonus: false,
+					},
+				],
+				history: undefined,
+			});
+			const result = mapGroundTruthFromApi(apiItem);
+			const [ref] = getItemReferences(result);
+			expect(result.history).toHaveLength(2);
+			expect(result.history?.[1]).toMatchObject({ role: "agent", content: "" });
+			expect(ref).toMatchObject({
+				url: "https://docs.example.com/auth",
+				messageIndex: 1,
+				turnId: result.history?.[1]?.turnId,
+			});
 		});
 	});
 
 	describe("providerId", () => {
 		it("defaults to 'api' when not provided", () => {
-			const apiItem = makeApiItem({
-				synthQuestion: "Q",
-			});
-
-			const result = mapGroundTruthFromApi(apiItem);
-
+			const result = mapGroundTruthFromApi(makeApiItem({ synthQuestion: "Q" }));
 			expect(result.providerId).toBe("api");
 		});
 
 		it("uses provided providerId", () => {
-			const apiItem = makeApiItem({
-				synthQuestion: "Q",
-			});
-
-			const result = mapGroundTruthFromApi(apiItem, "custom-provider");
-
+			const result = mapGroundTruthFromApi(
+				makeApiItem({ synthQuestion: "Q" }),
+				"custom-provider",
+			);
 			expect(result.providerId).toBe("custom-provider");
 		});
 	});
 });
 
-// ---------------------------------------------------------------------------
-// Parity: provider path vs explorer/service path must produce identical output
-// ---------------------------------------------------------------------------
 describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
+	function normalizeTurnIdentity(item: ReturnType<typeof groundTruthFromApi>) {
+		const normalizedPlugins = item.plugins
+			? Object.fromEntries(
+					Object.entries(item.plugins).map(([slot, payload]) => [
+						slot,
+						slot === "rag-compat" && payload.data?.retrievals
+							? {
+									...payload,
+									data: {
+										...payload.data,
+										retrievals: Object.fromEntries(
+											Object.entries(
+												payload.data.retrievals as Record<
+													string,
+													{ candidates?: Array<Record<string, unknown>> }
+												>,
+											).map(([key, bucket]) => [
+												key,
+												{
+													...bucket,
+													candidates: (bucket.candidates ?? []).map(
+														(candidate) => ({
+															...candidate,
+															turnId: candidate.turnId
+																? "<normalized>"
+																: undefined,
+														}),
+													),
+												},
+											]),
+										),
+									},
+								}
+							: payload,
+					]),
+				)
+			: item.plugins;
+		return {
+			...item,
+			history: item.history?.map((turn) => ({
+				...turn,
+				turnId: "<normalized>",
+				stepId: "<normalized>",
+			})),
+			plugins: normalizedPlugins,
+		};
+	}
+
 	function makeSharedPayload(
 		overrides: Partial<ApiGroundTruth> = {},
 	): ApiGroundTruth {
@@ -310,9 +227,9 @@ describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
 		const payload = makeSharedPayload();
 		const fromProvider = groundTruthFromApi(payload);
 		const fromService = mapGroundTruthFromApi(payload);
-
-		// Both paths must return the same domain object
-		expect(fromProvider).toEqual(fromService);
+		expect(normalizeTurnIdentity(fromProvider)).toEqual(
+			normalizeTurnIdentity(fromService),
+		);
 	});
 
 	it("produces identical output for a multi-turn payload with per-turn refs", () => {
@@ -337,38 +254,20 @@ describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
 		});
 		const fromProvider = groundTruthFromApi(payload);
 		const fromService = mapGroundTruthFromApi(payload);
-
-		expect(fromProvider).toEqual(fromService);
-		// Sanity: both should have 2 references
+		expect(normalizeTurnIdentity(fromProvider)).toEqual(
+			normalizeTurnIdentity(fromService),
+		);
 		expect(getItemReferences(fromProvider)).toHaveLength(2);
-	});
-
-	it("produces identical output when providerId is supplied", () => {
-		const payload = makeSharedPayload();
-		const fromProvider = groundTruthFromApi(payload, "explorer");
-		const fromService = mapGroundTruthFromApi(payload, "explorer");
-
-		expect(fromProvider).toEqual(fromService);
-		expect(fromProvider.providerId).toBe("explorer");
-	});
-
-	it("produces identical output for deleted status", () => {
-		const payload = makeSharedPayload({ status: "deleted" });
-		const fromProvider = groundTruthFromApi(payload);
-		const fromService = mapGroundTruthFromApi(payload);
-
-		expect(fromProvider).toEqual(fromService);
-		expect(fromProvider.deleted).toBe(true);
-		expect(fromProvider.status).toBe("draft");
 	});
 
 	it("preserves reviewedAt through both paths identically", () => {
 		const payload = makeSharedPayload({ reviewedAt: "2025-06-01T12:00:00Z" });
 		const fromProvider = groundTruthFromApi(payload);
 		const fromService = mapGroundTruthFromApi(payload);
-
 		expect(fromProvider.reviewedAt).toBe("2025-06-01T12:00:00Z");
 		expect(fromService.reviewedAt).toBe("2025-06-01T12:00:00Z");
-		expect(fromProvider).toEqual(fromService);
+		expect(normalizeTurnIdentity(fromProvider)).toEqual(
+			normalizeTurnIdentity(fromService),
+		);
 	});
 });

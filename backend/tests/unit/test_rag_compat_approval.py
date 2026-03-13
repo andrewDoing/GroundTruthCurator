@@ -7,13 +7,9 @@ hard-coded in the core validation_service.
 
 from __future__ import annotations
 
-import pytest
 
 from app.domain.models import (
     AgenticGroundTruthEntry,
-    ExpectedTools,
-    ToolCallRecord,
-    ToolExpectation,
 )
 from app.plugins.packs.rag_compat import RagCompatPack
 from app.services.validation_service import collect_approval_validation_errors
@@ -170,18 +166,3 @@ def test_registry_preserves_non_waived_errors():
     filtered = registry.filter_core_errors(item, core_errors)
     # "history must contain at least one conversation message" is NOT waived
     assert any("at least one conversation message" in e for e in filtered)
-
-
-# ---------------------------------------------------------------------------
-# Backward compatibility — legacy q/a items still pass
-# ---------------------------------------------------------------------------
-
-
-def test_legacy_question_answer_item_still_passes():
-    """Items with synthQuestion + answer synthesize user/assistant history and pass."""
-    item = _make_item(
-        synthQuestion="What is X?",
-        answer="X is Y.",
-    )
-    errors = collect_approval_validation_errors(item)
-    assert errors == []

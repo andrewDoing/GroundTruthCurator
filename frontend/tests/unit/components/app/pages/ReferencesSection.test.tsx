@@ -110,8 +110,7 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		// TracePanel renders "Trace Data" heading (wireframe v2.2 layout)
-		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 	});
 
 	it("shows RAG compat panel when in single-turn mode", () => {
@@ -140,8 +139,7 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			toolCalls: [],
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		// TracePanel shows header even with only expectedTools (no tool calls)
-		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 	});
 
 	it("shows generic evidence for context-only items", () => {
@@ -152,7 +150,7 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			],
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 		// Context Entries is inside "More Details" collapsible
 		expect(screen.getByText(/More Details/i)).toBeInTheDocument();
 	});
@@ -171,7 +169,7 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 			},
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 		// Plugin Details is inside "More Details" collapsible
 		expect(screen.getByText(/More Details/i)).toBeInTheDocument();
 	});
@@ -201,7 +199,7 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 				isMultiTurn
 			/>,
 		);
-		expect(screen.getByText(/Trace Data/i)).toBeInTheDocument();
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 		// RAG references panel is hidden in multi-turn mode
 		expect(screen.queryByText(/Selected/i)).not.toBeInTheDocument();
 	});

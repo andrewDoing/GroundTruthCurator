@@ -7,7 +7,8 @@ from pydantic.type_adapter import TypeAdapter
 import pytest
 from httpx import AsyncClient
 
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
+from tests.test_helpers import make_test_entry
 
 
 def make_item(dataset: str) -> dict[str, Any]:
@@ -41,13 +42,13 @@ async def test_self_serve_list_and_approve(async_client: AsyncClient, user_heade
     assert r.status_code == 200
     resp = cast(dict[str, Any], r.json())
     assert resp.get("assignedCount") == 2
-    assigned = TypeAdapter(list[GroundTruthItem]).validate_python(resp.get("assigned") or [])
+    assigned = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(resp.get("assigned") or [])
     assert len(assigned) == 2
 
     # List my assignments
     r = await async_client.get("/v1/assignments/my", headers=user_headers)
     assert r.status_code == 200
-    docs = TypeAdapter(list[GroundTruthItem]).validate_python(r.json())
+    docs = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(r.json())
     assert len(docs) == 2
 
     # Approve first via assignments PUT

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Ground Truth Curator application supports configurable validation rules via **runtime configuration**. The frontend fetches configuration from the backend's `/v1/config` endpoint on startup, allowing validation rules to be changed without rebuilding the frontend.
+The Ground Truth Curator application supports runtime configuration for the generic host plus plugin-owned evidence workflows. The frontend fetches configuration from the backend's `/v1/config` endpoint on startup so environment-specific approval and evidence-review rules can change without rebuilding the frontend.
 
 ## Configuration Architecture
 
@@ -52,21 +52,23 @@ VITE_SELF_SERVE_LIMIT=10
 
 **Note:** In production, the backend configuration always takes precedence.
 
-## Validation Rules
+## Validation Rules and Evidence Surfaces
+
+Runtime config controls shared host behavior, but reference-specific rules apply only to workflows that still expose compatibility search/evidence or to plugin surfaces that opt into the same gating contract. The generic multi-turn host remains conversation- and expected-tools-driven.
 
 ### Reference Visit Requirement
 
 **Environment Variable:** `VITE_REQUIRE_REFERENCE_VISIT` / `GTC_REQUIRE_REFERENCE_VISIT`  
 **Default:** `true`  
-**Applies to:** Both single-turn and multi-turn items
+**Applies to:** RAG-compat evidence workflows and any plugin surface that explicitly opts into visit gating
 
 When enabled (`true`):
-- All references must be opened/visited before approval
+- References governed by the active compat/plugin workflow must be opened/visited before approval
 - The "Needs visit" indicator appears for unvisited references
 - Approval is blocked until all references have `visitedAt` timestamp
 
 When disabled (`false`):
-- References can be approved without being visited
+- Plugin-owned evidence can be approved without visit gating when the active workflow does not require it
 - Visit status is tracked but not required for approval
 - Useful for bulk imports or when references are pre-validated
 
@@ -74,14 +76,14 @@ When disabled (`false`):
 
 **Environment Variable:** `VITE_REQUIRE_KEY_PARAGRAPH` / `GTC_REQUIRE_KEY_PARAGRAPH`  
 **Default:** `false`  
-**Applies to:** Both single-turn and multi-turn items
+**Applies to:** RAG-compat evidence workflows and any plugin surface that explicitly opts into key-paragraph gating
 
 When enabled (`true`):
-- Selected references must have key paragraphs ≥40 characters
+- Selected references in the active compat/plugin workflow must have key paragraphs ≥40 characters
 - Approval is blocked until all selected references have adequate key paragraphs
 
 When disabled (`false`):
-- Key paragraphs are optional but recommended
+- Key paragraphs are optional unless the active compat/plugin workflow requires them
 - Approval can proceed without key paragraphs
 - Useful for workflows where key paragraphs are added in a separate pass
 
@@ -186,24 +188,30 @@ Use case: Ensure references are reviewed but allow flexibility on key paragraphs
 
 ### Validation Logic
 
-The validation logic is implemented in:
+The validation logic is split intentionally:
 
-- `frontend/src/models/validators.ts` - `refsApprovalReady()` for single-turn
-- `frontend/src/models/gtHelpers.ts` - `canApproveMultiTurn()` for multi-turn
+- `frontend/src/models/validators.ts` - conversation integrity and reference-compat helpers
+- `frontend/src/models/gtHelpers.ts` - generic approval plus plugin/compat bypass logic
+- `frontend/src/components/app/pages/ReferencesSection.tsx` - generic evidence/review host that decides whether the compatibility search surface is shown
 
-Both functions use `getCachedConfig()` to determine whether to enforce:
-
-1. Reference visit requirement
-2. Key paragraph requirement for relevant references
+Runtime config only controls the reference-specific branch. Generic multi-turn approval remains conversation- and expected-tools-driven, while plugin-owned evidence panels decide whether to honor these shared reference rules.
 
 ### UI Components
 
-The following components have been updated to reflect configurable validation:
+The following components reflect configurable evidence validation:
 
+- `frontend/src/components/app/pages/ReferencesSection.tsx`
 - `frontend/src/components/app/ReferencesPanel/SelectedTab.tsx`
 - `frontend/src/components/app/editor/TurnReferencesModal.tsx`
 
-Help text and indicators now say "may be required based on configuration" rather than stating absolute requirements.
+Help text and indicators now say "may be required based on configuration" rather than stating absolute requirements, and the shared host only renders search when the current workflow still uses the compatibility surface.
+
+## Phase 1 Migration Inventory
+
+- Keep: runtime delivery of reference-specific configuration.
+- Rewrite: wording that implies every multi-turn workflow is permanently reference-first.
+- Narrow: compatibility-focused UI help text once plugin-owned evidence panels replace the shared references mental model.
+- Delete with shim: docs that only describe top-level reference approval after the legacy RAG path is retired.
 
 ## Local Development Setup
 
