@@ -7,6 +7,7 @@ import type {
 	PluginPayload,
 	Reference,
 	ToolCallRecord,
+	ToolExpectation,
 } from "../../models/groundTruth";
 import { getItemReferences, hasEvidenceData } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
@@ -274,6 +275,73 @@ function FeedbackViewer({ data }: ViewerProps) {
 	);
 }
 
+const EXPECTED_TOOL_GROUPS = [
+	{ key: "required", label: "Required" },
+	{ key: "optional", label: "Optional" },
+	{ key: "notNeeded", label: "Not Needed" },
+] as const;
+
+function formatToolExpectationArguments(
+	argumentsValue: ToolExpectation["arguments"],
+): string | null {
+	if (argumentsValue == null) return null;
+	if (typeof argumentsValue === "string") return argumentsValue;
+	return JSON.stringify(argumentsValue, null, 2);
+}
+
+function ExpectedToolsSection({
+	expectedTools,
+}: {
+	expectedTools: ExpectedTools;
+}) {
+	const groups = EXPECTED_TOOL_GROUPS.map(({ key, label }) => ({
+		key,
+		label,
+		tools: expectedTools[key] ?? [],
+	})).filter((group) => group.tools.length > 0);
+
+	if (!groups.length) return null;
+
+	return (
+		<div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+			<div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+				Expected Tools
+			</div>
+			<div className="space-y-3">
+				{groups.map((group) => (
+					<div key={group.key}>
+						<div className="mb-2 text-xs font-medium text-slate-600">
+							{group.label}
+						</div>
+						<div className="space-y-2">
+							{group.tools.map((tool) => {
+								const formattedArguments = formatToolExpectationArguments(
+									tool.arguments,
+								);
+								return (
+									<div
+										key={`${group.key}-${tool.name}-${JSON.stringify(tool.arguments ?? null)}`}
+										className="rounded-lg border border-slate-200 bg-white p-3"
+									>
+										<div className="text-sm font-medium text-slate-800">
+											{tool.name}
+										</div>
+										{formattedArguments && (
+											<pre className="mt-2 overflow-auto rounded-md bg-slate-100 p-2 text-xs text-slate-700 whitespace-pre-wrap break-all">
+												{formattedArguments}
+											</pre>
+										)}
+									</div>
+								);
+							})}
+						</div>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
+
 function PluginPayloadViewer({ data }: ViewerProps) {
 	const { slot, payload } = data as PluginRenderData;
 	const hasData = Object.keys(payload.data ?? {}).length > 0;
@@ -354,7 +422,7 @@ export default function TracePanel({
 	onUpdateReference,
 	onRemoveReference,
 }: {
-	item: GroundTruthItem;
+	item?: GroundTruthItem | null;
 	className?: string;
 	onUpdateContextEntries?: (entries: ContextEntry[]) => void;
 	onUpdateExpectedTools?: (tools: ExpectedTools) => void;
@@ -364,27 +432,14 @@ export default function TracePanel({
 	onRemoveReference?: (refId: string) => void;
 }) {
 	const [expanded, setExpanded] = useState(true);
-
-	if (!hasEvidenceData(item)) {
-		return (
-			<div
-				className={cn(
-					"rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-400",
-					className,
-				)}
-			>
-				No trace or evidence data available for this item.
-			</div>
-		);
-	}
-
-	const toolCalls = item.toolCalls ?? [];
-	const references = getItemReferences(item);
-	const contextEntries = item.contextEntries ?? [];
-	const metadata = item.metadata ?? {};
-	const plugins = item.plugins ?? {};
-	const feedback = item.feedback ?? [];
-	const tracePayload = item.tracePayload ?? {};
+	const hasEvidence = !!item && hasEvidenceData(item);
+	const toolCalls = item?.toolCalls ?? [];
+	const references = item ? getItemReferences(item) : [];
+	const contextEntries = item?.contextEntries ?? [];
+	const metadata = item?.metadata ?? {};
+	const plugins = item?.plugins ?? {};
+	const feedback = item?.feedback ?? [];
+	const tracePayload = item?.tracePayload ?? {};
 	const sentiment = deriveSentiment(feedback);
 	const hasMoreDetails =
 		contextEntries.length > 0 ||
@@ -426,136 +481,152 @@ export default function TracePanel({
 
 			{expanded && (
 				<div className="space-y-3 border-t px-4 pb-4">
-					<div className="mt-3">
-						<TraceInfoSection item={item} />
-					</div>
-
-					<RegistryRenderer
-						discriminator="feedback:scores"
-						data={feedback}
-						context={{ itemId: item.id, fieldPath: "feedback", readOnly: true }}
-						mode="viewer"
-					/>
-
-					{toolCalls.length > 0 && (
+					{hasEvidence && item ? (
 						<>
-							<div className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-								Tool Calls ({toolCalls.length})
+							<div className="mt-3">
+								<TraceInfoSection item={item} />
 							</div>
-							{toolCalls.map((tc, i) => (
-								<RegistryRenderer
-									key={tc.id || String(i)}
-									discriminator={`toolCall:${tc.name}`}
-									data={{
-										toolCall: tc,
-										index: i,
-										item,
-										expectedTools: item.expectedTools,
-										references,
-										onAddReferences,
-										onOpenReference,
-										onUpdateReference,
-										onRemoveReference,
-									}}
-									context={{
-										itemId: item.id,
-										fieldPath: `toolCalls.${i}`,
-										readOnly: !onUpdateExpectedTools,
-									}}
-									mode={onUpdateExpectedTools ? "editor" : "viewer"}
-									onChange={(next) => {
-										if (!onUpdateExpectedTools) return;
-										onUpdateExpectedTools(
-											(next as ToolCallRenderData).expectedTools ?? {
-												required: [],
-											},
-										);
-									}}
-								/>
-							))}
-						</>
-					)}
 
-					{hasMoreDetails && (
-						<CollapsibleSection title="More Details">
-							<div className="space-y-3">
-								{(contextEntries.length > 0 || onUpdateContextEntries) && (
-									<CollapsibleSection
-										title="Context Entries"
-										badge={contextEntries.length}
-										defaultOpen
-									>
+							<RegistryRenderer
+								discriminator="feedback:scores"
+								data={feedback}
+								context={{
+									itemId: item.id,
+									fieldPath: "feedback",
+									readOnly: true,
+								}}
+								mode="viewer"
+							/>
+
+							{item.expectedTools && (
+								<ExpectedToolsSection expectedTools={item.expectedTools} />
+							)}
+
+							{toolCalls.length > 0 && (
+								<>
+									<div className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+										Tool Calls ({toolCalls.length})
+									</div>
+									{toolCalls.map((tc, i) => (
 										<RegistryRenderer
-											discriminator="contextEntries:batch"
-											data={contextEntries}
+											key={tc.id || String(i)}
+											discriminator={`toolCall:${tc.name}`}
+											data={{
+												toolCall: tc,
+												index: i,
+												item,
+												expectedTools: item.expectedTools,
+												references,
+												onAddReferences,
+												onOpenReference,
+												onUpdateReference,
+												onRemoveReference,
+											}}
 											context={{
 												itemId: item.id,
-												fieldPath: "contextEntries",
-												readOnly: !onUpdateContextEntries,
+												fieldPath: `toolCalls.${i}`,
+												readOnly: !onUpdateExpectedTools,
 											}}
-											mode={onUpdateContextEntries ? "editor" : "viewer"}
-											onChange={(next) =>
-												onUpdateContextEntries?.(next as ContextEntry[])
-											}
-										/>
-									</CollapsibleSection>
-								)}
-
-								{Object.keys(metadata).length > 0 && (
-									<CollapsibleSection title="Metadata">
-										<RegistryRenderer
-											discriminator="metadata"
-											data={metadata}
-											context={{
-												itemId: item.id,
-												fieldPath: "metadata",
-												readOnly: true,
+											mode={onUpdateExpectedTools ? "editor" : "viewer"}
+											onChange={(next) => {
+												if (!onUpdateExpectedTools) return;
+												onUpdateExpectedTools(
+													(next as ToolCallRenderData).expectedTools ?? {
+														required: [],
+													},
+												);
 											}}
-											mode="viewer"
 										/>
-									</CollapsibleSection>
-								)}
+									))}
+								</>
+							)}
 
-								{Object.entries(plugins).length > 0 && (
-									<CollapsibleSection
-										title="Plugin Details"
-										badge={Object.keys(plugins).length}
-									>
-										<div className="space-y-2">
-											{Object.entries(plugins).map(([slot, payload]) => (
+							{hasMoreDetails && (
+								<CollapsibleSection title="More Details">
+									<div className="space-y-3">
+										{(contextEntries.length > 0 || onUpdateContextEntries) && (
+											<CollapsibleSection
+												title="Context Entries"
+												badge={contextEntries.length}
+												defaultOpen
+											>
 												<RegistryRenderer
-													key={slot}
-													discriminator={`pluginPayload:${payload.kind}`}
-													data={{ slot, payload }}
+													discriminator="contextEntries:batch"
+													data={contextEntries}
 													context={{
 														itemId: item.id,
-														fieldPath: `plugins.${slot}`,
-														pluginKind: payload.kind,
+														fieldPath: "contextEntries",
+														readOnly: !onUpdateContextEntries,
+													}}
+													mode={onUpdateContextEntries ? "editor" : "viewer"}
+													onChange={(next) =>
+														onUpdateContextEntries?.(next as ContextEntry[])
+													}
+												/>
+											</CollapsibleSection>
+										)}
+
+										{Object.keys(metadata).length > 0 && (
+											<CollapsibleSection title="Metadata">
+												<RegistryRenderer
+													discriminator="metadata"
+													data={metadata}
+													context={{
+														itemId: item.id,
+														fieldPath: "metadata",
 														readOnly: true,
 													}}
 													mode="viewer"
 												/>
-											))}
-										</div>
-									</CollapsibleSection>
-								)}
+											</CollapsibleSection>
+										)}
 
-								{Object.keys(tracePayload).length > 0 && (
-									<CollapsibleSection title="Trace Payload">
-										<RegistryRenderer
-											discriminator="tracePayload"
-											data={tracePayload}
-											context={{
-												itemId: item.id,
-												fieldPath: "tracePayload",
-												readOnly: true,
-											}}
-											mode="viewer"
-										/>
-									</CollapsibleSection>
-								)}
-							</div>
-						</CollapsibleSection>
+										{Object.entries(plugins).length > 0 && (
+											<CollapsibleSection
+												title="Plugin Details"
+												badge={Object.keys(plugins).length}
+											>
+												<div className="space-y-2">
+													{Object.entries(plugins).map(([slot, payload]) => (
+														<RegistryRenderer
+															key={slot}
+															discriminator={`pluginPayload:${payload.kind}`}
+															data={{ slot, payload }}
+															context={{
+																itemId: item.id,
+																fieldPath: `plugins.${slot}`,
+																pluginKind: payload.kind,
+																readOnly: true,
+															}}
+															mode="viewer"
+														/>
+													))}
+												</div>
+											</CollapsibleSection>
+										)}
+
+										{Object.keys(tracePayload).length > 0 && (
+											<CollapsibleSection title="Trace Payload">
+												<RegistryRenderer
+													discriminator="tracePayload"
+													data={tracePayload}
+													context={{
+														itemId: item.id,
+														fieldPath: "tracePayload",
+														readOnly: true,
+													}}
+													mode="viewer"
+												/>
+											</CollapsibleSection>
+										)}
+									</div>
+								</CollapsibleSection>
+							)}
+						</>
+					) : (
+						<div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+							No trace or evidence data available yet.
+						</div>
 					)}
 				</div>
 			)}

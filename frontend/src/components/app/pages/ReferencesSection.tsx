@@ -4,9 +4,9 @@
  * Phase 4 redesign: this component is now a generic right-pane host rather
  * than a purely retrieval-specific panel.  It renders:
  *
- *  1. Evidence & Trace panel (TracePanel) — always shown when the current item
- *     has generic agentic data (toolCalls, traceIds, metadata, feedback,
- *     expectedTools).  This is the primary Phase 4 evidence surface.
+ *  1. Evidence & Trace panel (TracePanel) — shown whenever the current item
+ *     slot contains a real selected item. This keeps the newer agentic review
+ *     surface as the default experience once selection/loading is resolved.
  *
  *  2. RAG compatibility panel (ReferencesTabs) — shown as an opt-in section
  *     when the item has references OR when in single-turn mode.  This surface
@@ -23,7 +23,6 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../../../models/groundTruth";
-import { hasEvidenceData } from "../../../models/groundTruth";
 import { cn, urlToTitle } from "../../../models/utils";
 import ReferencesTabs from "../../app/ReferencesPanel/ReferencesTabs";
 import TracePanel from "../../app/TracePanel";
@@ -69,8 +68,10 @@ export default function ReferencesSection({
 	// Multi-turn items manage references per-turn via the conversation editor.
 	const showRagCompat = !isMultiTurn;
 
-	// Evidence panel: show TracePanel when item has generic agentic data.
-	const showEvidence = !!item && hasEvidenceData(item);
+	// Render the evidence surface only for real selected items.
+	// `null` represents no current selection / loading; `undefined` still means
+	// the caller omitted the item prop entirely for backward compatibility.
+	const showEvidence = item !== undefined && item !== null;
 
 	async function runSearch() {
 		try {
@@ -132,8 +133,8 @@ export default function ReferencesSection({
 					: "rounded-2xl border bg-white shadow-sm h-[calc(100vh-5.5rem)]",
 			)}
 		>
-			{/* Evidence & Trace panel (generic agentic data) */}
-			{showEvidence && item && (
+			{/* Evidence & Trace panel (default agentic surface) */}
+			{showEvidence && (
 				<div
 					className={cn(
 						"overflow-y-auto",
