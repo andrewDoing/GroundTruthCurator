@@ -5,12 +5,42 @@
  * that can be changed without rebuilding the frontend.
  */
 
+import { useSyncExternalStore } from "react";
 import type { components } from "../api/generated";
 
-type RuntimeConfig = components["schemas"]["FrontendConfig"];
+export type RuntimeConfig = components["schemas"]["FrontendConfig"];
 
 let cachedConfig: RuntimeConfig | null = null;
 let configPromise: Promise<RuntimeConfig> | null = null;
+const listeners = new Set<() => void>();
+
+function notifyListeners() {
+	for (const listener of listeners) {
+		listener();
+	}
+}
+
+function setCachedConfig(config: RuntimeConfig) {
+	cachedConfig = config;
+	notifyListeners();
+}
+
+function buildFallbackConfig(): RuntimeConfig {
+	const trustedDomainsRaw =
+		(import.meta.env.VITE_TRUSTED_REFERENCE_DOMAINS as string | undefined) ??
+		"";
+	const trustedReferenceDomains = trustedDomainsRaw
+		.split(",")
+		.map((d) => d.trim().toLowerCase())
+		.filter(Boolean);
+
+	return {
+		requireReferenceVisit: getEnvBoolean("VITE_REQUIRE_REFERENCE_VISIT", true),
+		requireKeyParagraph: getEnvBoolean("VITE_REQUIRE_KEY_PARAGRAPH", false),
+		selfServeLimit: getEnvNumber("VITE_SELF_SERVE_LIMIT", 10),
+		trustedReferenceDomains,
+	};
+}
 
 /**
  * Fetch runtime configuration from backend.
@@ -34,7 +64,7 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
 			const response = await fetch("/v1/config");
 			if (response.ok) {
 				const config: RuntimeConfig = await response.json();
-				cachedConfig = config;
+				setCachedConfig(config);
 				return config;
 			}
 		} catch (error) {
@@ -44,25 +74,8 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
 			);
 		}
 
-		// Fallback to environment variables (for local dev)
-		const trustedDomainsRaw =
-			(import.meta.env.VITE_TRUSTED_REFERENCE_DOMAINS as string | undefined) ??
-			"";
-		const trustedReferenceDomains = trustedDomainsRaw
-			.split(",")
-			.map((d) => d.trim().toLowerCase())
-			.filter(Boolean);
-
-		const fallbackConfig: RuntimeConfig = {
-			requireReferenceVisit: getEnvBoolean(
-				"VITE_REQUIRE_REFERENCE_VISIT",
-				true,
-			),
-			requireKeyParagraph: getEnvBoolean("VITE_REQUIRE_KEY_PARAGRAPH", false),
-			selfServeLimit: getEnvNumber("VITE_SELF_SERVE_LIMIT", 10),
-			trustedReferenceDomains,
-		};
-		cachedConfig = fallbackConfig;
+		const fallbackConfig = buildFallbackConfig();
+		setCachedConfig(fallbackConfig);
 		return fallbackConfig;
 	})();
 
@@ -90,10 +103,29 @@ function getEnvNumber(key: string, defaultValue: number): number {
 	return Number.isNaN(parsed) ? defaultValue : parsed;
 }
 
+export function subscribeToRuntimeConfig(listener: () => void) {
+	listeners.add(listener);
+	return () => {
+		listeners.delete(listener);
+	};
+}
+
+export function getRuntimeConfigSnapshot(): RuntimeConfig | null {
+	return cachedConfig;
+}
+
 /**
  * Synchronously get cached config (must call getRuntimeConfig first).
  * Returns null if config not yet loaded.
  */
 export function getCachedConfig(): RuntimeConfig | null {
-	return cachedConfig;
+	return getRuntimeConfigSnapshot();
+}
+
+export function useRuntimeConfig(): RuntimeConfig | null {
+	return useSyncExternalStore(
+		subscribeToRuntimeConfig,
+		getRuntimeConfigSnapshot,
+		getRuntimeConfigSnapshot,
+	);
 }

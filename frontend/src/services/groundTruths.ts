@@ -61,6 +61,7 @@ interface ListAllGroundTruthsResult {
 
 export async function listAllGroundTruths(
 	params: ListAllGroundTruthsParams = {},
+	signal?: AbortSignal,
 ): Promise<ListAllGroundTruthsResult> {
 	const query: operations["list_all_ground_truths_v1_ground_truths_get"]["parameters"]["query"] =
 		{};
@@ -82,6 +83,7 @@ export async function listAllGroundTruths(
 		params: {
 			query: Object.keys(query).length ? query : undefined,
 		},
+		signal,
 	});
 	if (error) throw error;
 	const payload = (data as unknown as
@@ -99,10 +101,11 @@ export async function getGroundTruth(
 	datasetName: string,
 	bucket: string,
 	id: string,
+	signal?: AbortSignal,
 ): Promise<GroundTruthItem> {
 	const { data, error } = await client.GET(
 		"/v1/ground-truths/{datasetName}/{bucket}/{item_id}",
-		{ params: { path: { datasetName, bucket, item_id: id } } },
+		{ params: { path: { datasetName, bucket, item_id: id } }, signal },
 	);
 
 	if (error) {

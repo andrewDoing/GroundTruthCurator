@@ -261,6 +261,40 @@ export function getReferenceMessageIndex(
 	return ref.messageIndex;
 }
 
+function getReferenceChunkIdentityKey(
+	ref: Pick<Reference, "snippet" | "keyParagraph">,
+): string | null {
+	const snippet = ref.snippet?.trim();
+	const keyParagraph = ref.keyParagraph?.trim();
+	if (!snippet && !keyParagraph) {
+		return null;
+	}
+	return JSON.stringify([snippet ?? null, keyParagraph ?? null]);
+}
+
+export function getReferenceIdentityKey(
+	ref: Pick<
+		Reference,
+		| "url"
+		| "toolCallId"
+		| "turnId"
+		| "messageIndex"
+		| "snippet"
+		| "keyParagraph"
+	>,
+): string {
+	const ownerKey = ref.toolCallId ? `tool:${ref.toolCallId}` : "tool:none";
+	const turnKey = ref.turnId
+		? `turn:${ref.turnId}`
+		: ref.messageIndex !== undefined
+			? `index:${ref.messageIndex}`
+			: "index:none";
+	const chunkKey = getReferenceChunkIdentityKey(ref);
+	return chunkKey
+		? `${ownerKey}::${turnKey}::${ref.url}::chunk:${chunkKey}`
+		: `${ownerKey}::${turnKey}::${ref.url}`;
+}
+
 export type GroundTruthItem = {
 	id: string;
 	// ---------------------------------------------------------------------------

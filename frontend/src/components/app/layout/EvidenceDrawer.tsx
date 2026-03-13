@@ -90,7 +90,7 @@ export default function EvidenceDrawer({
 					</button>
 				</div>
 
-				<div className="p-3">{children}</div>
+				<div className="p-3">{open ? children : null}</div>
 			</div>
 		</>
 	);

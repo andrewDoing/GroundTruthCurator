@@ -13,6 +13,14 @@ import QuestionsExplorer, {
 const serviceMocks = vi.hoisted(() => ({
 	listAllGroundTruths: vi.fn(),
 	fetchTagsWithComputed: vi.fn(),
+	subscribeToTagMetadata: vi.fn(() => () => {}),
+	getTagMetadataSnapshot: vi.fn(() => ({
+		manualTags: [],
+		computedTags: [],
+		allTags: [],
+		loading: false,
+		error: null,
+	})),
 	fetchAvailableDatasets: vi.fn(),
 }));
 
@@ -29,6 +37,8 @@ vi.mock("../../../../src/services/groundTruths", async () => {
 
 vi.mock("../../../../src/services/tags", () => ({
 	fetchTagsWithComputed: serviceMocks.fetchTagsWithComputed,
+	subscribeToTagMetadata: serviceMocks.subscribeToTagMetadata,
+	getTagMetadataSnapshot: serviceMocks.getTagMetadataSnapshot,
 }));
 
 vi.mock("../../../../src/services/datasets", () => ({
@@ -80,10 +90,19 @@ describe("QuestionsExplorer", () => {
 		window.history.replaceState({}, "", "/");
 		serviceMocks.listAllGroundTruths.mockReset();
 		serviceMocks.fetchTagsWithComputed.mockReset();
+		serviceMocks.subscribeToTagMetadata.mockClear();
+		serviceMocks.getTagMetadataSnapshot.mockClear();
 		serviceMocks.fetchAvailableDatasets.mockReset();
 		serviceMocks.fetchTagsWithComputed.mockResolvedValue({
 			manualTags: [],
 			computedTags: [],
+		});
+		serviceMocks.getTagMetadataSnapshot.mockReturnValue({
+			manualTags: [],
+			computedTags: [],
+			allTags: [],
+			loading: false,
+			error: null,
 		});
 		serviceMocks.fetchAvailableDatasets.mockResolvedValue([]);
 		serviceMocks.listAllGroundTruths.mockImplementation(
@@ -422,6 +441,7 @@ describe("QuestionsExplorer", () => {
 						page: 1,
 						...expectedFilter,
 					}),
+					expect.any(AbortSignal),
 				);
 			});
 

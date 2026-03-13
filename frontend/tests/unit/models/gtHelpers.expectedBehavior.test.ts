@@ -13,7 +13,10 @@ import type {
 	ConversationTurn,
 	GroundTruthItem,
 } from "../../../src/models/groundTruth";
-import { canApproveMultiTurn } from "../../../src/models/gtHelpers";
+import {
+	canApproveCandidate,
+	canApproveMultiTurn,
+} from "../../../src/models/gtHelpers";
 
 describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 	const baseItem: GroundTruthItem = {
@@ -160,7 +163,7 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 		expect(result).toBe(true);
 	});
 
-	it("should allow approval for multi-turn items even when references are unvisited", () => {
+	it("blocks multi-turn approval when required references are unvisited", () => {
 		const itemWithUnvisitedReferences: GroundTruthItem = {
 			...baseItem,
 			plugins: {
@@ -178,7 +181,123 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 			},
 		};
 
-		const result = canApproveMultiTurn(itemWithUnvisitedReferences);
+		const result = canApproveMultiTurn(itemWithUnvisitedReferences, {
+			requireReferenceVisit: true,
+			requireKeyParagraph: false,
+		});
+		expect(result).toBe(false);
+	});
+
+	it("blocks multi-turn approval when required key paragraphs are missing", () => {
+		const itemWithShortKeyParagraph: GroundTruthItem = {
+			...baseItem,
+			plugins: {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1.0",
+					data: {
+						retrievals: {
+							_unassociated: {
+								candidates: [
+									{
+										url: "https://example.com/trace",
+										visitedAt: "2026-03-13T12:00:00Z",
+										keyParagraph: "Too short to satisfy the requirement.",
+									},
+								],
+							},
+						},
+					},
+				},
+			},
+		};
+
+		const result = canApproveMultiTurn(itemWithShortKeyParagraph, {
+			requireReferenceVisit: true,
+			requireKeyParagraph: true,
+		});
+		expect(result).toBe(false);
+	});
+
+	it("allows multi-turn approval when reference requirements are disabled", () => {
+		const itemWithUnvisitedReferences: GroundTruthItem = {
+			...baseItem,
+			plugins: {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1.0",
+					data: {
+						retrievals: {
+							_unassociated: {
+								candidates: [{ url: "https://example.com/trace" }],
+							},
+						},
+					},
+				},
+			},
+		};
+
+		const result = canApproveMultiTurn(itemWithUnvisitedReferences, {
+			requireReferenceVisit: false,
+			requireKeyParagraph: false,
+		});
+		expect(result).toBe(true);
+	});
+
+	it("threads reference requirements through canApproveCandidate for multi-turn items", () => {
+		const itemWithUnvisitedReferences: GroundTruthItem = {
+			...baseItem,
+			plugins: {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1.0",
+					data: {
+						retrievals: {
+							_unassociated: {
+								candidates: [{ url: "https://example.com/trace" }],
+							},
+						},
+					},
+				},
+			},
+		};
+
+		const result = canApproveCandidate(itemWithUnvisitedReferences, {
+			requireReferenceVisit: true,
+			requireKeyParagraph: false,
+		});
+		expect(result).toBe(false);
+	});
+
+	it("allows multi-turn approval when required references are visited and annotated", () => {
+		const itemWithReadyReferences: GroundTruthItem = {
+			...baseItem,
+			plugins: {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1.0",
+					data: {
+						retrievals: {
+							_unassociated: {
+								candidates: [
+									{
+										url: "https://example.com/trace",
+										visitedAt: "2026-03-13T12:00:00Z",
+										keyParagraph:
+											"This key paragraph is comfortably longer than forty characters.",
+									},
+								],
+							},
+						},
+					},
+				},
+			},
+		};
+
+		const result = canApproveCandidate(itemWithReadyReferences, {
+			requireReferenceVisit: true,
+			requireKeyParagraph: true,
+		});
 		expect(result).toBe(true);
 	});
 });

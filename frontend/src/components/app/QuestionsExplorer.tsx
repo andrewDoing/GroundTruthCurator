@@ -1,5 +1,6 @@
 import { Lock } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import useTags from "../../hooks/useTags";
 import type { GroundTruthItem } from "../../models/groundTruth";
 import { getLastAgentTurn, getQueuePreview } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
@@ -7,7 +8,6 @@ import { getExplorerExtensions } from "../../registry/ExplorerExtensions";
 import { fetchAvailableDatasets } from "../../services/datasets";
 import type { GroundTruthListPagination } from "../../services/groundTruths";
 import { listAllGroundTruths } from "../../services/groundTruths";
-import { fetchTagsWithComputed } from "../../services/tags";
 import type {
 	FilterState,
 	FilterType,
@@ -71,6 +71,7 @@ export default function QuestionsExplorer({
 
 	// Flag to track whether URL has been synchronized (prevent infinite loops)
 	const urlSyncedRef = useRef(false);
+	const listRequestIdRef = useRef(0);
 
 	// Initialize filter state from URL parameters
 	const initializeFilterStateFromUrl = (): FilterState => {
@@ -126,8 +127,7 @@ export default function QuestionsExplorer({
 	>(undefined);
 	const [isLoading, setIsLoading] = useState(false);
 	const [loadError, setLoadError] = useState<string | null>(null);
-	const [manualTags, setManualTags] = useState<string[]>([]);
-	const [computedTags, setComputedTags] = useState<string[]>([]);
+	const { manualTags, computedTags } = useTags();
 	const [availableDatasets, setAvailableDatasets] = useState<string[]>([]);
 	const [expandedTagRows, setExpandedTagRows] = useState<Set<string>>(
 		new Set(),
@@ -164,24 +164,23 @@ export default function QuestionsExplorer({
 		sortDirection,
 	]);
 
-	// Fetch available tags and datasets from backend
+	// Fetch available datasets from backend. Tag metadata now comes from the
+	// shared useTags() service-backed cache so explorer does not duplicate tag reads.
 	useEffect(() => {
-		let cancelled = false;
+		const controller = new AbortController();
 
-		Promise.all([fetchTagsWithComputed(), fetchAvailableDatasets()])
-			.then(([tagsResult, datasets]) => {
-				if (cancelled) return;
-				setManualTags(tagsResult.manualTags);
-				setComputedTags(tagsResult.computedTags);
+		fetchAvailableDatasets(false, controller.signal)
+			.then((datasets) => {
+				if (controller.signal.aborted) return;
 				setAvailableDatasets(datasets);
 			})
 			.catch((error) => {
-				if (cancelled) return;
-				console.error("Failed to fetch tags or datasets:", error);
+				if (controller.signal.aborted) return;
+				console.error("Failed to fetch datasets:", error);
 			});
 
 		return () => {
-			cancelled = true;
+			controller.abort();
 		};
 	}, []);
 
@@ -231,8 +230,10 @@ export default function QuestionsExplorer({
 			return;
 		}
 
-		let cancelled = false;
+		const controller = new AbortController();
+		const requestId = ++listRequestIdRef.current;
 		setIsLoading(true);
+		setLoadError(null);
 		// Clear previous items when starting a new fetch to avoid showing stale data
 		setFetchedItems([]);
 
@@ -271,15 +272,25 @@ export default function QuestionsExplorer({
 			limit: itemsPerPage,
 		};
 
-		listAllGroundTruths(params)
+		listAllGroundTruths(params, controller.signal)
 			.then(({ items: loadedItems, pagination: paginationData }) => {
-				if (cancelled) return;
+				if (
+					controller.signal.aborted ||
+					requestId !== listRequestIdRef.current
+				) {
+					return;
+				}
 				setFetchedItems(loadedItems);
 				setPagination(paginationData);
 				setLoadError(null);
 			})
 			.catch((error) => {
-				if (cancelled) return;
+				if (
+					controller.signal.aborted ||
+					requestId !== listRequestIdRef.current
+				) {
+					return;
+				}
 				const message =
 					error instanceof Error
 						? error.message
@@ -287,12 +298,17 @@ export default function QuestionsExplorer({
 				setLoadError(message);
 			})
 			.finally(() => {
-				if (cancelled) return;
+				if (
+					controller.signal.aborted ||
+					requestId !== listRequestIdRef.current
+				) {
+					return;
+				}
 				setIsLoading(false);
 			});
 
 		return () => {
-			cancelled = true;
+			controller.abort();
 		};
 	}, [items, appliedFilter, currentPage, itemsPerPage]);
 
@@ -363,8 +379,8 @@ export default function QuestionsExplorer({
 			sortDirection,
 		};
 
+		setCurrentPage(1);
 		setAppliedFilter(newFilter);
-		// Page reset is handled by useEffect that watches appliedFilter
 	};
 
 	const handleSort = (

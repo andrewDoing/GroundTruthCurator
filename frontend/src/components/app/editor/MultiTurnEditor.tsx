@@ -35,9 +35,12 @@ export default function MultiTurnEditor({
 	const [managingGroundTruthTags, setManagingGroundTruthTags] = useState(false);
 
 	const history = current?.history || [];
+	const shouldLoadTags = canEdit && !readOnly;
 
-	// Backend-provided global tags (cached via useTags)
-	const { allTags: availableTags, refresh: refreshTags } = useTags();
+	// Backend-provided global tags (cached via the shared metadata service)
+	const { allTags: availableTags, refresh: refreshTags } = useTags({
+		enabled: shouldLoadTags,
+	});
 
 	// Any turn type can be added at any position (agentic workflows allow
 	// consecutive agent turns such as orchestrator → sub-agent or RCA).

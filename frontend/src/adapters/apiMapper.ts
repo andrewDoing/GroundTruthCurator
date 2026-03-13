@@ -60,6 +60,10 @@ type StoredTurnIdentity = {
 	stepId?: string;
 };
 
+function hasOwnField(value: object, field: PropertyKey): boolean {
+	return Object.hasOwn(value, field);
+}
+
 function normalizeToolCalls(
 	toolCalls: components["schemas"]["ToolCallRecord"][] | null | undefined,
 ): ToolCallRecord[] | undefined {
@@ -234,7 +238,10 @@ export function groundTruthFromApi(
 		totalReferences: api.totalReferences,
 		// Generic schema fields — passed through from the API
 		scenarioId: api.scenarioId || undefined,
-		contextEntries: api.contextEntries?.length ? api.contextEntries : undefined,
+		contextEntries:
+			hasOwnField(api, "contextEntries") && Array.isArray(api.contextEntries)
+				? api.contextEntries
+				: undefined,
 		toolCalls: normalizeToolCalls(api.toolCalls),
 		expectedTools: api.expectedTools ?? undefined,
 		feedback: api.feedback?.length ? api.feedback : undefined,
@@ -348,7 +355,10 @@ export function groundTruthToPatch(args: {
 	}
 
 	// Pass through generic fields when present
-	if (item.contextEntries?.length) {
+	if (
+		hasOwnField(item, "contextEntries") &&
+		Array.isArray(item.contextEntries)
+	) {
 		(body as Record<string, unknown>).contextEntries = item.contextEntries;
 	}
 	if (item.toolCalls?.length) {

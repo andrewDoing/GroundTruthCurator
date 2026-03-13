@@ -61,11 +61,13 @@ function mapWireToReference(x: SearchResultWire): Reference | null {
 export async function searchReferences(
 	query: string,
 	top = 10,
+	signal?: AbortSignal,
 ): Promise<Reference[]> {
 	const q = query.trim();
 	if (!q) return [];
 	const { data, error } = await client.GET("/v1/search", {
 		params: { query: { q, top } },
+		signal,
 	});
 	if (error) throw error;
 	let arrUnknown: unknown[] = [];
@@ -94,9 +96,35 @@ export async function searchReferences(
 	return mapped;
 }
 
+function createAbortError(): DOMException {
+	return new DOMException("The operation was aborted.", "AbortError");
+}
+
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+	if (signal?.aborted) {
+		return Promise.reject(createAbortError());
+	}
+
+	return new Promise((resolve, reject) => {
+		const onAbort = () => {
+			window.clearTimeout(timeoutId);
+			reject(createAbortError());
+		};
+		const timeoutId = window.setTimeout(() => {
+			signal?.removeEventListener("abort", onAbort);
+			resolve();
+		}, ms);
+
+		signal?.addEventListener("abort", onAbort, { once: true });
+	});
+}
+
 // Mock for demo mode only
-export async function mockAiSearch(query: string): Promise<Reference[]> {
-	await new Promise((r) => setTimeout(r, 500));
+export async function mockAiSearch(
+	query: string,
+	signal?: AbortSignal,
+): Promise<Reference[]> {
+	await abortableDelay(500, signal);
 	const normalized = query.trim().toLowerCase();
 	const catalog = [
 		{

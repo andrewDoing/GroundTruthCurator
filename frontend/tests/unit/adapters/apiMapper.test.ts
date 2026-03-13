@@ -329,6 +329,15 @@ describe("groundTruthFromApi", () => {
 			expect(result.toolCalls?.[0].arguments).toBeUndefined();
 		});
 	});
+
+	describe("contextEntries handling", () => {
+		it("preserves explicit empty contextEntries arrays", () => {
+			const api = makeApiItem({ contextEntries: [] });
+			const result = groundTruthFromApi(api);
+
+			expect(result.contextEntries).toEqual([]);
+		});
+	});
 });
 
 describe("groundTruthToPatch", () => {
@@ -635,6 +644,23 @@ describe("groundTruthToPatch", () => {
 			const item = makeDomainItem({ manualTags: ["tag1", "tag2"] });
 			const patch = groundTruthToPatch({ item });
 			expect(patch.manualTags).toEqual(["tag1", "tag2"]);
+		});
+	});
+
+	describe("contextEntries serialization", () => {
+		it("includes explicit empty contextEntries arrays in the patch", () => {
+			const item = makeDomainItem({ contextEntries: [] });
+			const patch = groundTruthToPatch({ item });
+
+			expect(patch).toHaveProperty("contextEntries");
+			expect((patch as Record<string, unknown>).contextEntries).toEqual([]);
+		});
+
+		it("omits undefined contextEntries from the patch", () => {
+			const item = makeDomainItem({ contextEntries: undefined });
+			const patch = groundTruthToPatch({ item });
+
+			expect("contextEntries" in patch).toBe(false);
 		});
 	});
 });

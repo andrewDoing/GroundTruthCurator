@@ -14,12 +14,15 @@ import {
 	getItemReferences,
 	getLastAgentTurn,
 	getLastUserTurn,
+	getReferenceIdentityKey,
 	withDerivedLegacyFields,
 	withUpdatedReferences,
 } from "../models/groundTruth";
 import { canApproveCandidate } from "../models/gtHelpers";
 import type { Provider } from "../models/provider";
+import { getReferenceApprovalRequirements } from "../models/validators";
 
+import { useRuntimeConfig } from "../services/runtimeConfig";
 import { addTags } from "../services/tags";
 import { logEvent } from "../services/telemetry";
 import { invalidateGroundTruthCache } from "./useGroundTruthCache";
@@ -109,6 +112,14 @@ type UseGroundTruth = {
 	hasUnsaved: boolean;
 };
 
+function invalidateInspectCacheForItem(
+	item: Pick<GroundTruthItem, "datasetName" | "bucket" | "id">,
+): void {
+	if (item.datasetName && item.bucket && item.id) {
+		invalidateGroundTruthCache(item.datasetName, item.bucket, item.id);
+	}
+}
+
 // Pure helper to compute a stable fingerprint for unsaved detection
 function stateSignature(it: GroundTruthItem): string {
 	const refs = [...getItemReferences(it)]
@@ -132,6 +143,8 @@ function stateSignature(it: GroundTruthItem): string {
 		answer: getLastAgentTurn(it).trim(),
 		comment: (it.comment ?? "").trim(),
 		history: ensureConversationTurnIdentity(it.history),
+		contextEntries: it.contextEntries ?? [],
+		expectedTools: it.expectedTools ?? null,
 		references: refs,
 		manualTags: [...(it.manualTags || [])]
 			.map((t) => t.trim())
@@ -214,6 +227,7 @@ function useGroundTruth(): UseGroundTruth {
 	// Save idempotency
 	const [lastSavedStateFp, setLastSavedStateFp] = useState<string>("");
 	const [saving, setSaving] = useState(false);
+	const runtimeConfig = useRuntimeConfig();
 
 	// References editor (delegated to sub-hook)
 	const {
@@ -361,7 +375,14 @@ function useGroundTruth(): UseGroundTruth {
 		setCurrent((prev) => (prev ? { ...prev, comment: v } : prev));
 	}, []);
 
-	const canApprove = useMemo(() => canApproveCandidate(current), [current]);
+	const canApprove = useMemo(
+		() =>
+			canApproveCandidate(
+				current,
+				getReferenceApprovalRequirements(runtimeConfig),
+			),
+		[current, runtimeConfig],
+	);
 
 	const save = useCallback(
 		async (nextStatus?: GroundTruthItem["status"]): Promise<SaveResult> => {
@@ -379,7 +400,10 @@ function useGroundTruth(): UseGroundTruth {
 
 			if (
 				["approved"].includes(candidate.status) &&
-				!canApproveCandidate(candidate)
+				!canApproveCandidate(
+					candidate,
+					getReferenceApprovalRequirements(runtimeConfig),
+				)
 			) {
 				return { ok: false, error: "References not complete for approval" };
 			}
@@ -390,19 +414,25 @@ function useGroundTruth(): UseGroundTruth {
 			try {
 				const prevBeforeSave = current; // capture to merge transient fields
 				const saved = await p.save(candidate);
-				// SA-232: Backend does not persist visitedAt; reattach any prior visitedAt values by URL.
+				// SA-232: Backend does not persist visitedAt; reattach any prior visitedAt values by
+				// composite reference identity so duplicate URLs across turns/tool ownership stay distinct.
 				const prevRefs = getItemReferences(prevBeforeSave);
 				const savedRefs = getItemReferences(saved);
 				if (prevRefs.length && savedRefs.length) {
-					const visitedByUrl = new Map(
+					const visitedByReferenceIdentity = new Map(
 						prevRefs
 							.filter((r) => r.visitedAt)
-							.map((r) => [r.url, r.visitedAt as string]),
+							.map(
+								(r) =>
+									[getReferenceIdentityKey(r), r.visitedAt as string] as const,
+							),
 					);
 					let changed = false;
 					const merged = savedRefs.map((r) => {
 						if (!r.visitedAt) {
-							const v = visitedByUrl.get(r.url);
+							const v = visitedByReferenceIdentity.get(
+								getReferenceIdentityKey(r),
+							);
 							if (v) {
 								changed = true;
 								return { ...r, visitedAt: v };
@@ -428,9 +458,7 @@ function useGroundTruth(): UseGroundTruth {
 					};
 
 				// FR-002: Invalidate cache after successful save to ensure fresh data on next inspection
-				if (saved.datasetName && saved.bucket && saved.id) {
-					invalidateGroundTruthCache(saved.datasetName, saved.bucket, saved.id);
-				}
+				invalidateInspectCacheForItem(saved);
 
 				// Persist any new manual tags only after a successful save; fire-and-forget
 				try {
@@ -463,7 +491,7 @@ function useGroundTruth(): UseGroundTruth {
 				setSaving(false);
 			}
 		},
-		[current, saving, lastSavedStateFp, qaChanged],
+		[current, saving, lastSavedStateFp, qaChanged, runtimeConfig],
 	);
 
 	// Determine if current item differs from last saved state
@@ -566,6 +594,7 @@ function useGroundTruth(): UseGroundTruth {
 				setItems((arr) => arr.map((i) => (i.id === saved.id ? saved : i)));
 				setCurrent(saved);
 				setLastSavedStateFp(stateSignature(saved));
+				invalidateInspectCacheForItem(saved);
 				try {
 					logEvent(nextDeleted ? "gtc.soft_delete" : "gtc.restore", {
 						providerId: saved.providerId,
@@ -597,6 +626,7 @@ function useGroundTruth(): UseGroundTruth {
 					setCurrent(saved);
 					setLastSavedStateFp(stateSignature(saved));
 				}
+				invalidateInspectCacheForItem(saved);
 				try {
 					logEvent(nextDeleted ? "gtc.soft_delete" : "gtc.restore", {
 						providerId: saved.providerId,

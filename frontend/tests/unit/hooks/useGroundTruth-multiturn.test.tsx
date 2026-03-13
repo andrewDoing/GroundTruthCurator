@@ -113,6 +113,80 @@ describe("useGroundTruth multi-turn flows", () => {
 		expect(result.current.hasUnsaved).toBe(true);
 	});
 
+	it("marks contextEntries-only edits as unsaved and clears them after save", async () => {
+		const { result } = await setupHook();
+		expect(result.current.hasUnsaved).toBe(false);
+
+		await act(async () => {
+			result.current.updateContextEntries([
+				{
+					key: "test-context-entry",
+					value: { source: "useGroundTruth-multiturn.test.tsx" },
+				},
+			]);
+		});
+
+		expect(result.current.hasUnsaved).toBe(true);
+
+		await act(async () => {
+			const saveResult = await result.current.save();
+			expect(saveResult.ok).toBe(true);
+		});
+
+		expect(result.current.hasUnsaved).toBe(false);
+		expect(result.current.current?.contextEntries).toEqual([
+			{
+				key: "test-context-entry",
+				value: { source: "useGroundTruth-multiturn.test.tsx" },
+			},
+		]);
+	});
+
+	it("keeps cleared contextEntries cleared after save", async () => {
+		const { result } = await setupHook();
+		expect(result.current.current?.contextEntries?.length).toBeGreaterThan(0);
+
+		await act(async () => {
+			result.current.updateContextEntries([]);
+		});
+
+		expect(result.current.hasUnsaved).toBe(true);
+		expect(result.current.current?.contextEntries).toEqual([]);
+
+		await act(async () => {
+			const saveResult = await result.current.save();
+			expect(saveResult.ok).toBe(true);
+		});
+
+		expect(result.current.hasUnsaved).toBe(false);
+		expect(result.current.current?.contextEntries).toEqual([]);
+	});
+
+	it("marks expectedTools-only edits as unsaved and clears them after save", async () => {
+		const { result } = await setupHook();
+		expect(result.current.hasUnsaved).toBe(false);
+
+		await act(async () => {
+			result.current.updateExpectedTools({
+				required: [{ name: "test_required_tool" }],
+				optional: [{ name: "test_optional_tool" }],
+			});
+		});
+
+		expect(result.current.hasUnsaved).toBe(true);
+
+		await act(async () => {
+			const saveResult = await result.current.save();
+			expect(saveResult.ok).toBe(true);
+		});
+
+		expect(result.current.hasUnsaved).toBe(false);
+		expect(result.current.current?.expectedTools).toEqual({
+			required: [{ name: "test_required_tool" }],
+			optional: [{ name: "test_optional_tool" }],
+		});
+	});
+
 	it("marks unsaved when history changes", async () => {
 		const { result } = await setupHook();
 		await act(async () => {

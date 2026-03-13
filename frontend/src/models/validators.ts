@@ -1,4 +1,7 @@
-import { getCachedConfig } from "../services/runtimeConfig";
+import {
+	getRuntimeConfigSnapshot,
+	type RuntimeConfig,
+} from "../services/runtimeConfig";
 import type { ConversationTurn, GroundTruthItem } from "./groundTruth";
 import { getItemReferences } from "./groundTruth";
 
@@ -49,31 +52,35 @@ export function validateExpectedTools(
 	};
 }
 
-// Get config value for reference visit requirement (default: true)
-const requireReferenceVisit = () => {
-	const config = getCachedConfig();
-	if (config !== null) {
-		return config.requireReferenceVisit;
-	}
-	// Fallback to env var if config not loaded yet (shouldn't happen in normal flow)
+export type ReferenceApprovalRequirements = Pick<
+	RuntimeConfig,
+	"requireReferenceVisit" | "requireKeyParagraph"
+>;
+
+function getFallbackRequireReferenceVisit() {
 	const val = import.meta.env.VITE_REQUIRE_REFERENCE_VISIT;
 	if (val === undefined || val === null) return true;
 	if (typeof val === "boolean") return val;
 	return val !== "false" && val !== "0";
-};
+}
 
-// Get config value for key paragraph requirement (default: false)
-const requireKeyParagraph = () => {
-	const config = getCachedConfig();
-	if (config !== null) {
-		return config.requireKeyParagraph;
-	}
-	// Fallback to env var if config not loaded yet (shouldn't happen in normal flow)
+function getFallbackRequireKeyParagraph() {
 	const val = import.meta.env.VITE_REQUIRE_KEY_PARAGRAPH;
 	if (val === undefined || val === null) return false;
 	if (typeof val === "boolean") return val;
 	return val === "true" || val === "1";
-};
+}
+
+export function getReferenceApprovalRequirements(
+	config: RuntimeConfig | null = getRuntimeConfigSnapshot(),
+): ReferenceApprovalRequirements {
+	return {
+		requireReferenceVisit:
+			config?.requireReferenceVisit ?? getFallbackRequireReferenceVisit(),
+		requireKeyParagraph:
+			config?.requireKeyParagraph ?? getFallbackRequireKeyParagraph(),
+	};
+}
 
 /**
  * Validation result for multi-turn conversations.
@@ -124,19 +131,22 @@ export function validateConversationPattern(
 }
 
 // Validation helper (SELF-TESTED)
-export function refsApprovalReady(it: GroundTruthItem): boolean {
+export function refsApprovalReady(
+	it: GroundTruthItem,
+	requirements = getReferenceApprovalRequirements(),
+): boolean {
 	const refs = getItemReferences(it);
 	// Rule: Approval is allowed with zero references.
 	if (refs.length === 0) return true;
 
 	// Check if all references must be visited (configurable)
-	if (requireReferenceVisit()) {
+	if (requirements.requireReferenceVisit) {
 		const allVisited = refs.every((r) => Boolean(r.visitedAt));
 		if (!allVisited) return false;
 	}
 
 	// Check if key paragraphs are required for all references (configurable)
-	if (requireKeyParagraph()) {
+	if (requirements.requireKeyParagraph) {
 		const allHaveKeyParagraph = refs.every(
 			(r) => r.keyParagraph && r.keyParagraph.trim().length >= 40,
 		);

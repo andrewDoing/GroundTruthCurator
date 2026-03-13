@@ -10,7 +10,8 @@ import useModalKeys from "../../../hooks/useModalKeys";
 import { useToasts } from "../../../hooks/useToasts";
 import type { Reference } from "../../../models/groundTruth";
 import { cn, normalizeUrl, urlToTitle } from "../../../models/utils";
-import { getCachedConfig } from "../../../services/runtimeConfig";
+import { getReferenceApprovalRequirements } from "../../../models/validators";
+import { useRuntimeConfig } from "../../../services/runtimeConfig";
 import ModalPortal from "../../modals/ModalPortal";
 
 type Props = {
@@ -55,9 +56,11 @@ export default function TurnReferencesModal({
 		new Set(),
 	);
 
-	const config = getCachedConfig();
-	const requireVisit = config?.requireReferenceVisit ?? true;
-	const requireKeyPara = config?.requireKeyParagraph ?? false;
+	const runtimeConfig = useRuntimeConfig();
+	const {
+		requireReferenceVisit: requireVisit,
+		requireKeyParagraph: requireKeyPara,
+	} = getReferenceApprovalRequirements(runtimeConfig);
 	const { toasts, showToast, dismiss } = useToasts();
 	const undoTimerRef = useRef<number | null>(null);
 
