@@ -7,7 +7,8 @@ import pytest  # type: ignore[import-not-found]
 
 from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo, SELECT_CLAUSE_C
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
+from tests.test_helpers import make_test_entry
 
 
 @pytest.fixture()
@@ -104,15 +105,13 @@ def test_resolve_sort_with_overrides(repo: CosmosGroundTruthRepo) -> None:
 
 
 def test_sort_key_has_answer(repo: CosmosGroundTruthRepo) -> None:
-    example = GroundTruthItem.model_validate(
-        {
-            "id": "item",
-            "datasetName": "faq",
-            "synthQuestion": "What?",
-            "answer": "value",
-            "manualTags": ["team:sme"],
-            "reviewedAt": datetime(2024, 1, 1, tzinfo=timezone.utc).isoformat(),
-        }
+    example = make_test_entry(
+        id="item",
+        dataset_name="faq",
+        synth_question="What?",
+        answer="value",
+        manual_tags=["team:sme"],
+        reviewed_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
     key = CosmosGroundTruthRepo._sort_key(example, SortField.has_answer)
     assert key[0] == 1
@@ -140,29 +139,38 @@ def test_select_clause_includes_generic_phase_one_fields() -> None:
 
 
 class TestComputeTotalReferences:
-    """Unit tests for GroundTruthItem.compute_total_references_if_needed.
+    """Unit tests for AgenticGroundTruthEntry.totalReferences computation.
 
-    The method calculates total references with the following logic:
+    The property calculates total references with the following logic:
     - If history has refs, count only history refs (history takes priority)
-    - If history has no refs, count item-level refs as fallback
+    - If history has no refs, count plugin-stored refs as fallback
+    
+    **Phase 5 Audit (2026-03-12)**: ACTIVE COMPUTATION LOGIC - BLOCKING
+    The totalReferences field has active property logic that computes
+    values from history and plugin refs. This is not just compatibility
+    testing - it's core functionality that is used by:
+    - Model validation on all item saves
+    - Sort/filter operations that check reference counts
+    - UI displays of reference totals
+    
+    Cannot delete totalReferences until this computation is either:
+    - Moved to a computed property on AgenticGroundTruthEntry, OR
+    - Replaced by direct history ref counting in callers
     """
 
     def _make_item(
         self,
         refs: list[dict] | None = None,
         history: list[dict] | None = None,
-    ) -> GroundTruthItem:
-        """Helper to create a GroundTruthItem with specified refs and history."""
-        data: dict = {
-            "id": "test-item",
-            "datasetName": "test-dataset",
-            "synthQuestion": "Test question?",
-        }
-        if refs is not None:
-            data["refs"] = refs
-        if history is not None:
-            data["history"] = history
-        return GroundTruthItem.model_validate(data)
+    ) -> AgenticGroundTruthEntry:
+        """Helper to create an AgenticGroundTruthEntry with specified refs and history."""
+        return make_test_entry(
+            id="test-item",
+            dataset_name="test-dataset",
+            synth_question="Test question?",
+            refs=refs,
+            history=history,
+        )
 
     # -------------------------------------------------------------------------
     # History refs take priority over item refs
@@ -334,13 +342,21 @@ class TestComputeTotalReferences:
 
     def test_item_only_no_history_field_at_all(self) -> None:
         """Item created without history field entirely."""
-        data = {
+        # Use model_validate directly to test the case where history is completely absent
+        item = AgenticGroundTruthEntry.model_validate({
             "id": "minimal-item",
             "datasetName": "test",
-            "synthQuestion": "What?",
-            "refs": [{"url": "https://only-ref.com"}],
-        }
-        item = GroundTruthItem.model_validate(data)
+            "plugins": {
+                "rag-compat": {
+                    "kind": "rag-compat",
+                    "version": "1.0",
+                    "data": {
+                        "synthQuestion": "What?",
+                        "refs": [{"url": "https://only-ref.com"}],
+                    }
+                }
+            }
+        })
         assert item.totalReferences == 1
 
     def test_complex_real_world_scenario(self) -> None:
@@ -397,7 +413,6 @@ def test_list_all_gt_query_includes_doctype_filter(repo: CosmosGroundTruthRepo) 
 
 def test_list_all_gt_query_with_status_filter(repo: CosmosGroundTruthRepo) -> None:
     """list_all_gt with status must include BOTH docType and status filters."""
-    from app.domain.enums import GroundTruthStatus
 
     clauses = ["c.docType = 'ground-truth-item'", "c.status = @status"]
     where = " WHERE " + " AND ".join(clauses)

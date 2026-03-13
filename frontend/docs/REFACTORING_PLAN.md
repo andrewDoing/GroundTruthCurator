@@ -1,5 +1,7 @@
 # Frontend Refactoring Plan — Ground Truth Curator
 
+> Migration note: this document now describes the generic host plus plugin-owned evidence direction. Older single-turn and global references-tab assumptions are kept only when they still describe an active compatibility path.
+
 This plan outlines how to refactor the current 1-file demo (`src/demo.tsx`) into cohesive, testable modules using the already-established patterns (components in `components/*`, hooks in `hooks/*`, models in `models/*`, services in `services/*`). The goal is to preserve behavior while improving structure, maintainability, and testability.
 
 ## Goals
@@ -17,7 +19,7 @@ This plan outlines how to refactor the current 1-file demo (`src/demo.tsx`) into
 ## Current State (high-level)
 - Single container component: `src/demo.tsx` holds:
   - App header, view toggles, JSON export, in-app preview toggle.
-  - Left `QueueSidebar` (already extracted), center QA editor, right references tabs (already extracted as `ReferencesTabs`).
+  - Left `QueueSidebar` (already extracted), center multi-turn editor, right evidence/review host (`ReferencesTabs` only when the workflow still uses the shared compatibility surface).
   - Modals already extracted: `GenerateAnswerModal`, `ExportModal`.
   - Overlay already extracted: `ReferenceViewer`.
   - Toast system via `useToasts` and `Toasts` component.
@@ -35,12 +37,8 @@ This plan outlines how to refactor the current 1-file demo (`src/demo.tsx`) into
   - `hooks/useGroundTruth.ts` (or context provider `GroundTruthProvider` if we want React Context). Start with a hook; promote to context only if needed.
 - UI composed of small components:
   - HeaderBar (view toggles, preview toggle, export)
-  - Editor panel broken into:
-    - `QuestionEditor`
-    - `AnswerEditor`
-    - `ChangeCategorySelector`
-    - `SaveControls`
-  - References panel stays under `components/app/ReferencesPanel/*` and receives update/remove/open callbacks from the hook.
+  - Editor panel broken into multi-turn conversation editing plus save controls
+  - Evidence/review host under `components/app/pages/ReferencesSection.tsx`, with `components/app/ReferencesPanel/*` reserved for the shared compatibility surface
   - Explorer view list extracted to `QuestionsList`.
 - Data/Provider boundary
   - Keep `JsonProvider` as the backing implementation.
@@ -71,7 +69,7 @@ This plan outlines how to refactor the current 1-file demo (`src/demo.tsx`) into
 
 4) Tests
 - Add `frontend/src/__tests__/provider.spec.ts` covering versioning bump rules (already asserted in `runSelfTests`).
-- Add `frontend/src/__tests__/validators.spec.ts` covering `refsApprovalReady` edge cases.
+- Add validator coverage for generic conversation/expected-tools approval first; keep `refsApprovalReady` coverage only for RAG-compat migration paths.
 - Add minimal component smoke tests where practical.
 
 5) Cleanup
@@ -93,8 +91,8 @@ From `src/demo.tsx` → new modules:
 
 - Search integration
   - `runSearch`, `addRefsFromResults`, `toggleSelectSearchResult`, `addSelectedFromResults` → Split:
-    - Search execution stays in hook (`runSearch`),
-    - Selection state for search results can live in `ReferencesTabs` (UI-local) or in the hook if shared; prefer local to the right panel.
+    - Search execution stays in hook (`runSearch`) for the remaining compatibility surface
+    - Plugin-owned retrieval acquisition should stay out of the shared right-pane host and surface through plugin panels instead.
 
 - Generation
   - `onGenerate`, `doGenerateApply` → Expose `generateDraftAnswer` action in `useGroundTruth` (implementation calls `services/llm` mocks). Modal visibility remains in the view layer.
@@ -115,7 +113,8 @@ From `src/demo.tsx` → new modules:
   - Implementation details
     - Holds `providerRef` and memoizes.
     - Encapsulates `itemStateFingerprint` logic.
-    - Validates via `refsApprovalReady` and QA change category rules.
+    - Treats `history[]` with stable `turnId` / `stepId` as canonical editing state, with `question` / `answer` retained only as migration projections.
+    - Uses generic approval rules first, with reference-specific validation isolated to compat/plugin behavior.
 
 - `src/components/app/HeaderBar.tsx`
   - Props: sidebarOpen/toggle, viewMode/toggle, inAppPreview/toggle, onExport
@@ -136,17 +135,24 @@ From `src/demo.tsx` → new modules:
   - Props: canApprove, saving, isDeleted, onSaveDraft, onApprove, onDelete, onRestore
 
 - Keep existing:
-  - `QueueSidebar`, `ReferencesTabs`, `GenerateAnswerModal`, `ExportModal`, `ReferenceViewer`, `Toasts`
+  - `QueueSidebar`, `ReferencesTabs` (compatibility surface), `GenerateAnswerModal`, `ExportModal`, `ReferenceViewer`, `Toasts`
 
 ## Validation and Versioning Rules (kept)
 - Status-only saves do not bump version.
 - Content changes (question/answer/references) bump version.
-- Approval requires all refs visited, and selected refs must have a key paragraph ≥ 40 chars.
+- Approval is generic by default; reference visit/key-paragraph rules are a compat/plugin concern while legacy RAG workflows still exist.
+
+## Phase 1 Migration Inventory
+
+- Keep: `useGroundTruth` as the shared editing boundary, but make history the canonical host contract.
+- Rewrite: any remaining guidance that treats top-level question/answer or refs-only approval as the permanent architecture.
+- Narrow: mapping/provider tests that still hard-code legacy single-turn conversion.
+- Delete with shim: temporary references-only guidance once the legacy adapter path is removed.
 
 ## Testing Plan
 - Unit tests using Vitest (or your current test runner):
   - Provider/versioning: replicate `runSelfTests` into tests and remove from runtime.
-  - Validators: `refsApprovalReady` cases.
+  - Validators: generic approval rules first, then `refsApprovalReady` cases for the shrinking compat surface.
   - Hook: small tests around `itemStateFingerprint` behavior and save gating (optional if time-bound).
 
 ## Rollout Strategy
@@ -165,7 +171,7 @@ From `src/demo.tsx` → new modules:
   - Mitigation: keep selection local to `ReferencesTabs` and pass chosen refs back up.
 
 ## Acceptance Criteria (DoD)
-- Behavior remains unchanged (manual smoke test: save, approve gating, delete/restore, add/remove refs, generate draft, export JSON, in-app preview toggling).
+- Behavior remains aligned with the generic host and active compatibility flows (manual smoke test: save, generic approve gating, delete/restore, add/remove evidence on compat items, generate draft, export JSON, in-app preview toggling).
 - `demo.tsx` becomes a thin composition root; core logic moved to `hooks/useGroundTruth.ts` and child components.
 - Self-tests moved into unit tests; no console.assert in production code.
 - Lint/build pass without new warnings.

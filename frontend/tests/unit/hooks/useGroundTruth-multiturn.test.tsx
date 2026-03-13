@@ -42,7 +42,18 @@ describe("useGroundTruth multi-turn flows", () => {
 		await act(async () => {
 			result.current.updateHistory(history);
 		});
-		expect(result.current.current?.history).toEqual(history);
+		expect(result.current.current?.history).toHaveLength(2);
+		expect(result.current.current?.history?.[0]).toMatchObject({
+			role: "user",
+			content: "New question",
+		});
+		expect(result.current.current?.history?.[1]).toMatchObject({
+			role: "agent",
+			content: "Fresh answer",
+		});
+		expect(
+			result.current.current?.history?.every((turn) => !!turn.turnId),
+		).toBe(true);
 		expect(result.current.current?.question).toBe("New question");
 		expect(result.current.current?.answer).toBe("Fresh answer");
 	});
@@ -70,7 +81,12 @@ describe("useGroundTruth multi-turn flows", () => {
 	it("stateSignature ignores visitedAt mutations for hasUnsaved", async () => {
 		const { result } = await setupHook();
 		const before = result.current.hasUnsaved;
-		const firstRef = getItemReferences(result.current.current!)[0];
+		const current = result.current.current;
+		expect(current).toBeTruthy();
+		if (!current) {
+			throw new Error("Expected current item");
+		}
+		const firstRef = getItemReferences(current)[0];
 		expect(firstRef).toBeTruthy();
 		await act(async () => {
 			if (firstRef) {
@@ -82,7 +98,12 @@ describe("useGroundTruth multi-turn flows", () => {
 
 	it("stateSignature changes when reference messageIndex updates", async () => {
 		const { result } = await setupHook();
-		const ref = getItemReferences(result.current.current!)[0];
+		const current = result.current.current;
+		expect(current).toBeTruthy();
+		if (!current) {
+			throw new Error("Expected current item");
+		}
+		const ref = getItemReferences(current)[0];
 		expect(ref).toBeTruthy();
 		await act(async () => {
 			if (ref) {

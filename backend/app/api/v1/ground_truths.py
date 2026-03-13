@@ -21,7 +21,6 @@ from app.domain.models import (
     ContextEntry,
     ExpectedTools,
     FeedbackEntry,
-    GroundTruthItem,
     GroundTruthListResponse,
     HistoryItem,
     PluginPayload,
@@ -33,8 +32,14 @@ from app.domain.models import (
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.plugins import get_default_registry
 from app.container import container
-from app.api.v1._legacy_compat import apply_legacy_compat_fields, coerce_history_item
 from app.exports.models import SnapshotExportRequest
+from app.services.ground_truth_update_service import (
+    ETagMismatchError,
+    ETagRequiredError,
+    apply_shared_update,
+    persist_shared_update,
+    read_legacy_compat_update,
+)
 from app.services.validation_service import (
     ApprovalValidationError,
     ValidationError,
@@ -274,7 +279,7 @@ async def import_bulk(
         registry = get_default_registry()
         for it in gt_items:
             _coerce_history_for_internal_use(it)
-            apply_computed_tags(cast(GroundTruthItem, it), registry)
+            apply_computed_tags(it, registry)
 
         result = await container.repo.import_bulk_gt(gt_items, buckets=buckets)
 
@@ -603,70 +608,11 @@ async def update_ground_truth(
     user: UserContext = Depends(get_current_user),
     if_match: str | None = Header(default=None, alias="If-Match"),
 ) -> AgenticGroundTruthEntry:
-    it = cast(GroundTruthItem | None, await container.repo.get_gt(datasetName, bucket, item_id))
+    it = await container.repo.get_gt(datasetName, bucket, item_id)
     if not it:
         raise HTTPException(status_code=404, detail="Item not found")
     provided_fields = set(payload.model_fields_set)
     payload_extras = payload.model_extra or {}
-
-    if "status" in provided_fields:
-        if payload.status is None:
-            raise HTTPException(
-                status_code=400,
-                detail="status cannot be null; omit the field to leave it unchanged",
-            )
-        try:
-            val = payload.status
-            if isinstance(val, GroundTruthStatus):
-                it.status = val
-            elif val is not None:
-                it.status = GroundTruthStatus(val)
-        except (ValueError, KeyError):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid status value: {payload.status}. Must be one of: draft, approved, skipped, deleted"
-            )
-        if it.status == GroundTruthStatus.approved:
-            it.reviewed_at = datetime.now(timezone.utc)
-            it.updatedBy = user.user_id
-
-    if "comment" in provided_fields:
-        it.comment = payload.comment or ""
-
-    if "history" in provided_fields:
-        if payload.history is None:
-            it.history = None
-            it.totalReferences = 0
-        else:
-            try:
-                it.history = [coerce_history_item(entry) for entry in payload.history]
-                it.totalReferences = 0
-            except (KeyError, TypeError, ValueError, ValidationError) as e:
-                raise HTTPException(status_code=400, detail=f"Invalid history format: {str(e)}")
-
-    if "context_entries" in provided_fields:
-        it.context_entries = payload.context_entries or []
-    if "tool_calls" in provided_fields:
-        it.tool_calls = payload.tool_calls or []
-    if "expected_tools" in provided_fields:
-        if payload.expected_tools is None:
-            raise HTTPException(
-                status_code=400,
-                detail="expectedTools cannot be null; omit the field to leave it unchanged",
-            )
-        it.expected_tools = payload.expected_tools
-    if "feedback" in provided_fields:
-        it.feedback = payload.feedback or []
-    if "metadata" in provided_fields:
-        it.metadata = payload.metadata or {}
-    if "plugins" in provided_fields:
-        it.plugins = payload.plugins or {}
-    if "trace_ids" in provided_fields:
-        it.trace_ids = payload.trace_ids
-    if "trace_payload" in provided_fields:
-        it.trace_payload = payload.trace_payload or {}
-    if "scenario_id" in provided_fields:
-        it.scenario_id = payload.scenario_id or ""
 
     # Tags handling: Only accept 'manualTags' in the generic contract
     if "computedTags" in payload_extras:
@@ -679,38 +625,43 @@ async def update_ground_truth(
             status_code=400,
             detail="'tags' field is deprecated; use 'manualTags' instead",
         )
-    if "manual_tags" in provided_fields:
-        try:
-            it.manual_tags = payload.manual_tags or []
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
     try:
-        apply_legacy_compat_fields(it, payload_extras)
+        apply_shared_update(
+            it,
+            provided_fields=provided_fields,
+            comment=payload.comment,
+            history_entries=payload.history,
+            context_entries=payload.context_entries,
+            tool_calls=payload.tool_calls,
+            expected_tools=payload.expected_tools,
+            feedback=payload.feedback,
+            metadata=payload.metadata,
+            plugins=payload.plugins,
+            trace_ids=payload.trace_ids,
+            trace_payload=payload.trace_payload,
+            scenario_id=payload.scenario_id,
+            manual_tags=payload.manual_tags,
+            status=payload.status,
+            actor_user_id=user.user_id,
+            legacy_update=read_legacy_compat_update(payload_extras),
+        )
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=e.message)
-
-    # Concurrency: use If-Match header or etag field in body
-    provided_etag = payload.etag
-    if not if_match and not provided_etag:
-        # Require ETag to perform update
-        raise HTTPException(status_code=412, detail="ETag required")
-    if if_match:
-        it.etag = if_match
-    elif provided_etag:
-        it.etag = provided_etag
     try:
-        # Apply computed tags before saving
-        if it.status == GroundTruthStatus.approved:
-            validate_item_for_approval(it)
-        apply_computed_tags(it)
-        await container.repo.upsert_gt(it)
+        await persist_shared_update(
+            container.repo,
+            it,
+            if_match=if_match,
+            payload_etag=payload.etag,
+        )
     except ApprovalValidationError as e:
         raise HTTPException(status_code=400, detail={"code": "INVALID_APPROVAL", "errors": e.errors})
+    except ETagRequiredError:
+        raise HTTPException(status_code=412, detail="ETag required")
+    except ETagMismatchError:
+        raise HTTPException(status_code=412, detail="ETag mismatch")
     except ValueError as e:
-        if str(e) == "etag_mismatch":
-            raise HTTPException(status_code=412, detail="ETag mismatch")
-        raise
+        raise HTTPException(status_code=400, detail=str(e))
     # Fetch and return the updated item so the response includes the fresh ETag
     # and any server-populated fields (mirrors assignments API behavior).
     latest = await container.repo.get_gt(datasetName, bucket, item_id)
@@ -790,7 +741,7 @@ async def recompute_computed_tags(
             original_computed_tags = set(item.computed_tags or [])
 
             # Apply computed tags (mutates item in place)
-            apply_computed_tags(cast(GroundTruthItem, item), registry)
+            apply_computed_tags(item, registry)
 
             # Check if computed tags changed
             new_computed_tags = set(item.computed_tags or [])

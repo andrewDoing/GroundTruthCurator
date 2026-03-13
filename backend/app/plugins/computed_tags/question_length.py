@@ -1,7 +1,7 @@
 """Computed tag plugins for question length classification.
 
 This module provides plugins that tag documents based on the word count
-of the question (synthQuestion or editedQuestion).
+of the question (computed via the question property accessor).
 
 Word count thresholds:
 - short: SHORT_MAX_WORDS words or fewer
@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from app.plugins.base import ComputedTagPlugin
 
 if TYPE_CHECKING:
-    from app.domain.models import GroundTruthItem
+    from app.domain.models import AgenticGroundTruthEntry
 
 # Word count thresholds for question length classification
 SHORT_MAX_WORDS = 10  # Questions with this many words or fewer are "short"
@@ -25,14 +25,14 @@ MEDIUM_MAX_WORDS = (
 )
 
 
-def _get_question_word_count(doc: GroundTruthItem) -> int:
+def _get_question_word_count(doc: AgenticGroundTruthEntry) -> int:
     """Get the word count for the document's question.
 
-    Uses editedQuestion if available, otherwise synthQuestion.
-    Uses .split() to count words as specified in requirements.
+    Uses the computed property accessor which returns editedQuestion if available,
+    otherwise synthQuestion. Uses .split() to count words as specified in requirements.
 
     Args:
-        doc: The GroundTruthItem to evaluate.
+        doc: The AgenticGroundTruthEntry to evaluate.
 
     Returns:
         The number of words in the question.
@@ -51,7 +51,7 @@ class QuestionLengthLongPlugin(ComputedTagPlugin):
     def tag_key(self) -> str:
         return "question_length:long"
 
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         return self.tag_key if _get_question_word_count(doc) > MEDIUM_MAX_WORDS else None
 
 
@@ -65,7 +65,7 @@ class QuestionLengthMediumPlugin(ComputedTagPlugin):
     def tag_key(self) -> str:
         return "question_length:medium"
 
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         count = _get_question_word_count(doc)
         return self.tag_key if SHORT_MAX_WORDS < count <= MEDIUM_MAX_WORDS else None
 
@@ -80,5 +80,5 @@ class QuestionLengthShortPlugin(ComputedTagPlugin):
     def tag_key(self) -> str:
         return "question_length:short"
 
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         return self.tag_key if _get_question_word_count(doc) <= SHORT_MAX_WORDS else None

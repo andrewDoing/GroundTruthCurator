@@ -17,19 +17,21 @@ from app.domain.models import (
     ContextEntry,
     ExpectedTools,
     FeedbackEntry,
-    GroundTruthItem,
     PluginPayload,
     ToolCallRecord,
 )
 from app.domain.enums import GroundTruthStatus
 from app.container import container
-from app.api.v1._legacy_compat import apply_legacy_compat_fields, coerce_history_item
-from datetime import datetime, timezone
-from app.services.tagging_service import apply_computed_tags
+from app.services.ground_truth_update_service import (
+    ETagMismatchError,
+    ETagRequiredError,
+    apply_shared_update,
+    persist_shared_update,
+    read_legacy_compat_update,
+)
 from app.services.validation_service import (
     ApprovalValidationError,
     ValidationError,
-    validate_item_for_approval,
 )
 
 
@@ -126,7 +128,7 @@ async def update_item(
     if_match: str | None = Header(default=None, alias="If-Match"),
 ) -> AgenticGroundTruthEntry:
     # Fold soft delete into PUT via status=deleted
-    it = cast(GroundTruthItem | None, await container.repo.get_gt(dataset, bucket, item_id))
+    it = await container.repo.get_gt(dataset, bucket, item_id)
     if not it:
         raise HTTPException(status_code=404, detail="Item not found")
     # Only allow updates to fields permitted for SME
@@ -140,124 +142,51 @@ async def update_item(
 
     provided_fields: Set[str] = set(payload.model_fields_set)
     payload_extras = payload.model_extra or {}
-
-    if "comment" in provided_fields:
-        it.comment = payload.comment or ""
-    if "history" in provided_fields:
-        if payload.history is None:
-            it.history = None
-            it.totalReferences = 0
-        else:
-            try:
-                it.history = [coerce_history_item(entry) for entry in payload.history]
-                it.totalReferences = 0
-            except (TypeError, ValueError, ValidationError) as e:
-                raise HTTPException(status_code=400, detail=f"Invalid history format: {str(e)}")
-    if "context_entries" in provided_fields:
-        it.context_entries = payload.context_entries or []
-    if "tool_calls" in provided_fields:
-        it.tool_calls = payload.tool_calls or []
-    if "expected_tools" in provided_fields:
-        if payload.expected_tools is None:
-            raise HTTPException(
-                status_code=400,
-                detail="expectedTools cannot be null; omit the field to leave it unchanged",
-            )
-        it.expected_tools = payload.expected_tools
-    if "feedback" in provided_fields:
-        it.feedback = payload.feedback or []
-    if "metadata" in provided_fields:
-        it.metadata = payload.metadata or {}
-    if "plugins" in provided_fields:
-        it.plugins = payload.plugins or {}
-    if "trace_ids" in provided_fields:
-        it.trace_ids = payload.trace_ids
-    if "trace_payload" in provided_fields:
-        it.trace_payload = payload.trace_payload or {}
-    if "scenario_id" in provided_fields:
-        it.scenario_id = payload.scenario_id or ""
-
     try:
-        apply_legacy_compat_fields(it, payload_extras)
+        mutation = apply_shared_update(
+            it,
+            provided_fields=provided_fields,
+            comment=payload.comment,
+            history_entries=payload.history,
+            context_entries=payload.context_entries,
+            tool_calls=payload.tool_calls,
+            expected_tools=payload.expected_tools,
+            feedback=payload.feedback,
+            metadata=payload.metadata,
+            plugins=payload.plugins,
+            trace_ids=payload.trace_ids,
+            trace_payload=payload.trace_payload,
+            scenario_id=payload.scenario_id,
+            manual_tags=payload.manual_tags,
+            status=payload.status,
+            approve=bool(payload.approve),
+            actor_user_id=user.user_id,
+            legacy_update=read_legacy_compat_update(payload_extras),
+            clear_assignment_on_statuses={
+                GroundTruthStatus.approved,
+                GroundTruthStatus.deleted,
+            },
+        )
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=e.message)
-
-    now = datetime.now(timezone.utc)
-
-    # Track whether we need to delete the assignment document
-    should_delete_assignment = False
-
-    # Approve convenience flag
-    if bool(payload.approve):
-        it.status = GroundTruthStatus.approved
-        it.reviewed_at = now
-        it.updatedBy = user.user_id
-        # Clear assignment fields on completion
-        it.assignedTo = None
-        it.assigned_at = None
-        should_delete_assignment = True
-
-    # Status update handling (skip/delete/approved explicitly)
-    if "status" in provided_fields:
-        if payload.status is None:
-            raise HTTPException(
-                status_code=400,
-                detail="status cannot be null; omit the field to leave it unchanged",
-            )
-        try:
-            val = payload.status
-            if isinstance(val, GroundTruthStatus):
-                it.status = val
-            else:
-                it.status = GroundTruthStatus(str(val))
-        except (ValueError, KeyError):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid status value: {payload.status}. Must be one of: draft, approved, skipped, deleted"
-            )
-        if it.status in {GroundTruthStatus.approved, GroundTruthStatus.deleted}:
-            # Clear assignment when moving out of draft (keep for skipped so another SME can pick it up)
-            it.assignedTo = None
-            it.assigned_at = None
-            should_delete_assignment = True
-        if it.status == GroundTruthStatus.approved:
-            it.reviewed_at = now
-            it.updatedBy = user.user_id
-    # Tags (validated by model validators)
-    if "manual_tags" in provided_fields:
-        try:
-            it.manual_tags = payload.manual_tags or []
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-    # ETag handling: require an ETag for all SME updates (approve/skip/delete)
-    provided_etag = payload.etag
-    if not if_match and not provided_etag:
-        raise HTTPException(status_code=412, detail="ETag required")
-    if if_match:
-        it.etag = if_match
-    elif provided_etag:
-        it.etag = provided_etag
-
-    # Apply computed tags before saving
     try:
-        if it.status == GroundTruthStatus.approved:
-            validate_item_for_approval(it)
-        apply_computed_tags(it)
+        await persist_shared_update(
+            container.repo,
+            it,
+            if_match=if_match,
+            payload_etag=payload.etag,
+        )
     except ApprovalValidationError as e:
         raise HTTPException(status_code=400, detail={"code": "INVALID_APPROVAL", "errors": e.errors})
+    except ETagRequiredError:
+        raise HTTPException(status_code=412, detail="ETag required")
+    except ETagMismatchError:
+        raise HTTPException(status_code=412, detail="ETag mismatch")
     except ValueError as e:
-        # Convert ValueError from validation to HTTP 400
         raise HTTPException(status_code=400, detail=str(e))
 
-    try:
-        await container.repo.upsert_gt(it)
-    except ValueError as e:
-        if str(e) == "etag_mismatch":
-            raise HTTPException(status_code=412, detail="ETag mismatch")
-        raise
-
     # Delete assignment document after successful GT update
-    if should_delete_assignment and original_assigned_to:
+    if mutation.should_delete_assignment and original_assigned_to:
         try:
             deleted = await container.repo.delete_assignment_doc(
                 user_id=original_assigned_to,

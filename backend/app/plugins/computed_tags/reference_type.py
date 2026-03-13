@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from app.plugins.base import ComputedTagPlugin
 
 if TYPE_CHECKING:
-    from app.domain.models import GroundTruthItem, Reference
+    from app.domain.models import AgenticGroundTruthEntry, Reference
 
 # Pattern for article references: CS followed by digits (e.g., CS431120)
 _ARTICLE_PATTERN = re.compile(r"CS\d+", re.IGNORECASE)
@@ -52,31 +52,34 @@ def _is_helpcenter_url(url: str) -> bool:
     return "/help" in url.lower()
 
 
-def _get_all_references(doc: GroundTruthItem) -> list[Reference]:
+def _get_all_references(doc: AgenticGroundTruthEntry) -> list[Reference]:
     """Get all references from a document, including those in history turns.
 
     Args:
-        doc: The GroundTruthItem to evaluate.
+        doc: The AgenticGroundTruthEntry to evaluate.
 
     Returns:
         A list of all Reference objects from the document.
     """
+    from app.domain.models import HistoryItem
+    
     refs: list[Reference] = list(doc.refs or [])
 
     # Also gather refs from history turns
+    # HistoryItem (subclass of HistoryEntry) has refs field
     if doc.history:
         for turn in doc.history:
-            if turn.refs:
+            if isinstance(turn, HistoryItem) and turn.refs:
                 refs.extend(turn.refs)
 
     return refs
 
 
-def _has_article_reference(doc: GroundTruthItem) -> bool:
+def _has_article_reference(doc: AgenticGroundTruthEntry) -> bool:
     """Check if document has at least one article reference.
 
     Args:
-        doc: The GroundTruthItem to evaluate.
+        doc: The AgenticGroundTruthEntry to evaluate.
 
     Returns:
         True if at least one reference URL matches the article pattern.
@@ -85,11 +88,11 @@ def _has_article_reference(doc: GroundTruthItem) -> bool:
     return any(_is_article_url(ref.url) for ref in refs)
 
 
-def _has_helpcenter_reference(doc: GroundTruthItem) -> bool:
+def _has_helpcenter_reference(doc: AgenticGroundTruthEntry) -> bool:
     """Check if document has at least one helpcenter reference.
 
     Args:
-        doc: The GroundTruthItem to evaluate.
+        doc: The AgenticGroundTruthEntry to evaluate.
 
     Returns:
         True if at least one reference URL contains '/help'.
@@ -109,7 +112,7 @@ class ReferenceTypeArticlePlugin(ComputedTagPlugin):
     def tag_key(self) -> str:
         return "reference_type:article"
 
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         return self.tag_key if _has_article_reference(doc) else None
 
 
@@ -124,5 +127,5 @@ class ReferenceTypeHelpcenterPlugin(ComputedTagPlugin):
     def tag_key(self) -> str:
         return "reference_type:helpcenter"
 
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         return self.tag_key if _has_helpcenter_reference(doc) else None

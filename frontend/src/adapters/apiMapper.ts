@@ -1,8 +1,14 @@
 import type { components } from "../api/generated";
-import type {
-	GroundTruthItem,
-	PluginPayload,
-	Reference,
+import {
+	createConversationTurn,
+	ensureConversationTurnIdentity,
+	type GroundTruthItem,
+	getLastAgentTurn,
+	getLastUserTurn,
+	getTurnIndexById,
+	type PluginPayload,
+	type Reference,
+	withDerivedLegacyFields,
 } from "../models/groundTruth";
 import { urlToTitle } from "../models/utils";
 
@@ -17,6 +23,7 @@ type RetrievalBucket = {
 		relevance?: string;
 		toolCallId?: string;
 		messageIndex?: number;
+		turnId?: string;
 		keyParagraph?: string;
 		bonus?: boolean;
 	}>;
@@ -27,6 +34,8 @@ type ConversationTurn = NonNullable<GroundTruthItem["history"]>[number];
 export type ApiHistoryEntry = components["schemas"]["HistoryEntry"] & {
 	refs?: components["schemas"]["Reference"][];
 	expectedBehavior?: string[];
+	turnId?: string;
+	stepId?: string;
 };
 export type ApiGroundTruth =
 	components["schemas"]["AgenticGroundTruthEntry-Output"] & {
@@ -45,10 +54,31 @@ export type ApiGroundTruth =
 		};
 export type ApiReference = components["schemas"]["Reference"];
 
+type StoredTurnIdentity = {
+	turnId?: string;
+	stepId?: string;
+};
+
+function getStoredTurnIdentities(
+	plugins: Record<string, PluginPayload>,
+): StoredTurnIdentity[] {
+	const turnIdentity = (
+		plugins[_RAG_COMPAT_KEY]?.data as Record<string, unknown>
+	)?.turnIdentity;
+	return Array.isArray(turnIdentity)
+		? (turnIdentity as StoredTurnIdentity[])
+		: [];
+}
+
 export function groundTruthFromApi(
 	api: ApiGroundTruth,
 	providerId = "api",
 ): GroundTruthItem {
+	const plugins: Record<string, PluginPayload> =
+		api.plugins && Object.keys(api.plugins).length
+			? (api.plugins as Record<string, PluginPayload>)
+			: {};
+	const storedTurnIdentity = getStoredTurnIdentities(plugins);
 	let history: GroundTruthItem["history"];
 	const legacyRefs: Reference[] = [];
 	let refIndex = 0;
@@ -60,14 +90,17 @@ export function groundTruthFromApi(
 			const h = api.history[idx];
 			// Preserve free-form roles; map "assistant" to "agent" for backward compat.
 			const role = h.role === "assistant" ? "agent" : h.role;
-			history[idx] = {
+			const identity = storedTurnIdentity[idx];
+			history[idx] = createConversationTurn({
 				role,
 				content: h.msg,
+				turnId: h.turnId || identity?.turnId,
+				stepId: h.stepId || identity?.stepId,
 				expectedBehavior:
 					h.expectedBehavior && h.expectedBehavior.length > 0
 						? (h.expectedBehavior as ConversationTurn["expectedBehavior"])
 						: undefined,
-			};
+			});
 
 			if (h.refs && h.refs.length > 0) {
 				for (const r of h.refs) {
@@ -80,6 +113,7 @@ export function groundTruthFromApi(
 						visitedAt: null,
 						bonus: r.bonus === true,
 						messageIndex: idx,
+						turnId: history[idx]?.turnId,
 					});
 				}
 			}
@@ -89,8 +123,18 @@ export function groundTruthFromApi(
 		const initialQuestion = api.editedQuestion || api.synthQuestion || "";
 		if (initialQuestion) {
 			history = [
-				{ role: "user" as const, content: initialQuestion },
-				{ role: "agent" as const, content: api.answer || "" },
+				createConversationTurn({
+					role: "user",
+					content: initialQuestion,
+					turnId: storedTurnIdentity[0]?.turnId,
+					stepId: storedTurnIdentity[0]?.stepId,
+				}),
+				createConversationTurn({
+					role: "agent",
+					content: api.answer || "",
+					turnId: storedTurnIdentity[1]?.turnId,
+					stepId: storedTurnIdentity[1]?.stepId,
+				}),
 			];
 		}
 	}
@@ -99,6 +143,10 @@ export function groundTruthFromApi(
 	if (api.refs && api.refs.length > 0) {
 		const wasLegacyConversion = !api.history || api.history.length === 0;
 		const messageIndex = wasLegacyConversion ? 1 : undefined;
+		const turnId =
+			typeof messageIndex === "number"
+				? history?.[messageIndex]?.turnId
+				: undefined;
 
 		for (const r of api.refs) {
 			legacyRefs.push({
@@ -110,15 +158,10 @@ export function groundTruthFromApi(
 				visitedAt: null,
 				bonus: r.bonus === true,
 				messageIndex,
+				turnId,
 			});
 		}
 	}
-
-	// Build plugin data — merge existing plugins with per-call retrieval state
-	const plugins: Record<string, PluginPayload> =
-		api.plugins && Object.keys(api.plugins).length
-			? (api.plugins as Record<string, PluginPayload>)
-			: {};
 
 	// Read per-call retrieval state from plugin data if it already exists
 	const existingRetrievals = (
@@ -144,7 +187,8 @@ export function groundTruthFromApi(
 				chunk: ref.snippet,
 				relevance: undefined,
 				toolCallId: ref.toolCallId,
-				messageIndex: ref.messageIndex,
+				messageIndex: ref.turnId ? undefined : ref.messageIndex,
+				turnId: ref.turnId,
 				keyParagraph: ref.keyParagraph,
 				bonus: ref.bonus,
 			});
@@ -158,15 +202,12 @@ export function groundTruthFromApi(
 		};
 	}
 
-	const question = api.editedQuestion || api.synthQuestion || "";
 	const deleted = api.status === "deleted";
 
-	return {
+	return withDerivedLegacyFields({
 		id: api.id,
 		providerId,
-		question,
-		answer: api.answer ?? "",
-		history,
+		history: history ? ensureConversationTurnIdentity(history) : history,
 		comment: api.comment ?? undefined,
 		status:
 			(deleted ? "draft" : (api.status as GroundTruthItem["status"])) ||
@@ -198,14 +239,16 @@ export function groundTruthFromApi(
 			bucket: (api.bucket as string) || "0",
 			_etag: api._etag,
 		} as Record<string, unknown>),
-	};
+	});
 }
 
 export function groundTruthToPatch(args: {
 	item: GroundTruthItem;
 	originalApi?: ApiGroundTruth;
 }): Partial<ApiGroundTruth> {
-	const { item, originalApi } = args;
+	const { originalApi } = args;
+	const item = withDerivedLegacyFields(args.item);
+	const history = ensureConversationTurnIdentity(item.history);
 
 	// Extract references from per-call plugin state
 	const references = getItemReferencesFromPlugins(item);
@@ -217,8 +260,14 @@ export function groundTruthToPatch(args: {
 
 	let topLevelRefs: ApiReference[] = [];
 	if (hadLegacyTopLevelRefs) {
+		const legacyAgentTurnId = history[1]?.turnId;
 		topLevelRefs = references
-			.filter((r) => r.messageIndex === 1 || r.messageIndex === undefined)
+			.filter(
+				(r) =>
+					r.turnId === legacyAgentTurnId ||
+					r.messageIndex === 1 ||
+					r.messageIndex === undefined,
+			)
 			.map((r) => ({
 				url: r.url,
 				title: r.title || undefined,
@@ -242,17 +291,19 @@ export function groundTruthToPatch(args: {
 		status: (item.deleted
 			? "deleted"
 			: item.status) as components["schemas"]["GroundTruthStatus"],
-		answer: item.answer,
-		editedQuestion: item.question,
+		answer: getLastAgentTurn(item),
+		editedQuestion: getLastUserTurn(item),
 		refs: topLevelRefs,
 		manualTags: item.manualTags || [],
 	};
 
-	if (item.history && item.history.length > 0) {
-		body.history = item.history.map((turn, idx) => {
+	if (history.length > 0) {
+		body.history = history.map((turn, idx) => {
 			let turnRefs: ApiReference[] | undefined;
 			if (turn.role !== "user") {
-				const refsForTurn = references.filter((r) => r.messageIndex === idx);
+				const refsForTurn = references.filter(
+					(r) => r.turnId === turn.turnId || r.messageIndex === idx,
+				);
 				if (refsForTurn.length > 0) {
 					turnRefs = refsForTurn.map((r) => ({
 						url: r.url,
@@ -270,6 +321,8 @@ export function groundTruthToPatch(args: {
 			return {
 				role: apiRole,
 				msg: turn.content,
+				turnId: turn.turnId,
+				stepId: turn.stepId,
 				expectedBehavior: turn.expectedBehavior || undefined,
 				...(turnRefs ? { refs: turnRefs } : {}),
 			};
@@ -296,8 +349,23 @@ export function groundTruthToPatch(args: {
 	if (item.metadata && Object.keys(item.metadata).length) {
 		(body as Record<string, unknown>).metadata = item.metadata;
 	}
-	if (item.plugins && Object.keys(item.plugins).length) {
-		(body as Record<string, unknown>).plugins = item.plugins;
+	const plugins = { ...(item.plugins || {}) };
+	const existingCompat = plugins[_RAG_COMPAT_KEY];
+	if (history.length > 0) {
+		plugins[_RAG_COMPAT_KEY] = {
+			kind: _RAG_COMPAT_KEY,
+			version: existingCompat?.version || "1.0",
+			data: {
+				...(existingCompat?.data || {}),
+				turnIdentity: history.map((turn) => ({
+					turnId: turn.turnId,
+					stepId: turn.stepId,
+				})),
+			},
+		};
+	}
+	if (Object.keys(plugins).length) {
+		(body as Record<string, unknown>).plugins = plugins;
 	}
 	if (item.traceIds) {
 		(body as Record<string, unknown>).traceIds = item.traceIds;
@@ -318,6 +386,8 @@ function getItemReferencesFromPlugins(item: GroundTruthItem): Reference[] {
 		| Record<string, unknown>
 		| undefined;
 	if (!data) return [];
+	const history = ensureConversationTurnIdentity(item.history);
+	const indexByTurnId = getTurnIndexById(history);
 
 	const retrievals = data.retrievals;
 	if (
@@ -338,6 +408,16 @@ function getItemReferencesFromPlugins(item: GroundTruthItem): Reference[] {
 	)) {
 		if (!bucket?.candidates) continue;
 		for (const c of bucket.candidates) {
+			const storedTurnId = c.turnId as string | undefined;
+			const resolvedMessageIndex =
+				storedTurnId && indexByTurnId.has(storedTurnId)
+					? indexByTurnId.get(storedTurnId)
+					: (c.messageIndex as number | undefined);
+			const resolvedTurnId =
+				storedTurnId ||
+				(typeof resolvedMessageIndex === "number"
+					? history[resolvedMessageIndex]?.turnId
+					: undefined);
 			refs.push({
 				id: `ref_${refIndex++}`,
 				title: (c.title as string) || undefined,
@@ -346,7 +426,8 @@ function getItemReferencesFromPlugins(item: GroundTruthItem): Reference[] {
 				keyParagraph: (c.keyParagraph as string) || undefined,
 				visitedAt: (c.visitedAt as string) || null,
 				bonus: (c.bonus as boolean) || false,
-				messageIndex: c.messageIndex as number | undefined,
+				messageIndex: resolvedMessageIndex,
+				turnId: resolvedTurnId,
 				toolCallId: toolCallId !== _UNASSOCIATED_KEY ? toolCallId : undefined,
 			});
 		}

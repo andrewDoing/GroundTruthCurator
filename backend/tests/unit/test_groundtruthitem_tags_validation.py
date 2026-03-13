@@ -1,6 +1,6 @@
 import pytest
 
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
 
 
 BASE = dict(id="id1", datasetName="ds", synthQuestion="What is this product?")
@@ -9,7 +9,7 @@ BASE = dict(id="id1", datasetName="ds", synthQuestion="What is this product?")
 def make_item(**overrides):
     data = {**BASE, **overrides}
     # Allow both field names and aliases; Pydantic config handles this
-    return GroundTruthItem(**data)
+    return AgenticGroundTruthEntry(**data)
 
 
 def test_model_accepts_valid_tag_set():

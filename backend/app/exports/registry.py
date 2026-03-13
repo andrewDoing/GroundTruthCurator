@@ -51,6 +51,20 @@ class ExportProcessorRegistry:
         names = requested if requested is not None else (default_order or [])
         return [self.get(name) for name in names]
 
+    def apply_transforms(
+        self,
+        docs: list[dict[str, Any]],
+        transforms: list[Any] | None,
+    ) -> list[dict[str, Any]]:
+        if not transforms:
+            return docs
+
+        current_docs = [dict(doc) for doc in docs]
+        for transform in transforms:
+            transform_fn = getattr(transform, "transform", transform)
+            current_docs = [transform_fn(dict(doc)) for doc in current_docs]
+        return current_docs
+
 
 class ExportFormatterRegistry:
     def __init__(self) -> None:

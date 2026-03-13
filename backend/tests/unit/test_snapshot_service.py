@@ -10,12 +10,12 @@ from app.exports.processors.merge_tags import MergeTagsProcessor
 from app.exports.registry import ExportFormatterRegistry, ExportProcessorRegistry
 from app.exports.storage.local import LocalExportStorage
 from app.services.snapshot_service import SnapshotService
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
 from app.domain.enums import GroundTruthStatus
 
 
 class _FakeRepo:
-    def __init__(self, items: list[GroundTruthItem]):
+    def __init__(self, items: list[AgenticGroundTruthEntry]):
         self._items = items
         self.calls: list[tuple[str, Any]] = []
 
@@ -95,7 +95,7 @@ class _FakeRepo:
 
 
 def _make_item(id: str, dataset: str, status: GroundTruthStatus) -> GroundTruthItem:
-    return GroundTruthItem(
+    return AgenticGroundTruthEntry(
         id=id,
         datasetName=dataset,
         bucket=None,
@@ -128,6 +128,31 @@ def _build_snapshot_service(repo: _FakeRepo) -> SnapshotService:
         processor_registry=processor_registry,
         formatter_registry=formatter_registry,
         default_processor_order=[],
+    )
+
+
+def _build_snapshot_service_with_transforms(
+    repo: _FakeRepo, *, plugin_export_transforms: list[Any]
+) -> SnapshotService:
+    storage = LocalExportStorage(base_dir=".")
+    pipeline = ExportPipeline(storage)
+    processor_registry = ExportProcessorRegistry()
+    formatter_registry = ExportFormatterRegistry()
+    formatter_registry.register(JsonItemsFormatter())
+    formatter_registry.register_factory(
+        "json_snapshot_payload",
+        lambda snapshot_at, filters=None: JsonSnapshotPayloadFormatter(
+            snapshot_at=snapshot_at,
+            filters=filters,
+        ),
+    )
+    return SnapshotService(
+        repo,
+        export_pipeline=pipeline,
+        processor_registry=processor_registry,
+        formatter_registry=formatter_registry,
+        default_processor_order=[],
+        plugin_export_transforms=plugin_export_transforms,
     )
 
 
@@ -206,3 +231,16 @@ async def test_build_snapshot_payload_empty_list():
 
     assert payload["count"] == 0
     assert payload["items"] == []
+
+
+@pytest.mark.anyio
+async def test_build_snapshot_payload_applies_plugin_export_transforms():
+    repo = _FakeRepo([_make_item("1", "faq", GroundTruthStatus.approved)])
+    svc = _build_snapshot_service_with_transforms(
+        repo,
+        plugin_export_transforms=[lambda doc: {**doc, "pluginProjected": True}],
+    )
+
+    payload = await svc.build_snapshot_payload()
+
+    assert payload["items"][0]["pluginProjected"] is True

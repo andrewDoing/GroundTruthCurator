@@ -59,6 +59,7 @@ export default function ConversationTurnComponent({
 
 	const isUser = turn.role === "user";
 	const isAgent = turn.role !== "user";
+	const stableTurnIdentity = turn.stepId || turn.turnId;
 	// Display label: "Agent" for generic "agent" role, capitalize for others
 	const roleLabel = isUser
 		? "User"
@@ -87,6 +88,7 @@ export default function ConversationTurnComponent({
 
 	return (
 		<div
+			data-turn-id={turn.turnId}
 			data-turn-index={index}
 			data-last-turn={isLast ? "true" : "false"}
 			className={cn(
@@ -106,7 +108,10 @@ export default function ConversationTurnComponent({
 					>
 						{roleLabel}
 					</span>
-					<span className="text-xs text-slate-600">Turn #{turnNumber}</span>
+					<span className="text-xs text-slate-600">
+						Turn #{turnNumber}
+						{stableTurnIdentity ? ` · ${stableTurnIdentity}` : ""}
+					</span>
 					<button
 						type="button"
 						onClick={() => setIsCollapsed((c) => !c)}

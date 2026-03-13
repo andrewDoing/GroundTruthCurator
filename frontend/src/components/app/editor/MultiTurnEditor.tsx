@@ -129,7 +129,8 @@ export default function MultiTurnEditor({
 						</div>
 					) : (
 						history.map((turn, idx) => {
-							const turnKey = `${turn.role}-${String(idx)}`;
+							const turnKey =
+								turn.turnId || turn.stepId || `${turn.role}-${String(idx)}`;
 							return (
 								<ConversationTurnComponent
 									key={turnKey}
