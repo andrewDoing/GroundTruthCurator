@@ -1,0 +1,80 @@
+stages:
+  - validate
+  - deploy
+
+validate-deploy-inputs:
+  stage: validate
+  inherit:
+    default: false
+  image: alpine:3.21
+  needs: []
+  rules:
+    - if: '$DEPLOY_BACKEND == "true" && $CI_COMMIT_REF_PROTECTED == "true"'
+    - when: never
+  script:
+    - |
+      set -eu
+
+      if [ "${DEPLOY_BACKEND:-}" != "true" ]; then
+        echo "DEPLOY_BACKEND must be set to true for deploy pipelines." >&2
+        exit 1
+      fi
+
+      if [ -z "${DEPLOYMENT_TARGET_NAME:-}" ]; then
+        echo "DEPLOYMENT_TARGET_NAME is required when DEPLOY_BACKEND=true." >&2
+        exit 1
+      fi
+
+      case "$DEPLOYMENT_TARGET_NAME" in
+        *[!A-Za-z0-9._-]*)
+          echo "DEPLOYMENT_TARGET_NAME may only contain letters, numbers, dot, underscore, or hyphen." >&2
+          exit 1
+          ;;
+      esac
+
+      if [ "${CI_COMMIT_REF_PROTECTED:-false}" != "true" ]; then
+        echo "Deploy pipelines must run on a protected ref." >&2
+        exit 1
+      fi
+
+      if [ -n "${TAG_NAME:-}" ] && [ -n "${CONTAINER_IMAGE:-}" ]; then
+        echo "Set either TAG_NAME or CONTAINER_IMAGE, not both." >&2
+        exit 1
+      fi
+
+      if [ -z "${TAG_NAME:-}${CONTAINER_IMAGE:-}" ]; then
+        echo "Set TAG_NAME or CONTAINER_IMAGE when DEPLOY_BACKEND=true." >&2
+        exit 1
+      fi
+
+      if [ -n "${TAG_NAME:-}" ] && [ -z "${REGISTRY_PREFIX:-}" ]; then
+        echo "REGISTRY_PREFIX is required when TAG_NAME is used." >&2
+        exit 1
+      fi
+
+      if [ -n "${CONTAINER_IMAGE:-}" ] && ! printf '%s' "$CONTAINER_IMAGE" | grep -q '/'; then
+        echo "CONTAINER_IMAGE must include a registry hostname and image path." >&2
+        exit 1
+      fi
+
+deploy-backend:
+  stage: deploy
+  inherit:
+    default: false
+  image: mcr.microsoft.com/azure-cli:2.64.0
+  allow_failure: false
+  needs:
+    - validate-deploy-inputs
+  rules:
+    - if: '$DEPLOY_BACKEND == "true" && $CI_COMMIT_REF_PROTECTED == "true"'
+      when: manual
+    - when: never
+  before_script:
+    - tdnf install -y make
+    - az config set core.only_show_errors=yes
+    - az login --service-principal --username "$AZURE_CLIENT_ID" --password "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
+    - az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+  script:
+    - make -f Makefile.harness deploy
+  environment:
+    name: $DEPLOYMENT_TARGET_NAME

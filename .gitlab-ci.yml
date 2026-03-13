@@ -1,59 +1,16 @@
-stages:
-  - test
-  - integration
+workflow:
+  rules:
+    - if: '$DEPLOY_BACKEND == "true" && $CI_COMMIT_REF_PROTECTED == "true" && ($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger" || $CI_PIPELINE_SOURCE == "pipeline")'
+    - if: '$DEPLOY_BACKEND == "true"'
+      when: never
+    - when: always
 
-variables:
-  UV_CACHE_DIR: "$CI_PROJECT_DIR/.cache/uv"
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.cache/npm"
-  GTC_LLM_ENABLED: "False"
-
-default:
-  image: node:20-bookworm
-  cache:
-    key:
-      files:
-        - backend/uv.lock
-        - frontend/package-lock.json
-    paths:
-      - .cache/pip/
-      - .cache/uv/
-      - .cache/npm/
-  before_script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends python3 python3-pip make curl jq
-    - rm -rf /var/lib/apt/lists/*
-    - python3 -m pip install --break-system-packages uv
-    - make -f Makefile.harness setup
-
-app-ci:
-  stage: test
-  script:
-    - make -f Makefile.harness ci
-  artifacts:
-    when: always
-    reports:
-      junit:
-        - backend/pytest-unit-results.xml
-        - frontend/junit-results.xml
-    paths:
-      - .harness/logs.jsonl
-      - .harness/traces.jsonl
-
-backend-integration:
-  stage: integration
-  services:
-    - name: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-EN20251022
-      alias: cosmos
-      variables:
-        AZURE_COSMOS_EMULATOR_ENABLE_HTTP_API: "true"
-        AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "3"
-  variables:
-    GTC_COSMOS_ENDPOINT: "http://cosmos:8081"
-    HARNESS_COSMOS_READY_URL: "http://cosmos:8081"
-  script:
-    - make -f Makefile.harness backend-integration-test
-  artifacts:
-    when: always
-    reports:
-      junit: backend/pytest-int-results.xml
+include:
+  - local: '.gitlab/ci/ci.yml'
+    rules:
+      - if: '$DEPLOY_BACKEND == "true" && $CI_COMMIT_REF_PROTECTED == "true" && ($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger" || $CI_PIPELINE_SOURCE == "pipeline")'
+        when: never
+      - when: always
+  - local: '.gitlab/ci/deploy.yml'
+    rules:
+      - if: '$DEPLOY_BACKEND == "true" && $CI_COMMIT_REF_PROTECTED == "true" && ($CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger" || $CI_PIPELINE_SOURCE == "pipeline")'

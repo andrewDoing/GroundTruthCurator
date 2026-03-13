@@ -27,9 +27,11 @@ Run from repository root:
 | Full test suite | `make -f Makefile.harness test` |
 | Backend integration tests | `make -f Makefile.harness backend-integration-test` |
 | CI-equivalent local run | `make -f Makefile.harness ci` |
+| Backend deploy | `make -f Makefile.harness deploy` |
 | CI + telemetry review | `make -f Makefile.harness verify` |
 
 Use `dev` for interactive local work, and `dev-up` / `dev-down` when an agent or developer needs the servers managed in the background. Background PID files and logs live under `.harness/dev/`.
+Run GitLab deploy pipelines with `DEPLOY_BACKEND=true`, `DEPLOYMENT_TARGET_NAME=<environment>`, and either `TAG_NAME=<image-tag>` or `CONTAINER_IMAGE=<full-image>`, plus environment-scoped Azure and `GTC_*` deploy variables.
 
 ### Demo Mode
 
@@ -109,6 +111,7 @@ When `make -f Makefile.harness ci` fails, identify the stage before changing cod
 - Regenerate frontend API types when backend API schemas change: `cd frontend && npm run api:types`.
 - Do not modify `infra/` without explicit user direction.
 - Treat `scripts/harness/` and `Makefile.harness` as operational code: change them only when the repo workflow actually changes.
+- Backend deploys use `scripts/harness/deploy_backend.sh` (via `make -f Makefile.harness deploy` locally) and expect Azure/auth/runtime values from CI/CD variables rather than repo-side deployment env files.
 
 ## Architecture Boundaries
 

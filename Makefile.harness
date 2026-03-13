@@ -1,4 +1,4 @@
-.PHONY: setup backend frontend dev dev-up dev-up-demo dev-down format smoke api-check test backend-integration-test lint typecheck check ci verify observe
+.PHONY: setup backend frontend dev dev-up dev-up-demo dev-down format smoke api-check test backend-integration-test lint typecheck check ci deploy verify observe
 
 setup:
 	@./scripts/harness/setup.sh
@@ -62,6 +62,9 @@ typecheck:
 check: lint typecheck
 
 ci: smoke check api-check test
+
+deploy:
+	@./scripts/harness/deploy_backend.sh
 
 # Agent verify loop: run checks + inspect runtime telemetry
 verify: ci
