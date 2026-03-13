@@ -507,23 +507,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/chat": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Chat */
-        post: operations["chat_v1_chat_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -742,7 +725,7 @@ export interface components {
             /** Etag */
             etag?: string | null;
             /** History */
-            history?: components["schemas"]["app__api__v1__assignments__HistoryEntryPatch"][] | null;
+            history?: components["schemas"]["app__api__v1__ground_truths__HistoryEntryPatch"][] | null;
             /** Contextentries */
             contextEntries?: components["schemas"]["ContextEntry"][] | null;
             /** Toolcalls */
@@ -799,35 +782,6 @@ export interface components {
              * @description Human-readable error description
              */
             message: string;
-        };
-        /** ChatReference */
-        ChatReference: {
-            /** Id */
-            id?: string | null;
-            /** Title */
-            title?: string | null;
-            /** Url */
-            url?: string | null;
-            /** Snippet */
-            snippet?: string | null;
-            /** Keyparagraph */
-            keyParagraph?: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /** ChatRequest */
-        ChatRequest: {
-            /** Message */
-            message: string;
-            /** Context */
-            context?: string | null;
-        };
-        /** ChatResponse */
-        ChatResponse: {
-            /** Content */
-            content: string;
-            /** References */
-            references?: components["schemas"]["ChatReference"][];
         };
         /** ContextEntry */
         ContextEntry: {
@@ -999,7 +953,7 @@ export interface components {
             /** Comment */
             comment?: string | null;
             /** History */
-            history?: components["schemas"]["app__api__v1__assignments__HistoryEntryPatch"][] | null;
+            history?: components["schemas"]["app__api__v1__ground_truths__HistoryEntryPatch"][] | null;
             /** Contextentries */
             contextEntries?: components["schemas"]["ContextEntry"][] | null;
             /** Toolcalls */
@@ -1355,6 +1309,10 @@ export interface components {
              * @enum {string}
              */
             callType: "tool" | "subagent";
+            /** Arguments */
+            arguments?: {
+                [key: string]: unknown;
+            } | null;
             /** Agent */
             agent?: string | null;
             /** Stepnumber */
@@ -1403,7 +1361,7 @@ export interface components {
             failed: number;
         };
         /** HistoryEntryPatch */
-        app__api__v1__assignments__HistoryEntryPatch: {
+        app__api__v1__ground_truths__HistoryEntryPatch: {
             /** Role */
             role: string;
             /** Msg */
@@ -2344,39 +2302,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    chat_v1_chat_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChatRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChatResponse"];
                 };
             };
             /** @description Validation Error */

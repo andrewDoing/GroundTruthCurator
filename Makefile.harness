@@ -1,4 +1,4 @@
-.PHONY: setup backend frontend dev dev-up dev-up-demo dev-down format smoke test backend-integration-test lint typecheck check ci verify observe
+.PHONY: setup backend frontend dev dev-up dev-up-demo dev-down format smoke api-check test backend-integration-test lint typecheck check ci verify observe
 
 setup:
 	@./scripts/harness/setup.sh
@@ -44,11 +44,14 @@ format:
 smoke:
 	@./scripts/harness/smoke.sh
 
+api-check:
+	@./scripts/harness/api_check.sh
+
 test:
 	@./scripts/harness/test.sh
 
 backend-integration-test:
-	@cd backend && GTC_LLM_ENABLED=False uv run pytest -q tests/integration -v
+	@./scripts/harness/backend_integration_test.sh
 
 lint:
 	@./scripts/harness/lint.sh
@@ -58,7 +61,7 @@ typecheck:
 
 check: lint typecheck
 
-ci: smoke check test
+ci: smoke check api-check test
 
 # Agent verify loop: run checks + inspect runtime telemetry
 verify: ci

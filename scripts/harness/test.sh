@@ -15,7 +15,7 @@ command -v npm >/dev/null 2>&1 || { echo 'ERROR: npm is required for frontend te
 echo '==> Backend unit tests'
 (
   cd "$root_dir/backend"
-  GTC_LLM_ENABLED=False uv run pytest tests/unit/ -v
+  GTC_LLM_ENABLED=False uv run pytest -q tests/unit/ -v --junitxml=pytest-unit-results.xml
 )
 
 echo '==> Frontend unit tests'

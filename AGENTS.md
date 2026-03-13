@@ -22,6 +22,7 @@ Run from repository root:
 | Stop background dev servers | `make -f Makefile.harness dev-down` |
 | Auto-format code | `make -f Makefile.harness format` |
 | Fast sanity check | `make -f Makefile.harness smoke` |
+| API contract and generated types | `make -f Makefile.harness api-check` |
 | Static checks | `make -f Makefile.harness check` |
 | Full test suite | `make -f Makefile.harness test` |
 | Backend integration tests | `make -f Makefile.harness backend-integration-test` |
