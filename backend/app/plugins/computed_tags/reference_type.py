@@ -62,7 +62,7 @@ def _get_all_references(doc: AgenticGroundTruthEntry) -> list[Reference]:
         A list of all Reference objects from the document.
     """
     from app.domain.models import HistoryItem
-    
+
     refs: list[Reference] = list(doc.refs or [])
 
     # Also gather refs from history turns

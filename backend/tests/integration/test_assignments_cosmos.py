@@ -4,7 +4,6 @@ import pytest
 import uuid
 
 from app.domain.models import AgenticGroundTruthEntry
-from tests.test_helpers import make_test_entry
 from app.container import container
 from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo
 

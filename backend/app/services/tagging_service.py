@@ -122,7 +122,9 @@ def validate_tags_with_cache(tags: Iterable[str], valid_tags: set[str] | None) -
     return sorted(unique)
 
 
-def apply_computed_tags(item: AgenticGroundTruthEntry, registry: TagPluginRegistry | None = None) -> None:
+def apply_computed_tags(
+    item: AgenticGroundTruthEntry, registry: TagPluginRegistry | None = None
+) -> None:
     """Compute and set the computed tags for an item.
 
     This mutates the item in place, setting:

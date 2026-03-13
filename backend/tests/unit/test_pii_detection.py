@@ -20,7 +20,7 @@ from app.services.pii_service import (
     _mask_match,
     _create_snippet,
 )
-from app.domain.models import AgenticGroundTruthEntry, AgenticGroundTruthEntry, HistoryItem
+from app.domain.models import HistoryItem
 from app.domain.enums import HistoryItemRole
 from tests.test_helpers import make_test_entry
 

@@ -414,18 +414,22 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         )
         from app.plugins.packs.rag_compat import _LEGACY_PLUGIN_FIELDS
 
-        allowed_keys = {
-            field_name
-            for field_name in AgenticGroundTruthEntry.model_fields
-        } | {
-            field.alias
-            for field in AgenticGroundTruthEntry.model_fields.values()
-            if field.alias is not None
-        } | {
-            # Include computed_fields that need to be preserved from Cosmos documents
-            "totalReferences"  # Computed and persisted for sorting/querying
-        } | set(_LEGACY_PLUGIN_FIELDS)
-        normalized_doc = {key: value for key, value in normalized_doc.items() if key in allowed_keys}
+        allowed_keys = (
+            {field_name for field_name in AgenticGroundTruthEntry.model_fields}
+            | {
+                field.alias
+                for field in AgenticGroundTruthEntry.model_fields.values()
+                if field.alias is not None
+            }
+            | {
+                # Include computed_fields that need to be preserved from Cosmos documents
+                "totalReferences"  # Computed and persisted for sorting/querying
+            }
+            | set(_LEGACY_PLUGIN_FIELDS)
+        )
+        normalized_doc = {
+            key: value for key, value in normalized_doc.items() if key in allowed_keys
+        }
 
         plugins = normalized_doc.get("plugins")
         rag_plugin = plugins.get("rag-compat") if isinstance(plugins, dict) else None
@@ -439,11 +443,16 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             for index, entry in enumerate(history):
                 if isinstance(entry, dict):
                     entry_dict = dict(entry)
-                    annotation = history_annotations[index] if index < len(history_annotations) else None
+                    annotation = (
+                        history_annotations[index] if index < len(history_annotations) else None
+                    )
                     if isinstance(annotation, dict):
                         if "refs" in annotation and "refs" not in entry_dict:
                             entry_dict["refs"] = annotation["refs"]
-                        if "expectedBehavior" in annotation and "expectedBehavior" not in entry_dict:
+                        if (
+                            "expectedBehavior" in annotation
+                            and "expectedBehavior" not in entry_dict
+                        ):
                             entry_dict["expectedBehavior"] = annotation["expectedBehavior"]
                     merged_history.append(entry_dict)
                 else:

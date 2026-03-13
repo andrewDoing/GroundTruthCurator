@@ -1,4 +1,5 @@
 """Tests for RagCompatPack per-tool-call retrieval state (Phase 6)."""
+
 from __future__ import annotations
 
 
@@ -72,9 +73,12 @@ class TestPerCallRetrievalState:
         pack = RagCompatPack()
         item = _make_item()
         pack.set_retrieval_candidates(item, "tc-1", [{"url": "https://a.com"}])
-        pack.set_retrievals(item, {
-            "tc-2": {"candidates": [{"url": "https://b.com"}]},
-        })
+        pack.set_retrievals(
+            item,
+            {
+                "tc-2": {"candidates": [{"url": "https://b.com"}]},
+            },
+        )
         assert pack.get_retrieval_candidates(item, "tc-1") == []
         assert len(pack.get_retrieval_candidates(item, "tc-2")) == 1
 
@@ -92,12 +96,20 @@ class TestPerCallRetrievalState:
     def test_get_all_candidates_flat_from_per_call(self):
         pack = RagCompatPack()
         item = _make_item()
-        pack.set_retrieval_candidates(item, "tc-1", [
-            {"url": "https://a.com", "title": "A"},
-        ])
-        pack.set_retrieval_candidates(item, "tc-2", [
-            {"url": "https://b.com", "title": "B"},
-        ])
+        pack.set_retrieval_candidates(
+            item,
+            "tc-1",
+            [
+                {"url": "https://a.com", "title": "A"},
+            ],
+        )
+        pack.set_retrieval_candidates(
+            item,
+            "tc-2",
+            [
+                {"url": "https://b.com", "title": "B"},
+            ],
+        )
         flat = pack.get_all_candidates_flat(item)
         assert len(flat) == 2
         urls = {c["url"] for c in flat}
@@ -114,9 +126,13 @@ class TestPerCallRetrievalState:
     def test_get_all_candidates_flat_includes_tool_call_id(self):
         pack = RagCompatPack()
         item = _make_item()
-        pack.set_retrieval_candidates(item, "tc-1", [
-            {"url": "https://a.com"},
-        ])
+        pack.set_retrieval_candidates(
+            item,
+            "tc-1",
+            [
+                {"url": "https://a.com"},
+            ],
+        )
         flat = pack.get_all_candidates_flat(item)
         assert flat[0]["toolCallId"] == "tc-1"
 

@@ -167,7 +167,9 @@ async def test_import_with_approve_flag(async_client: AsyncClient, user_headers)
 
     # Item WITHOUT history: approval validation should reject it
     invalid_item = make_item(dataset)
-    r = await async_client.post("/v1/ground-truths?approve=true", json=[invalid_item], headers=user_headers)
+    r = await async_client.post(
+        "/v1/ground-truths?approve=true", json=[invalid_item], headers=user_headers
+    )
     assert r.status_code == 200
     data = r.json()
     # Approval-invalid items must NOT be imported
@@ -181,7 +183,9 @@ async def test_import_with_approve_flag(async_client: AsyncClient, user_headers)
         {"role": "user", "msg": "What is the capital of France?"},
         {"role": "assistant", "msg": "The capital of France is Paris."},
     ]
-    r = await async_client.post("/v1/ground-truths?approve=true", json=[valid_item], headers=user_headers)
+    r = await async_client.post(
+        "/v1/ground-truths?approve=true", json=[valid_item], headers=user_headers
+    )
     assert r.status_code == 200
     data = r.json()
     assert data.get("imported") == 1

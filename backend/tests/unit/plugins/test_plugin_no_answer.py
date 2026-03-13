@@ -12,7 +12,9 @@ class TestNoAnswerPlugin:
     def test_no_answer_exact_match(self):
         """Should return tag when answer is exactly NO_ANSWER."""
         plugin = NoAnswerPlugin()
-        item = AgenticGroundTruthEntry(id="test", datasetName="test", synthQuestion="Q", answer="NO_ANSWER")
+        item = AgenticGroundTruthEntry(
+            id="test", datasetName="test", synthQuestion="Q", answer="NO_ANSWER"
+        )
         assert plugin.compute(item) == "answer:no_answer"
 
     def test_no_answer_with_whitespace(self):
@@ -42,7 +44,9 @@ class TestNoAnswerPlugin:
     def test_none_answer_returns_none(self):
         """Should return None when answer is None."""
         plugin = NoAnswerPlugin()
-        item = AgenticGroundTruthEntry(id="test", datasetName="test", synthQuestion="Q", answer=None)
+        item = AgenticGroundTruthEntry(
+            id="test", datasetName="test", synthQuestion="Q", answer=None
+        )
         assert plugin.compute(item) is None
 
     def test_empty_answer_returns_none(self):

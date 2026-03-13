@@ -94,7 +94,7 @@ class _FakeRepo:
         raise NotImplementedError
 
 
-def _make_item(id: str, dataset: str, status: GroundTruthStatus) -> GroundTruthItem:
+def _make_item(id: str, dataset: str, status: GroundTruthStatus) -> AgenticGroundTruthEntry:
     return AgenticGroundTruthEntry(
         id=id,
         datasetName=dataset,

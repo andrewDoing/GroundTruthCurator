@@ -233,11 +233,7 @@ def test_replace_references_clears_per_call_retrieval_state():
                 "rag-compat": {
                     "kind": "rag-compat",
                     "data": {
-                        "retrievals": {
-                            "tc-1": {
-                                "candidates": [{"url": "https://example.com/old"}]
-                            }
-                        }
+                        "retrievals": {"tc-1": {"candidates": [{"url": "https://example.com/old"}]}}
                     },
                 }
             },

@@ -36,7 +36,7 @@ async def test_assignments_put_persists_edited_question_camel_case(
     This test stays only while assignments updates still project legacy camelCase
     question fields across the compatibility boundary. Delete it with the alias
     retirement work in the hard-delete phase.
-    
+
     **Phase 5 Audit (2026-03-12)**: MIGRATION TEST - INFORMATIONAL
     This test validates that editedQuestion persists correctly through Cosmos
     round-trips. The test is marked as temporary and should be deleted when

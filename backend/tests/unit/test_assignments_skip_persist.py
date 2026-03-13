@@ -12,7 +12,7 @@ from app.domain.enums import GroundTruthStatus
 class _InMemoryRepo:
     def __init__(self):
         # Tuple key: datasetName, bucket_str, id
-        self.items: dict[tuple[str, str, str], GroundTruthItem] = {}
+        self.items: dict[tuple[str, str, str], AgenticGroundTruthEntry] = {}
 
     # ---- GroundTruthRepo protocol (minimal working set for this test) ----
     async def import_bulk_gt(
@@ -87,7 +87,9 @@ class _InMemoryRepo:
     async def list_assigned(self, user_id: str):  # pragma: no cover
         raise NotImplementedError
 
-    async def upsert_assignment_doc(self, user_id: str, gt: AgenticGroundTruthEntry):  # pragma: no cover
+    async def upsert_assignment_doc(
+        self, user_id: str, gt: AgenticGroundTruthEntry
+    ):  # pragma: no cover
         raise NotImplementedError
 
     async def list_assignments_by_user(self, user_id: str):  # pragma: no cover

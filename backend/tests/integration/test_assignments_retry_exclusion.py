@@ -16,7 +16,6 @@ from pydantic.type_adapter import TypeAdapter
 import pytest
 
 from app.domain.models import AgenticGroundTruthEntry
-from tests.test_helpers import make_test_entry
 from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo
 
 
@@ -111,7 +110,9 @@ async def test_skipped_items_excluded_from_user_resampling(
         "/v1/assignments/self-serve", json={"limit": 2}, headers=user_headers
     )
     assert r.status_code == 200
-    first_batch = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(r.json().get("assigned") or [])
+    first_batch = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(
+        r.json().get("assigned") or []
+    )
     assert len(first_batch) == 2
 
     # Skip one item

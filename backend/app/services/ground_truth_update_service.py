@@ -75,7 +75,9 @@ def read_legacy_compat_update(extras: dict[str, Any]) -> LegacyCompatUpdate:
 
 def _parse_status(value: GroundTruthStatus | str | None) -> GroundTruthStatus:
     if value is None:
-        raise ValidationError("", "status", "status cannot be null; omit the field to leave it unchanged")
+        raise ValidationError(
+            "", "status", "status cannot be null; omit the field to leave it unchanged"
+        )
     try:
         if isinstance(value, GroundTruthStatus):
             return value
@@ -199,7 +201,9 @@ def apply_shared_update(
             item.answer = cast(str | None, legacy_update.answer)
         if legacy_update.refs is not MISSING:
             rag_compat_pack = get_rag_compat_pack()
-            rag_compat_pack.replace_references(item, list(cast(list[Reference], legacy_update.refs)))
+            rag_compat_pack.replace_references(
+                item, list(cast(list[Reference], legacy_update.refs))
+            )
 
     if approve:
         item.status = GroundTruthStatus.approved

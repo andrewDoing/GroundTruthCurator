@@ -68,7 +68,9 @@ def _coerce_reference_list(raw_refs: Any) -> list[Any]:
 
     from app.domain.models import Reference
 
-    return [ref if isinstance(ref, Reference) else Reference.model_validate(ref) for ref in raw_refs]
+    return [
+        ref if isinstance(ref, Reference) else Reference.model_validate(ref) for ref in raw_refs
+    ]
 
 
 def _history_message(history: Any, role: str, *, reverse: bool = False) -> str | None:
@@ -231,7 +233,9 @@ def compat_refs_from_payload(
             else:
                 continue
             if tool_call_id:
-                step_by_tool_call_id[tool_call_id] = step_number if isinstance(step_number, int) else None
+                step_by_tool_call_id[tool_call_id] = (
+                    step_number if isinstance(step_number, int) else None
+                )
 
     flattened: list[Reference] = []
     for tool_call_id, bucket in retrievals.items():
@@ -278,7 +282,9 @@ def compat_total_references_from_payload(
     return len(compat_refs_from_payload(payload, plugin_name=plugin_name))
 
 
-def apply_export_projection(doc: dict[str, Any], *, plugin_name: str = _RAG_COMPAT_KIND) -> dict[str, Any]:
+def apply_export_projection(
+    doc: dict[str, Any], *, plugin_name: str = _RAG_COMPAT_KIND
+) -> dict[str, Any]:
     projected = dict(doc)
     compat = rag_compat_data_from_payload(projected, plugin_name=plugin_name)
     if not compat:
@@ -341,9 +347,7 @@ class RagCompatPack(PluginPack):
                 f"AgenticGroundTruthEntry._RAG_COMPAT_PLUGIN '{expected}'. "
                 "Update _RAG_COMPAT_KIND in rag_compat.py to keep them in sync."
             )
-        logger.debug(
-            "rag_compat_pack.validate_registration.ok | kind=%s", _RAG_COMPAT_KIND
-        )
+        logger.debug("rag_compat_pack.validate_registration.ok | kind=%s", _RAG_COMPAT_KIND)
 
     def collect_approval_errors(self, item: AgenticGroundTruthEntry) -> list[str]:
         """Return RAG-specific approval errors for an item.
@@ -427,7 +431,9 @@ class RagCompatPack(PluginPack):
         item._set_rag_compat_value("totalReferences", None)  # Remove from plugin storage too
         return item
 
-    def attach_reference(self, item: AgenticGroundTruthEntry, ref: Reference) -> AgenticGroundTruthEntry:
+    def attach_reference(
+        self, item: AgenticGroundTruthEntry, ref: Reference
+    ) -> AgenticGroundTruthEntry:
         """Attach a reference to an item via the rag-compat plugin payload.
 
         This is a RAG-compat concern; the generic core does not manage refs.
@@ -445,7 +451,9 @@ class RagCompatPack(PluginPack):
         current.append(ref)
         return self.replace_references(item, current)
 
-    def detach_reference(self, item: AgenticGroundTruthEntry, ref_url: str) -> AgenticGroundTruthEntry:
+    def detach_reference(
+        self, item: AgenticGroundTruthEntry, ref_url: str
+    ) -> AgenticGroundTruthEntry:
         """Detach a reference from an item by URL, using the rag-compat payload.
 
         This is a RAG-compat concern; the generic core does not manage refs.
@@ -514,9 +522,7 @@ class RagCompatPack(PluginPack):
         retrievals = compat.get("retrievals")
         return isinstance(retrievals, dict) and len(retrievals) > 0
 
-    def get_all_candidates_flat(
-        self, item: AgenticGroundTruthEntry
-    ) -> list[dict[str, Any]]:
+    def get_all_candidates_flat(self, item: AgenticGroundTruthEntry) -> list[dict[str, Any]]:
         """Flatten all per-call candidates into a single list.
 
         Read path: returns per-call candidates when present.  Falls back
@@ -575,9 +581,7 @@ class RagCompatPack(PluginPack):
             )
         ]
 
-    def migrate_refs_to_per_call(
-        self, item: AgenticGroundTruthEntry
-    ) -> bool:
+    def migrate_refs_to_per_call(self, item: AgenticGroundTruthEntry) -> bool:
         """Migrate top-level refs into per-call state (idempotent).
 
         Associates refs with retrieval tool calls by matching
@@ -608,14 +612,16 @@ class RagCompatPack(PluginPack):
 
             if key not in retrievals:
                 retrievals[key] = {"candidates": []}
-            retrievals[key]["candidates"].append({
-                "url": getattr(ref, "url", ""),
-                "title": getattr(ref, "title", None),
-                "chunk": getattr(ref, "content", None),
-                "relevance": None,
-                "rawPayload": None,
-                "toolCallId": key if key != self._UNASSOCIATED_KEY else None,
-            })
+            retrievals[key]["candidates"].append(
+                {
+                    "url": getattr(ref, "url", ""),
+                    "title": getattr(ref, "title", None),
+                    "chunk": getattr(ref, "content", None),
+                    "relevance": None,
+                    "rawPayload": None,
+                    "toolCallId": key if key != self._UNASSOCIATED_KEY else None,
+                }
+            )
 
         self.set_retrievals(item, retrievals)
         return True

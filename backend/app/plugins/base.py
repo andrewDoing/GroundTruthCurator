@@ -490,9 +490,7 @@ class PluginPackRegistry:
             try:
                 pack.validate_registration()
             except ValueError as exc:
-                raise ValueError(
-                    f"Plugin pack '{name}' failed startup validation: {exc}"
-                ) from exc
+                raise ValueError(f"Plugin pack '{name}' failed startup validation: {exc}") from exc
 
     def collect_approval_errors(self, item: AgenticGroundTruthEntry) -> list[str]:
         """Gather approval errors from all registered packs.

@@ -171,9 +171,7 @@ class ExpectedTools(BaseModel):
             | (optional_names & not_needed_names)
         )
         if overlap:
-            raise ValueError(
-                f"tools cannot appear in more than one category: {', '.join(overlap)}"
-            )
+            raise ValueError(f"tools cannot appear in more than one category: {', '.join(overlap)}")
         return self
 
 
@@ -208,9 +206,7 @@ class RetrievalCandidate(BaseModel):
             return None
         allowed = {"relevant", "partially_relevant", "not_relevant"}
         if value not in allowed:
-            raise ValueError(
-                f"relevance must be one of {sorted(allowed)}, got '{value}'"
-            )
+            raise ValueError(f"relevance must be one of {sorted(allowed)}, got '{value}'")
         return value
 
 
@@ -451,7 +447,7 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
             return
         # Handle both Reference objects and dict representations
         serialized = []
-        for ref in (value or []):
+        for ref in value or []:
             if isinstance(ref, Reference):
                 serialized.append(ref.model_dump(by_alias=True))
             elif isinstance(ref, dict):
@@ -491,8 +487,6 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
     # AgenticGroundTruthEntry uses computed properties for legacy field access.
     # Read paths extract these values from history and plugin data. Write paths
     # normalize incoming payloads into canonical multi-turn structures.
-
-
 
 
 class PaginationMetadata(BaseModel):
@@ -538,7 +532,9 @@ class BulkImportError(BaseModel):
         alias="itemId",
         description="ID of the failed item (if available)",
     )
-    field: str | None = Field(default=None, description="Field that caused the error (if applicable)")
+    field: str | None = Field(
+        default=None, description="Field that caused the error (if applicable)"
+    )
     code: str = Field(description="Error code: INVALID_TAG, DUPLICATE_ID, CREATE_FAILED, etc.")
     message: str = Field(description="Human-readable error description")
 

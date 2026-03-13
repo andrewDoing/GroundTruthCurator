@@ -8,7 +8,6 @@ from app.services.duplicate_detection_service import (
     detect_duplicates_for_item,
     detect_duplicates_for_bulk_items,
 )
-from app.domain.models import AgenticGroundTruthEntry
 from app.domain.enums import GroundTruthStatus
 from tests.test_helpers import make_test_entry
 

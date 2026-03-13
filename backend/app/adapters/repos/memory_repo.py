@@ -42,7 +42,7 @@ class InMemoryGroundTruthRepo:
 
     def _next_etag(self) -> str:
         self._etag_version += 1
-        return f'memory-etag-{self._etag_version}'
+        return f"memory-etag-{self._etag_version}"
 
     def _clone_item(self, item: AgenticGroundTruthEntry) -> AgenticGroundTruthEntry:
         return AgenticGroundTruthEntry.model_validate(item.model_dump(by_alias=True))
@@ -50,7 +50,9 @@ class InMemoryGroundTruthRepo:
     def _clone_instruction(self, doc: DatasetCurationInstructions) -> DatasetCurationInstructions:
         return DatasetCurationInstructions.model_validate(doc.model_dump(by_alias=True))
 
-    def _location_key(self, dataset: str, bucket: UUID | None, item_id: str) -> tuple[str, UUID, str]:
+    def _location_key(
+        self, dataset: str, bucket: UUID | None, item_id: str
+    ) -> tuple[str, UUID, str]:
         return (dataset, bucket or ZERO_UUID, item_id)
 
     def _store_initial_item(self, item: AgenticGroundTruthEntry) -> None:
@@ -63,10 +65,12 @@ class InMemoryGroundTruthRepo:
         if stored.bucket is None:
             stored.bucket = ZERO_UUID
         self.items[stored.id] = stored
-        self._locations[self._location_key(stored.datasetName, stored.bucket, stored.id)] = stored.id
+        self._locations[self._location_key(stored.datasetName, stored.bucket, stored.id)] = (
+            stored.id
+        )
         if stored.assignedTo:
             self._assignment_docs[(stored.assignedTo, stored.id)] = AssignmentDocument(
-                id=f'{stored.assignedTo}:{stored.id}',
+                id=f"{stored.assignedTo}:{stored.id}",
                 pk=stored.assignedTo,
                 ground_truth_id=stored.id,
                 datasetName=stored.datasetName,
@@ -82,14 +86,22 @@ class InMemoryGroundTruthRepo:
         stored.updated_at = self._now()
         stored.etag = self._next_etag()
         self.items[stored.id] = stored
-        self._locations[self._location_key(stored.datasetName, stored.bucket, stored.id)] = stored.id
+        self._locations[self._location_key(stored.datasetName, stored.bucket, stored.id)] = (
+            stored.id
+        )
         return self._clone_item(stored)
 
     def _get_stored(self, item_id: str) -> AgenticGroundTruthEntry | None:
         return self.items.get(item_id)
 
-    def _matches_location(self, item: AgenticGroundTruthEntry, dataset: str, bucket: UUID, item_id: str) -> bool:
-        return item.id == item_id and item.datasetName == dataset and (item.bucket or ZERO_UUID) == bucket
+    def _matches_location(
+        self, item: AgenticGroundTruthEntry, dataset: str, bucket: UUID, item_id: str
+    ) -> bool:
+        return (
+            item.id == item_id
+            and item.datasetName == dataset
+            and (item.bucket or ZERO_UUID) == bucket
+        )
 
     def _collect_urls(self, item: AgenticGroundTruthEntry) -> Iterable[str]:
         for ref in item.refs:
@@ -102,22 +114,25 @@ class InMemoryGroundTruthRepo:
         parts = [
             item.id,
             item.datasetName,
-            item.synth_question or '',
-            item.edited_question or '',
-            item.answer or '',
-            item.comment or '',
+            item.synth_question or "",
+            item.edited_question or "",
+            item.answer or "",
+            item.comment or "",
         ]
         for turn in item.history or []:
             parts.append(turn.msg)
         for ref in item.refs:
-            parts.extend([ref.title or '', ref.url, ref.content or '', ref.keyExcerpt or ''])
+            parts.extend([ref.title or "", ref.url, ref.content or "", ref.keyExcerpt or ""])
         for turn in item.history or []:
             for ref in getattr(turn, "refs", None) or []:
-                parts.extend([ref.title or '', ref.url, ref.content or '', ref.keyExcerpt or ''])
-        return ' '.join(parts).lower()
+                parts.extend([ref.title or "", ref.url, ref.content or "", ref.keyExcerpt or ""])
+        return " ".join(parts).lower()
 
     def _is_unassigned_candidate(self, item: AgenticGroundTruthEntry) -> bool:
-        return not item.assignedTo and item.status in {GroundTruthStatus.draft, GroundTruthStatus.skipped}
+        return not item.assignedTo and item.status in {
+            GroundTruthStatus.draft,
+            GroundTruthStatus.skipped,
+        }
 
     def _sort_items(
         self,
@@ -134,11 +149,20 @@ class InMemoryGroundTruthRepo:
             if field == SortField.id:
                 return item.id
             if field == SortField.has_answer:
-                return (1 if (item.answer or '').strip() else 0, item.updated_at or datetime.min.replace(tzinfo=timezone.utc))
+                return (
+                    1 if (item.answer or "").strip() else 0,
+                    item.updated_at or datetime.min.replace(tzinfo=timezone.utc),
+                )
             if field == SortField.totalReferences:
-                return (item.totalReferences, item.updated_at or datetime.min.replace(tzinfo=timezone.utc))
+                return (
+                    item.totalReferences,
+                    item.updated_at or datetime.min.replace(tzinfo=timezone.utc),
+                )
             if field == SortField.tag_count:
-                return (len(item.tags), item.updated_at or datetime.min.replace(tzinfo=timezone.utc))
+                return (
+                    len(item.tags),
+                    item.updated_at or datetime.min.replace(tzinfo=timezone.utc),
+                )
             return item.reviewed_at or datetime.min.replace(tzinfo=timezone.utc)
 
         return sorted(items, key=key, reverse=reverse)
@@ -152,7 +176,7 @@ class InMemoryGroundTruthRepo:
             if item.id in self.items:
                 persistence_errors.append(
                     BulkImportPersistenceError(
-                        message=f'duplicate_id (id: {item.id})',
+                        message=f"duplicate_id (id: {item.id})",
                         item_id=item.id,
                         persistence_index=index,
                     )
@@ -168,7 +192,10 @@ class InMemoryGroundTruthRepo:
         items = [item for item in self.items.values() if item.datasetName == dataset]
         if status is not None:
             items = [item for item in items if item.status == status]
-        return [self._clone_item(item) for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)]
+        return [
+            self._clone_item(item)
+            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)
+        ]
 
     async def list_all_gt(
         self, status: GroundTruthStatus | None = None
@@ -176,7 +203,10 @@ class InMemoryGroundTruthRepo:
         items = list(self.items.values())
         if status is not None:
             items = [item for item in items if item.status == status]
-        return [self._clone_item(item) for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)]
+        return [
+            self._clone_item(item)
+            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)
+        ]
 
     async def list_gt_paginated(
         self,
@@ -206,7 +236,9 @@ class InMemoryGroundTruthRepo:
         if item_id:
             filtered = [item for item in filtered if item_id in item.id]
         if ref_url:
-            filtered = [item for item in filtered if any(ref_url in url for url in self._collect_urls(item))]
+            filtered = [
+                item for item in filtered if any(ref_url in url for url in self._collect_urls(item))
+            ]
         if keyword:
             lowered = keyword.lower()
             filtered = [item for item in filtered if lowered in self._collect_text(item)]
@@ -238,7 +270,7 @@ class InMemoryGroundTruthRepo:
     async def upsert_gt(self, item: AgenticGroundTruthEntry) -> AgenticGroundTruthEntry:
         existing = self._get_stored(item.id)
         if existing is not None and item.etag and existing.etag != item.etag:
-            raise ValueError('etag_mismatch')
+            raise ValueError("etag_mismatch")
         candidate = self._clone_item(item)
         if existing is not None and candidate.created_at is None:
             candidate.created_at = existing.created_at
@@ -272,9 +304,7 @@ class InMemoryGroundTruthRepo:
                 self._assignment_docs.pop(key, None)
         self._curation.pop(dataset, None)
         self._locations = {
-            key: value
-            for key, value in self._locations.items()
-            if key[0] != dataset
+            key: value for key, value in self._locations.items() if key[0] != dataset
         }
 
     async def stats(self) -> Stats:
@@ -293,7 +323,10 @@ class InMemoryGroundTruthRepo:
 
     async def list_unassigned(self, limit: int) -> list[AgenticGroundTruthEntry]:
         items = [item for item in self.items.values() if self._is_unassigned_candidate(item)]
-        return [self._clone_item(item) for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)[:limit]]
+        return [
+            self._clone_item(item)
+            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)[:limit]
+        ]
 
     async def sample_unassigned(
         self, user_id: str, limit: int, exclude_ids: list[str] | None = None
@@ -311,7 +344,10 @@ class InMemoryGroundTruthRepo:
             and self._is_unassigned_candidate(item)
             and item.id not in blocked
         ]
-        return [self._clone_item(item) for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)[:take]]
+        return [
+            self._clone_item(item)
+            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)[:take]
+        ]
 
     async def query_unassigned_global(
         self, user_id: str, take: int, exclude_ids: list[str] | None = None
@@ -322,13 +358,20 @@ class InMemoryGroundTruthRepo:
             for item in self.items.values()
             if self._is_unassigned_candidate(item) and item.id not in blocked
         ]
-        return [self._clone_item(item) for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)[:take]]
+        return [
+            self._clone_item(item)
+            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)[:take]
+        ]
 
     async def assign_to(self, item_id: str, user_id: str) -> bool:
         existing = self._get_stored(item_id)
         if existing is None:
             return False
-        if existing.assignedTo and existing.assignedTo != user_id and existing.status == GroundTruthStatus.draft:
+        if (
+            existing.assignedTo
+            and existing.assignedTo != user_id
+            and existing.status == GroundTruthStatus.draft
+        ):
             return False
         existing.assignedTo = user_id
         existing.assigned_at = self._now()
@@ -354,14 +397,17 @@ class InMemoryGroundTruthRepo:
             for item in self.items.values()
             if item.assignedTo == user_id and item.status == GroundTruthStatus.draft
         ]
-        return [self._clone_item(item) for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)]
+        return [
+            self._clone_item(item)
+            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)
+        ]
 
     async def upsert_assignment_doc(
         self, user_id: str, gt: AgenticGroundTruthEntry
     ) -> AssignmentDocument:
         bucket = gt.bucket or ZERO_UUID
         doc = AssignmentDocument(
-            id=f'{user_id}:{gt.id}',
+            id=f"{user_id}:{gt.id}",
             pk=user_id,
             ground_truth_id=gt.id,
             datasetName=gt.datasetName,
@@ -371,7 +417,11 @@ class InMemoryGroundTruthRepo:
         return AssignmentDocument.model_validate(doc.model_dump(by_alias=True))
 
     async def list_assignments_by_user(self, user_id: str) -> list[AssignmentDocument]:
-        docs = [doc for (assigned_user, _), doc in self._assignment_docs.items() if assigned_user == user_id]
+        docs = [
+            doc
+            for (assigned_user, _), doc in self._assignment_docs.items()
+            if assigned_user == user_id
+        ]
         return [AssignmentDocument.model_validate(doc.model_dump(by_alias=True)) for doc in docs]
 
     async def get_assignment_by_gt(
@@ -387,9 +437,7 @@ class InMemoryGroundTruthRepo:
     ) -> bool:
         return self._assignment_docs.pop((user_id, ground_truth_id), None) is not None
 
-    async def get_curation_instructions(
-        self, dataset: str
-    ) -> DatasetCurationInstructions | None:
+    async def get_curation_instructions(self, dataset: str) -> DatasetCurationInstructions | None:
         doc = self._curation.get(dataset)
         if doc is None:
             return None

@@ -8,7 +8,6 @@ import pytest
 from httpx import AsyncClient
 
 from app.domain.models import AgenticGroundTruthEntry
-from tests.test_helpers import make_test_entry
 
 
 def make_item(dataset: str) -> dict[str, Any]:
@@ -42,7 +41,9 @@ async def test_self_serve_list_and_approve(async_client: AsyncClient, user_heade
     assert r.status_code == 200
     resp = cast(dict[str, Any], r.json())
     assert resp.get("assignedCount") == 2
-    assigned = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(resp.get("assigned") or [])
+    assigned = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(
+        resp.get("assigned") or []
+    )
     assert len(assigned) == 2
 
     # List my assignments

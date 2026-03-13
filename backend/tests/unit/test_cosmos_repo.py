@@ -144,7 +144,7 @@ class TestComputeTotalReferences:
     The property calculates total references with the following logic:
     - If history has refs, count only history refs (history takes priority)
     - If history has no refs, count plugin-stored refs as fallback
-    
+
     **Phase 5 Audit (2026-03-12)**: ACTIVE COMPUTATION LOGIC - BLOCKING
     The totalReferences field has active property logic that computes
     values from history and plugin refs. This is not just compatibility
@@ -152,7 +152,7 @@ class TestComputeTotalReferences:
     - Model validation on all item saves
     - Sort/filter operations that check reference counts
     - UI displays of reference totals
-    
+
     Cannot delete totalReferences until this computation is either:
     - Moved to a computed property on AgenticGroundTruthEntry, OR
     - Replaced by direct history ref counting in callers
@@ -343,20 +343,22 @@ class TestComputeTotalReferences:
     def test_item_only_no_history_field_at_all(self) -> None:
         """Item created without history field entirely."""
         # Use model_validate directly to test the case where history is completely absent
-        item = AgenticGroundTruthEntry.model_validate({
-            "id": "minimal-item",
-            "datasetName": "test",
-            "plugins": {
-                "rag-compat": {
-                    "kind": "rag-compat",
-                    "version": "1.0",
-                    "data": {
-                        "synthQuestion": "What?",
-                        "refs": [{"url": "https://only-ref.com"}],
+        item = AgenticGroundTruthEntry.model_validate(
+            {
+                "id": "minimal-item",
+                "datasetName": "test",
+                "plugins": {
+                    "rag-compat": {
+                        "kind": "rag-compat",
+                        "version": "1.0",
+                        "data": {
+                            "synthQuestion": "What?",
+                            "refs": [{"url": "https://only-ref.com"}],
+                        },
                     }
-                }
+                },
             }
-        })
+        )
         assert item.totalReferences == 1
 
     def test_complex_real_world_scenario(self) -> None:

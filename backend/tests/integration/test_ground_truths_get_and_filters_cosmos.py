@@ -8,7 +8,6 @@ from uuid import uuid4
 from httpx import AsyncClient
 
 from app.domain.models import AgenticGroundTruthEntry
-from tests.test_helpers import make_test_entry
 
 
 def make_item(dataset: str, *, gid: Optional[str] = None) -> dict[str, Any]:

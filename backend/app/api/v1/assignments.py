@@ -63,7 +63,9 @@ class AssignmentUpdateRequest(BaseModel):
     history: Optional[list[HistoryEntryPatch]] = None
     context_entries: Optional[list[ContextEntry]] = Field(default=None, alias="contextEntries")
     tool_calls: Optional[list[ToolCallRecord]] = Field(default=None, alias="toolCalls")
-    expected_tools: ExpectedTools | SkipJsonSchema[None] = Field(default=None, alias="expectedTools")
+    expected_tools: ExpectedTools | SkipJsonSchema[None] = Field(
+        default=None, alias="expectedTools"
+    )
     feedback: Optional[list[FeedbackEntry]] = None
     metadata: Optional[dict[str, Any]] = None
     plugins: Optional[dict[str, PluginPayload]] = None
@@ -177,7 +179,9 @@ async def update_item(
             payload_etag=payload.etag,
         )
     except ApprovalValidationError as e:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_APPROVAL", "errors": e.errors})
+        raise HTTPException(
+            status_code=400, detail={"code": "INVALID_APPROVAL", "errors": e.errors}
+        )
     except ETagRequiredError:
         raise HTTPException(status_code=412, detail="ETag required")
     except ETagMismatchError:

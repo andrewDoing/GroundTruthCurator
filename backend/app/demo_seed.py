@@ -136,7 +136,11 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-001",
                     name="get_location",
                     arguments="msisdn='[REDACTED_MSISDN_001]' context=None",
-                    result={"response": {"items": [{"valueObject": {"location": {"wifiConnected": False}}}]}},
+                    result={
+                        "response": {
+                            "items": [{"valueObject": {"location": {"wifiConnected": False}}}]
+                        }
+                    },
                     execution_time=2.41,
                 ),
                 _tool_call(
@@ -144,7 +148,9 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-001",
                     name="get_plan_usage",
                     arguments="msisdn='[REDACTED_MSISDN_001]' context=None",
-                    result={"response": {"items": [{"valueObject": {"planLimitGb": 50, "usageGb": 63}}]}},
+                    result={
+                        "response": {"items": [{"valueObject": {"planLimitGb": 50, "usageGb": 63}}]}
+                    },
                     execution_time=1.83,
                 ),
                 _tool_call(
@@ -211,7 +217,13 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-002",
                     name="get_device_details",
                     arguments="msisdn='[REDACTED_MSISDN_002]' context=None",
-                    result={"response": {"items": [{"valueObject": {"deviceModel": "Phone X", "hotspotCapable": True}}]}},
+                    result={
+                        "response": {
+                            "items": [
+                                {"valueObject": {"deviceModel": "Phone X", "hotspotCapable": True}}
+                            ]
+                        }
+                    },
                     execution_time=1.24,
                 ),
                 _tool_call(
@@ -219,7 +231,11 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-002",
                     name="get_hotspot_usage",
                     arguments="msisdn='[REDACTED_MSISDN_002]' context=None",
-                    result={"response": {"items": [{"valueObject": {"hotspotUsageGb": 18, "window": "48h"}}]}},
+                    result={
+                        "response": {
+                            "items": [{"valueObject": {"hotspotUsageGb": 18, "window": "48h"}}]
+                        }
+                    },
                     execution_time=1.76,
                 ),
                 _tool_call(
@@ -284,7 +300,13 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-003",
                     name="get_roaming_usage",
                     arguments="msisdn='[REDACTED_MSISDN_003]' context=None",
-                    result={"response": {"items": [{"valueObject": {"chargedSessions": 3, "passCoveredSessions": 9}}]}},
+                    result={
+                        "response": {
+                            "items": [
+                                {"valueObject": {"chargedSessions": 3, "passCoveredSessions": 9}}
+                            ]
+                        }
+                    },
                     execution_time=1.58,
                 ),
                 _tool_call(
@@ -292,8 +314,9 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-003",
                     name="search_fixit_flows",
                     arguments="query='roaming pass activation timeline'",
-                    result={"response": {"items": [{"title": "Roaming pass timing", "score": 0.94}]}}
-                    ,
+                    result={
+                        "response": {"items": [{"title": "Roaming pass timing", "score": 0.94}]}
+                    },
                     execution_time=0.89,
                 ),
                 _tool_call(
@@ -301,7 +324,9 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-003",
                     name="Billing_agent",
                     arguments="msisdn='[REDACTED_MSISDN_003]' context=None",
-                    result={"response": {"summary": "Billing timeline and pass activation are aligned."}},
+                    result={
+                        "response": {"summary": "Billing timeline and pass activation are aligned."}
+                    },
                     execution_time=1.11,
                 ),
             ],
@@ -355,7 +380,13 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-004",
                     name="get_subscription_status",
                     arguments="msisdn='[REDACTED_MSISDN_004]' context=None",
-                    result={"response": {"items": [{"valueObject": {"simState": "active", "featureSet": ["LTE"]}}]}},
+                    result={
+                        "response": {
+                            "items": [
+                                {"valueObject": {"simState": "active", "featureSet": ["LTE"]}}
+                            ]
+                        }
+                    },
                     execution_time=1.42,
                 ),
                 _tool_call(
@@ -363,7 +394,11 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-004",
                     name="qtm_provisioning_status_daily_query",
                     arguments="msisdn='[REDACTED_MSISDN_004]' days=3",
-                    result={"response": {"items": [{"valueObject": {"lastRefresh": "failed", "attempts": 2}}]}},
+                    result={
+                        "response": {
+                            "items": [{"valueObject": {"lastRefresh": "failed", "attempts": 2}}]
+                        }
+                    },
                     execution_time=2.03,
                 ),
                 _tool_call(
@@ -371,7 +406,11 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-004",
                     name="Data_agent",
                     arguments="msisdn='[REDACTED_MSISDN_004]' context=None",
-                    result={"response": {"summary": "Retry provisioning before opening a network ticket."}},
+                    result={
+                        "response": {
+                            "summary": "Retry provisioning before opening a network ticket."
+                        }
+                    },
                     execution_time=1.31,
                 ),
             ],
@@ -431,7 +470,11 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-005",
                     name="qtm_cellsector_ref_query",
                     arguments="sector='STADIUM-12' hours=12",
-                    result={"response": {"items": [{"valueObject": {"congestionEvent": True, "peakUsers": 1840}}]}},
+                    result={
+                        "response": {
+                            "items": [{"valueObject": {"congestionEvent": True, "peakUsers": 1840}}]
+                        }
+                    },
                     execution_time=1.92,
                 ),
                 _tool_call(
@@ -439,7 +482,11 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
                     run_id="run-005",
                     name="qtm_device_connectivity_kpis_7d_rolling_query",
                     arguments="msisdn='[REDACTED_MSISDN_005]' days=7",
-                    result={"response": {"items": [{"valueObject": {"drops": 0, "attachSuccessRate": 0.99}}]}},
+                    result={
+                        "response": {
+                            "items": [{"valueObject": {"drops": 0, "attachSuccessRate": 0.99}}]
+                        }
+                    },
                     execution_time=2.27,
                 ),
             ],

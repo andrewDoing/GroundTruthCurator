@@ -104,7 +104,9 @@ def collect_approval_validation_errors(item: AgenticGroundTruthEntry) -> list[st
             "expectedTools.required must include at least one tool before approval when toolCalls are present"
         )
 
-    missing_required_tools = sorted({name for name in required_tools if name not in tool_call_names})
+    missing_required_tools = sorted(
+        {name for name in required_tools if name not in tool_call_names}
+    )
     if missing_required_tools:
         errors.append(
             "expectedTools.required references toolCalls that do not exist: "
@@ -195,7 +197,9 @@ async def validate_bulk_items(
     valid_tags_cache: set[str] | None = None
     has_items_with_tags = any(item.manual_tags for item in items)
     if has_items_with_tags:
-        valid_tags_cache = set(await _resolve_tag_registry_service(tag_registry_service).list_tags())
+        valid_tags_cache = set(
+            await _resolve_tag_registry_service(tag_registry_service).list_tags()
+        )
 
     validation_tasks = [
         validate_ground_truth_item(

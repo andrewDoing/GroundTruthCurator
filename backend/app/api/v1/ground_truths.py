@@ -133,7 +133,9 @@ class GroundTruthUpdateRequest(BaseModel):
     history: list[HistoryEntryPatch] | None = None
     context_entries: list[ContextEntry] | None = Field(default=None, alias="contextEntries")
     tool_calls: list[ToolCallRecord] | None = Field(default=None, alias="toolCalls")
-    expected_tools: ExpectedTools | SkipJsonSchema[None] = Field(default=None, alias="expectedTools")
+    expected_tools: ExpectedTools | SkipJsonSchema[None] = Field(
+        default=None, alias="expectedTools"
+    )
     feedback: list[FeedbackEntry] | None = None
     metadata: dict[str, Any] | None = None
     plugins: dict[str, PluginPayload] | None = None
@@ -225,12 +227,12 @@ async def import_bulk(
             it.status = GroundTruthStatus.approved
             it.reviewed_at = now
             it.updatedBy = updater
-        
+
         # Enforce generic approval validation for approved items.
         # validate_bulk_items returns results keyed by position within gt_items here
         # (not by item.id) so duplicate IDs in the filtered list remain distinct.
         approval_validation_errors = await validate_bulk_items(gt_items)
-        
+
         # Check generic approval invariants plus plugin-pack hooks for each item
         approval_ready_items: list[AgenticGroundTruthEntry] = []
         approval_ready_orig_indices: list[int] = []
@@ -261,14 +263,14 @@ async def import_bulk(
                             message=err_msg,
                         )
                     )
-            
+
             if item_errors:
                 errors.extend(item_errors)
                 failed_request_indices.add(orig_idx)
             else:
                 approval_ready_items.append(item)
                 approval_ready_orig_indices.append(orig_idx)
-        
+
         gt_items = approval_ready_items
         gt_item_orig_indices = approval_ready_orig_indices
 
@@ -655,7 +657,9 @@ async def update_ground_truth(
             payload_etag=payload.etag,
         )
     except ApprovalValidationError as e:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_APPROVAL", "errors": e.errors})
+        raise HTTPException(
+            status_code=400, detail={"code": "INVALID_APPROVAL", "errors": e.errors}
+        )
     except ETagRequiredError:
         raise HTTPException(status_code=412, detail="ETag required")
     except ETagMismatchError:

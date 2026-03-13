@@ -9,7 +9,6 @@ from pydantic.type_adapter import TypeAdapter
 import pytest
 
 from app.domain.models import AgenticGroundTruthEntry
-from tests.test_helpers import make_test_entry
 
 
 def make_skipped_item(dataset: str, assigned_to: str) -> dict[str, Any]:

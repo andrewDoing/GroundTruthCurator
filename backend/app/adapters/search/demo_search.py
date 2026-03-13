@@ -19,8 +19,15 @@ class DemoSearchAdapter:
             for turn in item.history or []:
                 refs.extend(getattr(turn, "refs", None) or [])
             for ref in refs:
-                haystack = ' '.join(
-                    [ref.url, ref.title or '', ref.content or '', ref.keyExcerpt or '', item.datasetName, item.id]
+                haystack = " ".join(
+                    [
+                        ref.url,
+                        ref.title or "",
+                        ref.content or "",
+                        ref.keyExcerpt or "",
+                        item.datasetName,
+                        item.id,
+                    ]
                 ).lower()
                 if query not in haystack:
                     continue
@@ -29,9 +36,9 @@ class DemoSearchAdapter:
                 seen_urls.add(ref.url)
                 matches.append(
                     {
-                        'url': ref.url,
-                        'title': ref.title,
-                        'chunk': ref.content or ref.keyExcerpt or f'Reference for {item.id}',
+                        "url": ref.url,
+                        "title": ref.title,
+                        "chunk": ref.content or ref.keyExcerpt or f"Reference for {item.id}",
                     }
                 )
                 if len(matches) >= top:

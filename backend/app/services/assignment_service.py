@@ -324,9 +324,7 @@ class AssignmentService:
         assigned_docs: list[AssignmentDocument] = []
         seen_ids: set[str] = set()
 
-        async def _try_assign(
-            candidates: list[AgenticGroundTruthEntry], remaining: int
-        ) -> None:
+        async def _try_assign(candidates: list[AgenticGroundTruthEntry], remaining: int) -> None:
             nonlocal assigned_docs, seen_ids
             if remaining <= 0:
                 return

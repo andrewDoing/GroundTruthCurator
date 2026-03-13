@@ -209,7 +209,6 @@ def _build_manual_tags(trace: Mapping[str, Any]) -> list[str]:
 
 
 class TraceExportAdapter(TraceAdapterPlugin):
-
     @property
     def name(self) -> str:
         return "trace-export"
@@ -227,7 +226,9 @@ class TraceExportAdapter(TraceAdapterPlugin):
         self._status = status
         self._created_by = created_by
 
-    def adapt_payload(self, payload: Mapping[str, Any], **kwargs: Any) -> list[AgenticGroundTruthEntry]:
+    def adapt_payload(
+        self, payload: Mapping[str, Any], **kwargs: Any
+    ) -> list[AgenticGroundTruthEntry]:
         traces = payload.get("traces")
         if not isinstance(traces, list):
             raise ValueError("trace export payload must contain a 'traces' list")
@@ -239,9 +240,7 @@ class TraceExportAdapter(TraceAdapterPlugin):
             items.append(self.adapt_trace(trace, index=index))
         return items
 
-    def adapt_trace(
-        self, trace: Mapping[str, Any], *, index: int = 1
-    ) -> AgenticGroundTruthEntry:
+    def adapt_trace(self, trace: Mapping[str, Any], *, index: int = 1) -> AgenticGroundTruthEntry:
         trace_id = _clean_text(trace.get("id")) or f"trace-{index}"
         created_at = _coerce_datetime(trace)
 
@@ -263,7 +262,9 @@ class TraceExportAdapter(TraceAdapterPlugin):
             if raw_context is None:
                 continue
             if not isinstance(raw_context, list):
-                raise ValueError(f"trace '{trace_id}' chat_history[{step_number - 1}] context must be a list")
+                raise ValueError(
+                    f"trace '{trace_id}' chat_history[{step_number - 1}] context must be a list"
+                )
             for raw_tool_call in raw_context:
                 if not isinstance(raw_tool_call, Mapping):
                     raise ValueError(
@@ -271,8 +272,10 @@ class TraceExportAdapter(TraceAdapterPlugin):
                     )
                 tool_calls.append(
                     ToolCallRecord(
-                        id=_clean_text(raw_tool_call.get("id")) or f"{trace_id}:tool:{len(tool_calls) + 1}",
-                        name=_clean_text(raw_tool_call.get("function_name")) or f"tool-{len(tool_calls) + 1}",
+                        id=_clean_text(raw_tool_call.get("id"))
+                        or f"{trace_id}:tool:{len(tool_calls) + 1}",
+                        name=_clean_text(raw_tool_call.get("function_name"))
+                        or f"tool-{len(tool_calls) + 1}",
                         callType="tool",
                         arguments=_parse_tool_arguments(raw_tool_call.get("function_arguments")),
                         stepNumber=len(tool_calls) + 1,

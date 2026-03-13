@@ -52,6 +52,4 @@ def test_approval_validation_requires_required_tool_to_match_tool_calls():
 
     errors = collect_approval_validation_errors(item)
 
-    assert errors == [
-        "expectedTools.required references toolCalls that do not exist: browser"
-    ]
+    assert errors == ["expectedTools.required references toolCalls that do not exist: browser"]

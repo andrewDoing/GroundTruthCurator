@@ -43,9 +43,7 @@ def create_default_pack_registry() -> PluginPackRegistry:
 
     registry = PluginPackRegistry()
     registry.register(RagCompatPack())
-    logger.debug(
-        "plugin_pack_registry.created | packs=%s", registry.names()
-    )
+    logger.debug("plugin_pack_registry.created | packs=%s", registry.names())
     return registry
 
 

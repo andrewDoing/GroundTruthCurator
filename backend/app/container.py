@@ -235,9 +235,7 @@ class Container:
         self.tag_registry_service = TagRegistryService(self.tags_repo)
         self.tag_definitions_repo = cast(Any, None)
         self.search_service = (
-            SearchService(DemoSearchAdapter(demo_items))
-            if enable_demo_data
-            else SearchService()
+            SearchService(DemoSearchAdapter(demo_items)) if enable_demo_data else SearchService()
         )
         logger.info(
             "Using InMemoryGroundTruthRepo (demo_mode=%s, items=%s)",
@@ -329,5 +327,6 @@ class Container:
             # Keep default no-op search service to satisfy consumers and typing
             self.search_service = self.search_service or SearchService()
             logger.info("Search adapter not configured; using no-op SearchService")
+
 
 container = Container()

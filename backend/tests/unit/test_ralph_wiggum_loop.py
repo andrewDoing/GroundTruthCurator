@@ -36,7 +36,9 @@ class FakeTtyStream(io.StringIO):
         super().flush()
 
 
-def make_args(*, phase: int | None, max_iterations: int = 7, committer_agent: str = "task-implementor") -> Namespace:
+def make_args(
+    *, phase: int | None, max_iterations: int = 7, committer_agent: str = "task-implementor"
+) -> Namespace:
     return Namespace(
         phase=phase,
         max_iterations=max_iterations,
@@ -75,7 +77,9 @@ def test_implementor_prompt_references_learnings_handoff(tmp_path) -> None:
 
     assert "Learnings handoff path: RALPH_LEARNINGS.md" in prompt
     assert "Read the learnings handoff file before coding" in prompt
-    assert "Commit your phase-specific implementation work before you finish this iteration" in prompt
+    assert (
+        "Commit your phase-specific implementation work before you finish this iteration" in prompt
+    )
     assert "ralph: phase 1 iteration 1 - First" in prompt
 
 

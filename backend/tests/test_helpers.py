@@ -6,11 +6,11 @@ from history or stored in plugins["rag-compat"].
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from app.domain.enums import GroundTruthStatus
-from app.domain.models import AgenticGroundTruthEntry, HistoryEntry, Reference
+from app.domain.models import AgenticGroundTruthEntry
 
 
 def make_test_entry(
@@ -84,7 +84,9 @@ def make_test_entry(
     }
 
     if reviewed_at is not None:
-        payload["reviewedAt"] = reviewed_at.isoformat() if isinstance(reviewed_at, datetime) else reviewed_at
+        payload["reviewedAt"] = (
+            reviewed_at.isoformat() if isinstance(reviewed_at, datetime) else reviewed_at
+        )
 
     # Handle history construction
     if history is not None:

@@ -85,7 +85,9 @@ def _prune_empty(value: object) -> object | None:
         }
         return pruned or None
     if isinstance(value, list):
-        pruned = [pruned_value for nested in value if (pruned_value := _prune_empty(nested)) is not None]
+        pruned = [
+            pruned_value for nested in value if (pruned_value := _prune_empty(nested)) is not None
+        ]
         return pruned or None
     return value
 
@@ -100,15 +102,15 @@ def _history_signature(item: AgenticGroundTruthEntry) -> str:
 def _generic_signature(item: AgenticGroundTruthEntry) -> str:
     structured_payload = _prune_empty(
         {
-        "scenarioId": item.scenario_id,
-        "contextEntries": item.context_entries,
-        "toolCalls": item.tool_calls,
-        "expectedTools": item.expected_tools,
-        "feedback": item.feedback,
-        "metadata": item.metadata,
-        "plugins": item.plugins,
-        "traceIds": item.trace_ids,
-        "tracePayload": item.trace_payload,
+            "scenarioId": item.scenario_id,
+            "contextEntries": item.context_entries,
+            "toolCalls": item.tool_calls,
+            "expectedTools": item.expected_tools,
+            "feedback": item.feedback,
+            "metadata": item.metadata,
+            "plugins": item.plugins,
+            "traceIds": item.trace_ids,
+            "tracePayload": item.trace_payload,
         }
     )
     if structured_payload is None:

@@ -51,7 +51,9 @@ class TestBulkImportApprovalValidation:
         # Mock dependencies
         original_repo = container.repo
         container.repo = AsyncMock()
-        container.repo.import_bulk_gt = AsyncMock(return_value=BulkImportResult(imported=0, errors=[]))
+        container.repo.import_bulk_gt = AsyncMock(
+            return_value=BulkImportResult(imported=0, errors=[])
+        )
         container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
 
         try:
@@ -110,7 +112,9 @@ class TestBulkImportApprovalValidation:
         # Mock dependencies
         original_repo = container.repo
         container.repo = AsyncMock()
-        container.repo.import_bulk_gt = AsyncMock(return_value=BulkImportResult(imported=1, errors=[]))
+        container.repo.import_bulk_gt = AsyncMock(
+            return_value=BulkImportResult(imported=1, errors=[])
+        )
         container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
 
         try:
@@ -190,9 +194,9 @@ class TestBulkImportApprovalValidation:
             assert len(approval_errors) >= 1, (
                 "Expected at least one APPROVAL_VALIDATION_FAILED error from plugin-pack hook"
             )
-            assert any(
-                "plugin-pack" in e.message for e in approval_errors
-            ), "Error message should contain plugin-pack content"
+            assert any("plugin-pack" in e.message for e in approval_errors), (
+                "Error message should contain plugin-pack content"
+            )
 
             # Original request index must be preserved (0 for a single-item request).
             assert all(e.index == 0 for e in approval_errors)
@@ -239,14 +243,15 @@ class TestAssignmentHistoryReset:
         original_repo = container.repo
         container.repo = AsyncMock()
         container.repo.get_gt = AsyncMock(return_value=existing_item)
-        
+
         # Mock upsert to capture what gets saved
         saved_item = None
+
         async def mock_upsert(item):
             nonlocal saved_item
             saved_item = item
             return item
-        
+
         container.repo.upsert_gt = AsyncMock(side_effect=mock_upsert)
 
         try:
@@ -254,6 +259,7 @@ class TestAssignmentHistoryReset:
 
             # Payload with updated history
             from app.api.v1.assignments import AssignmentUpdateRequest
+
             payload = AssignmentUpdateRequest(
                 history=[
                     {"role": "user", "msg": "New question"},
@@ -309,19 +315,21 @@ class TestAssignmentHistoryReset:
         original_repo = container.repo
         container.repo = AsyncMock()
         container.repo.get_gt = AsyncMock(return_value=existing_item)
-        
+
         saved_item = None
+
         async def mock_upsert(item):
             nonlocal saved_item
             saved_item = item
             return item
-        
+
         container.repo.upsert_gt = AsyncMock(side_effect=mock_upsert)
 
         try:
             mock_user = UserContext(user_id="test-user")
 
             from app.api.v1.assignments import AssignmentUpdateRequest
+
             payload = AssignmentUpdateRequest(
                 history=None,  # Clear history
                 etag="test-etag",
@@ -377,6 +385,7 @@ class TestInvalidStatusRejection:
             mock_user = UserContext(user_id="test-user")
 
             from app.api.v1.ground_truths import GroundTruthUpdateRequest
+
             payload = GroundTruthUpdateRequest(
                 status="invalid-status",  # Invalid status
                 etag="test-etag",
@@ -430,6 +439,7 @@ class TestInvalidStatusRejection:
             mock_user = UserContext(user_id="test-user")
 
             from app.api.v1.assignments import AssignmentUpdateRequest
+
             payload = AssignmentUpdateRequest(
                 status="bogus-status",  # Invalid status
                 etag="test-etag",
@@ -646,16 +656,26 @@ class TestBulkImportFailedCount:
 
         # Two invalid items; each produces at least one error via approval validation
         item1 = AgenticGroundTruthEntry(
-            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
-            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+            id=str(uuid4()),
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
         )
         item2 = AgenticGroundTruthEntry(
-            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
-            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+            id=str(uuid4()),
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
         )
         original_repo = container.repo
         container.repo = AsyncMock()
-        container.repo.import_bulk_gt = AsyncMock(return_value=BulkImportResult(imported=0, errors=[]))
+        container.repo.import_bulk_gt = AsyncMock(
+            return_value=BulkImportResult(imported=0, errors=[])
+        )
         container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
 
         try:
@@ -681,25 +701,35 @@ class TestBulkImportFailedCount:
 
         # First item is valid (passes tag validation), second is approval-invalid
         item_valid = AgenticGroundTruthEntry(
-            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
-            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+            id=str(uuid4()),
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
             history=[
                 HistoryEntry(role="user", msg="Q"),
                 HistoryEntry(role="assistant", msg="A"),
             ],
         )
         item_invalid = AgenticGroundTruthEntry(
-            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
-            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+            id=str(uuid4()),
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
             # no history → approval validation fails
         )
         original_repo = container.repo
         container.repo = AsyncMock()
-        container.repo.import_bulk_gt = AsyncMock(return_value=BulkImportResult(imported=1, errors=[]))
+        container.repo.import_bulk_gt = AsyncMock(
+            return_value=BulkImportResult(imported=1, errors=[])
+        )
         container.repo.list_gt_paginated = AsyncMock(return_value=([], None))
 
         try:
-            # Payload: [valid_at_idx_0, invalid_at_idx_1]
+            # Request keeps the valid item first and the invalid item second.
             result = await import_bulk(
                 items=[item_valid, item_invalid],
                 user=UserContext(user_id="u1"),
@@ -726,16 +756,28 @@ class TestBulkImportFailedCount:
         from app.api.v1.ground_truths import import_bulk
 
         item0 = AgenticGroundTruthEntry(
-            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
-            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+            id=str(uuid4()),
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
         )
         item1 = AgenticGroundTruthEntry(
-            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
-            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+            id=str(uuid4()),
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
         )
         item2 = AgenticGroundTruthEntry(
-            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
-            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+            id=str(uuid4()),
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
         )
 
         original_repo = container.repo
@@ -780,8 +822,12 @@ class TestBulkImportFailedCount:
         from app.api.v1.ground_truths import import_bulk
 
         item = AgenticGroundTruthEntry(
-            id=str(uuid4()), datasetName="ds", bucket=str(uuid4()),
-            status=GroundTruthStatus.draft, docType="ground-truth", schemaVersion="agentic-v1",
+            id=str(uuid4()),
+            datasetName="ds",
+            bucket=str(uuid4()),
+            status=GroundTruthStatus.draft,
+            docType="ground-truth",
+            schemaVersion="agentic-v1",
         )
 
         original_repo = container.repo
