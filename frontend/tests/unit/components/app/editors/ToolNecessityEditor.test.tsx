@@ -107,6 +107,40 @@ describe("ToolNecessityEditor", () => {
 		expect(result.notNeeded?.map((t) => t.name) ?? []).toContain("search");
 	});
 
+	it("preserves expectation arguments when moving a tool between buckets", () => {
+		const onUpdate = vi.fn();
+		const expected: ExpectedTools = {
+			optional: [
+				{
+					name: "search",
+					arguments: { query: "ground truth curator" },
+				},
+			],
+		};
+		render(
+			<ToolNecessityEditor
+				toolCalls={toolCalls}
+				expectedTools={expected}
+				onUpdate={onUpdate}
+			/>,
+		);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Set search to Required",
+			}),
+		);
+
+		expect(onUpdate).toHaveBeenCalledOnce();
+		const result = onUpdate.mock.calls[0][0] as ExpectedTools;
+		expect(result.optional?.map((t) => t.name) ?? []).not.toContain("search");
+		expect(result.required).toEqual([
+			{
+				name: "search",
+				arguments: { query: "ground truth curator" },
+			},
+		]);
+	});
+
 	it("shows empty state when no tool calls exist", () => {
 		const onUpdate = vi.fn();
 		render(

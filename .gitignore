@@ -45,6 +45,9 @@ build/
 # Based on common Node.gitignore defaults
 # ------------------------------
 .vitest/
+.playwright/
+frontend/playwright-report/
+frontend/test-results/
 .eslintcache
 *.tsbuildinfo
 

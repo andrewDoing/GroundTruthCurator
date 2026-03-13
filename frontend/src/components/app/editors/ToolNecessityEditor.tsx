@@ -15,56 +15,16 @@ import type {
 	ToolCallRecord,
 } from "../../../models/groundTruth";
 import { cn } from "../../../models/utils";
-
-type NecessityState = "required" | "optional" | "not-needed";
+import {
+	getToolState,
+	type NecessityState,
+	setToolNecessity,
+} from "./toolNecessity";
 
 type ToolRow = {
 	name: string;
 	state: NecessityState;
 };
-
-/** Derive the current necessity state for a tool name from expectedTools. */
-function getToolState(
-	name: string,
-	et: ExpectedTools | undefined,
-): NecessityState {
-	if (et?.required?.some((t) => t.name === name)) return "required";
-	if (et?.optional?.some((t) => t.name === name)) return "optional";
-	if (et?.notNeeded?.some((t) => t.name === name)) return "not-needed";
-	// Default: unclassified tools start as optional
-	return "optional";
-}
-
-/** Build a new ExpectedTools by placing `toolName` into `targetBucket`. */
-function setToolNecessity(
-	toolName: string,
-	target: NecessityState,
-	current: ExpectedTools | undefined,
-): ExpectedTools {
-	const removeFrom = (arr: ExpectedTools["required"]) =>
-		(arr ?? []).filter((t) => t.name !== toolName);
-
-	const base: ExpectedTools = {
-		required: removeFrom(current?.required),
-		optional: removeFrom(current?.optional),
-		notNeeded: removeFrom(current?.notNeeded),
-	};
-
-	const entry = { name: toolName };
-	switch (target) {
-		case "required":
-			base.required = [...(base.required ?? []), entry];
-			break;
-		case "optional":
-			base.optional = [...(base.optional ?? []), entry];
-			break;
-		case "not-needed":
-			base.notNeeded = [...(base.notNeeded ?? []), entry];
-			break;
-	}
-
-	return base;
-}
 
 const STATES: {
 	value: NecessityState;
