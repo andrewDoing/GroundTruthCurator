@@ -82,6 +82,15 @@ Run from `frontend/`:
 | Lint (fix) | `npm run lint` |
 | Pre-commit | `npm run pre-commit` |
 
+## Frontend React Guidance
+
+- For React and TypeScript work in `frontend/`, consult `.github/skills/react-best-practices/SKILL.md` and `.github/skills/react-best-practices/APPLICABILITY.md`.
+- This frontend is a Vite + React app, not Next.js.
+- Apply framework-agnostic React, re-render, rendering, bundle, and JavaScript performance rules normally.
+- Translate `next/dynamic` guidance to `React.lazy()` or gated `import()` patterns instead of copying Next.js examples directly.
+- Treat Next.js-only rules (`async-api-routes`, `server-*`, API routes, server actions, `after()`, and other server-only guidance) as not applicable unless the stack changes.
+- Treat SWR-specific guidance as reference-only; current frontend data access uses `fetch` / `openapi-fetch` helpers under `frontend/src/api/` and `frontend/src/services/`.
+
 ## Debugging Loop
 
 When `make -f Makefile.harness ci` fails, identify the stage before changing code blindly.

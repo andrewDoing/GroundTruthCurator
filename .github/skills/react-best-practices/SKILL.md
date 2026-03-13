@@ -15,6 +15,7 @@ Comprehensive performance optimization guide for React and Next.js applications,
 > - Framework-agnostic React performance guidance applies normally.
 > - Next.js-specific rules (for example API routes, server actions, `next/dynamic`, and `after()`) should be treated as not applicable unless this repository adopts Next.js.
 > - SWR-specific rules are reference-only unless SWR is added to this repository.
+> - See `APPLICABILITY.md` for the repo-curated rule matrix and Vite/React substitutions.
 
 ## When to Apply
 
