@@ -3,11 +3,12 @@ import {
 	createConversationTurn,
 	ensureConversationTurnIdentity,
 	type GroundTruthItem,
+	getItemReferences,
 	getLastAgentTurn,
 	getLastUserTurn,
-	getTurnIndexById,
 	type PluginPayload,
 	type Reference,
+	type ToolCallRecord,
 	withDerivedLegacyFields,
 } from "../models/groundTruth";
 import { urlToTitle } from "../models/utils";
@@ -58,6 +59,19 @@ type StoredTurnIdentity = {
 	turnId?: string;
 	stepId?: string;
 };
+
+function normalizeToolCalls(
+	toolCalls: components["schemas"]["ToolCallRecord"][] | null | undefined,
+): ToolCallRecord[] | undefined {
+	if (!toolCalls?.length) {
+		return undefined;
+	}
+
+	return toolCalls.map((toolCall) => ({
+		...toolCall,
+		arguments: toolCall.arguments ?? undefined,
+	}));
+}
 
 function getStoredTurnIdentities(
 	plugins: Record<string, PluginPayload>,
@@ -221,7 +235,7 @@ export function groundTruthFromApi(
 		// Generic schema fields — passed through from the API
 		scenarioId: api.scenarioId || undefined,
 		contextEntries: api.contextEntries?.length ? api.contextEntries : undefined,
-		toolCalls: api.toolCalls?.length ? api.toolCalls : undefined,
+		toolCalls: normalizeToolCalls(api.toolCalls),
 		expectedTools: api.expectedTools ?? undefined,
 		feedback: api.feedback?.length ? api.feedback : undefined,
 		metadata:
@@ -251,11 +265,11 @@ export function groundTruthToPatch(args: {
 	const history = ensureConversationTurnIdentity(item.history);
 
 	// Extract references from per-call plugin state
-	const references = getItemReferencesFromPlugins(item);
+	const references = getItemReferences(item);
 
 	const hadLegacyTopLevelRefs =
 		!!originalApi &&
-		!originalApi.history &&
+		(!originalApi.history || originalApi.history.length === 0) &&
 		(originalApi.refs?.length || 0) > 0;
 
 	let topLevelRefs: ApiReference[] = [];
@@ -375,62 +389,4 @@ export function groundTruthToPatch(args: {
 	}
 
 	return body;
-}
-
-/**
- * Extract references from per-call plugin state.
- * Used internally by the patch mapper and externally by UI components.
- */
-function getItemReferencesFromPlugins(item: GroundTruthItem): Reference[] {
-	const data = item.plugins?.[_RAG_COMPAT_KEY]?.data as
-		| Record<string, unknown>
-		| undefined;
-	if (!data) return [];
-	const history = ensureConversationTurnIdentity(item.history);
-	const indexByTurnId = getTurnIndexById(history);
-
-	const retrievals = data.retrievals;
-	if (
-		!retrievals ||
-		typeof retrievals !== "object" ||
-		Array.isArray(retrievals)
-	) {
-		return [];
-	}
-
-	const refs: Reference[] = [];
-	let refIndex = 0;
-	for (const [toolCallId, bucket] of Object.entries(
-		retrievals as Record<
-			string,
-			{ candidates?: Array<Record<string, unknown>> }
-		>,
-	)) {
-		if (!bucket?.candidates) continue;
-		for (const c of bucket.candidates) {
-			const storedTurnId = c.turnId as string | undefined;
-			const resolvedMessageIndex =
-				storedTurnId && indexByTurnId.has(storedTurnId)
-					? indexByTurnId.get(storedTurnId)
-					: (c.messageIndex as number | undefined);
-			const resolvedTurnId =
-				storedTurnId ||
-				(typeof resolvedMessageIndex === "number"
-					? history[resolvedMessageIndex]?.turnId
-					: undefined);
-			refs.push({
-				id: `ref_${refIndex++}`,
-				title: (c.title as string) || undefined,
-				url: (c.url as string) || "",
-				snippet: (c.chunk as string) || undefined,
-				keyParagraph: (c.keyParagraph as string) || undefined,
-				visitedAt: (c.visitedAt as string) || null,
-				bonus: (c.bonus as boolean) || false,
-				messageIndex: resolvedMessageIndex,
-				turnId: resolvedTurnId,
-				toolCallId: toolCallId !== _UNASSOCIATED_KEY ? toolCallId : undefined,
-			});
-		}
-	}
-	return refs;
 }

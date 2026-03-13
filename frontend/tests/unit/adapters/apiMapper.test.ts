@@ -305,6 +305,30 @@ describe("groundTruthFromApi", () => {
 			expect(result.computedTags).toEqual([]);
 		});
 	});
+
+	describe("tool call handling", () => {
+		it("normalizes null tool call arguments to undefined", () => {
+			const api = makeApiItem({
+				toolCalls: [
+					{
+						id: "tc-1",
+						name: "search_docs",
+						callType: "tool",
+						arguments: null,
+					},
+				],
+			});
+			const result = groundTruthFromApi(api);
+
+			expect(result.toolCalls).toHaveLength(1);
+			expect(result.toolCalls?.[0]).toMatchObject({
+				id: "tc-1",
+				name: "search_docs",
+				callType: "tool",
+			});
+			expect(result.toolCalls?.[0].arguments).toBeUndefined();
+		});
+	});
 });
 
 describe("groundTruthToPatch", () => {
@@ -406,6 +430,42 @@ describe("groundTruthToPatch", () => {
 			expect(patch.refs).toHaveLength(2);
 			expect(patch.refs?.map((r) => r.url)).toContain("https://legacy.ref");
 			expect(patch.refs?.map((r) => r.url)).toContain("https://new.ref");
+		});
+
+		it("preserves top-level refs when legacy items use empty history arrays", () => {
+			const originalApi = makeApiItem({
+				history: [],
+				refs: [{ url: "https://legacy-empty.ref", bonus: false }],
+			});
+			const item = makeDomainItem({
+				history: [
+					{ role: "user", content: "Q" },
+					{ role: "agent", content: "A" },
+				],
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							retrievals: {
+								_unassociated: {
+									candidates: [
+										{ url: "https://legacy-empty.ref", messageIndex: 1 },
+										{ url: "https://new-empty.ref", messageIndex: 1 },
+									],
+								},
+							},
+						},
+					},
+				},
+			});
+			const patch = groundTruthToPatch({ item, originalApi });
+
+			expect(patch.refs).toHaveLength(2);
+			expect(patch.refs?.map((r) => r.url)).toContain(
+				"https://legacy-empty.ref",
+			);
+			expect(patch.refs?.map((r) => r.url)).toContain("https://new-empty.ref");
 		});
 
 		it("omits top-level refs for true multi-turn items", () => {
