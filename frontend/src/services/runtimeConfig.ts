@@ -7,6 +7,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { components } from "../api/generated";
+import { getApiBaseUrl } from "./http";
 
 export type RuntimeConfig = components["schemas"]["FrontendConfig"];
 
@@ -61,7 +62,7 @@ export async function getRuntimeConfig(): Promise<RuntimeConfig> {
 	// Fetch config from backend
 	configPromise = (async () => {
 		try {
-			const response = await fetch("/v1/config");
+			const response = await fetch(`${getApiBaseUrl()}/config`);
 			if (response.ok) {
 				const config: RuntimeConfig = await response.json();
 				setCachedConfig(config);

@@ -1,11 +1,28 @@
 /** HTTP helper utilities for backend API calls */
 
+export function normalizeAppBasePath(basePath: string | undefined): string {
+	if (!basePath) return "";
+	const trimmed = basePath.trim();
+	if (!trimmed || trimmed === "/") return "";
+	return `/${trimmed.replace(/^\/+|\/+$/g, "")}`;
+}
+
+export function getAppBasePath(): string {
+	return normalizeAppBasePath(import.meta.env.BASE_URL as string | undefined);
+}
+
+export function prefixAppBasePath(path: string): string {
+	if (!path.startsWith("/") || path.startsWith("//")) return path;
+	const basePath = getAppBasePath();
+	if (!basePath || path === basePath || path.startsWith(`${basePath}/`)) {
+		return path;
+	}
+	return `${basePath}${path}`;
+}
+
 export function getApiBaseUrl(): string {
-	// In the browser, use relative "/v1" so Vite dev proxy can intercept; in production
-	// VITE_API_BASE_URL can still be used if absolute URLs are needed in deployments.
-	// Prefer relative path for browser calls; backend is expected under /v1
-	// If you need absolute base for SSR or other contexts, revise as needed.
-	return "/v1";
+	// Keep browser calls same-origin, but honor an optional Vite base path like "/gtc".
+	return prefixAppBasePath("/v1");
 }
 
 export function withDevUser(init: RequestInit = {}): RequestInit {
