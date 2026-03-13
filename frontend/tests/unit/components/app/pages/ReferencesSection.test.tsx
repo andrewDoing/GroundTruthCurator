@@ -113,33 +113,44 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 	});
 
-	it("shows RAG compat panel when in single-turn mode", () => {
+	it("does not show the evidence pane when item is null in single-turn mode", () => {
 		render(
 			<ReferencesSection {...noopProps} item={null} isMultiTurn={false} />,
 		);
+		expect(screen.queryByText(/Evidence & Review/i)).not.toBeInTheDocument();
+		expect(
+			screen.queryByText(/No trace or evidence data available yet/i),
+		).not.toBeInTheDocument();
 		// Search tab should be visible (RAG compat surface)
 		const searchBtns = screen.getAllByRole("button", { name: /Search/i });
 		expect(searchBtns.length).toBeGreaterThan(0);
 	});
 
-	it("shows empty state when multi-turn mode and no evidence or references", () => {
+	it("shows the trace empty state when multi-turn mode has no evidence yet", () => {
 		const item = makeItem(); // no toolCalls, no traceIds, etc.
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		// No references, no evidence data → empty state
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 		expect(
-			screen.getByText(/No evidence or references available/i),
+			screen.getByText(/No trace or evidence data available yet/i),
 		).toBeInTheDocument();
 	});
 
-	it("shows TracePanel header when item has expectedTools", () => {
+	it("shows expected-tool details when item has expectedTools without toolCalls", () => {
 		const item = makeItem({
 			expectedTools: {
-				required: [{ name: "search" }],
+				required: [{ name: "search", arguments: { query: "refund policy" } }],
+				optional: [{ name: "fetch" }],
 			},
 			toolCalls: [],
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
 		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
+		expect(screen.getByText(/Expected Tools/i)).toBeInTheDocument();
+		expect(screen.getByText(/^Required$/i)).toBeInTheDocument();
+		expect(screen.getByText(/^Optional$/i)).toBeInTheDocument();
+		expect(screen.getByText(/^search$/i)).toBeInTheDocument();
+		expect(screen.getByText(/refund policy/i)).toBeInTheDocument();
+		expect(screen.getByText(/^fetch$/i)).toBeInTheDocument();
 	});
 
 	it("shows generic evidence for context-only items", () => {
