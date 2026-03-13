@@ -179,6 +179,7 @@ export default function ConversationTurnComponent({
 			{!isCollapsed &&
 				(isEditing ? (
 					<textarea
+						aria-label={`${roleLabel} turn ${index + 1} content`}
 						className="w-full rounded-lg border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
 						value={editContent}
 						onChange={(e) => setEditContent(e.target.value)}

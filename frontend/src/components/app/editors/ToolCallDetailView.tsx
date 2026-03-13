@@ -23,12 +23,15 @@ import type {
 } from "../../../models/groundTruth";
 import { ToolCallExtensionRenderer } from "../../../registry";
 import { getExecTime } from "../TracePanel";
+import {
+	getToolState,
+	type NecessityState,
+	setToolNecessity,
+} from "./toolNecessity";
 
 // ---------------------------------------------------------------------------
 // Decision segments -- mirrors wireframe DECISION_SEGMENTS
 // ---------------------------------------------------------------------------
-
-type NecessityState = "required" | "optional" | "not-needed";
 
 const DECISION_SEGMENTS: {
 	value: NecessityState;
@@ -63,47 +66,6 @@ const DECISION_SEGMENTS: {
 		dotClasses: "bg-rose-600 text-white",
 	},
 ];
-
-/** Derive the current necessity state for a tool name from expectedTools. */
-function getToolState(
-	name: string,
-	et: ExpectedTools | undefined,
-): NecessityState {
-	if (et?.required?.some((t) => t.name === name)) return "required";
-	if (et?.optional?.some((t) => t.name === name)) return "optional";
-	if (et?.notNeeded?.some((t) => t.name === name)) return "not-needed";
-	return "optional";
-}
-
-/** Build a new ExpectedTools by placing toolName into targetBucket. */
-function setToolNecessity(
-	toolName: string,
-	target: NecessityState,
-	current: ExpectedTools | undefined,
-): ExpectedTools {
-	const removeFrom = (arr: ExpectedTools["required"]) =>
-		(arr ?? []).filter((t) => t.name !== toolName);
-
-	const base: ExpectedTools = {
-		required: removeFrom(current?.required),
-		optional: removeFrom(current?.optional),
-		notNeeded: removeFrom(current?.notNeeded),
-	};
-
-	const entry = { name: toolName };
-	switch (target) {
-		case "required":
-			base.required = [...(base.required ?? []), entry];
-			break;
-		case "optional":
-			base.optional = [...(base.optional ?? []), entry];
-			break;
-		case "not-needed":
-			base.notNeeded = [...(base.notNeeded ?? []), entry];
-			break;
-	}
-	return base;
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -162,6 +124,7 @@ export default function ToolCallDetailView({
 				}}
 				onClick={() => setExpanded((v) => !v)}
 				aria-expanded={expanded}
+				aria-label={`Toggle tool call ${tc.name}`}
 			>
 				{/* Col 1: Order */}
 				<span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800 text-center">
