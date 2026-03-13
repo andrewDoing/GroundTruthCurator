@@ -60,19 +60,21 @@ async def lifespan(app: FastAPI):
 
     # Lazily initialize repo (creates Cosmos DB/container if configured)
     try:
-        # In test mode, fixtures configure the repo/tags repo and we must not
-        # re-initialize here (it can rebind clients to a different event loop
-        # and overwrite per-test DB names). Only initialize in non-test mode.
-        if not config.settings.COSMOS_TEST_MODE:
-            # Wire repository and services based on configured backend
-            if config.settings.REPO_BACKEND.lower() == "cosmos":
+        repo_backend = config.settings.REPO_BACKEND.lower()
+
+        # In test mode, Cosmos fixtures configure the repo/tags repo and we must
+        # not re-initialize them here. Memory-backed demo mode is different: some
+        # tests intentionally clear the container and rely on lifespan startup to
+        # rebuild the in-memory services.
+        if repo_backend == "cosmos":
+            if not config.settings.COSMOS_TEST_MODE:
                 await container.startup_cosmos()
-            elif (
-                config.settings.REPO_BACKEND.lower() == "memory"
-                and getattr(container, "repo", None) is None
-            ):
-                container.init_memory_repo(enable_demo_data=config.settings.DEMO_MODE)
-            # Seed built-in tags into global tag registry (idempotent add)
+        elif repo_backend == "memory" and getattr(container, "repo", None) is None:
+            container.init_memory_repo(enable_demo_data=config.settings.DEMO_MODE)
+
+        # Seed built-in tags into global tag registry (idempotent add). Keep the
+        # existing test-mode guard so Cosmos integration fixtures stay isolated.
+        if not config.settings.COSMOS_TEST_MODE:
             try:
                 defaults = sorted(
                     f"{group}:{value}"
