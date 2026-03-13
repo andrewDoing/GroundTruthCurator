@@ -90,9 +90,9 @@ async def test_update_requests_share_stable_history_patch_schema(async_client: A
     data = r.json()
     schemas = data["components"]["schemas"]
 
-    assignment_history = schemas["AssignmentUpdateRequest"]["properties"]["history"]["anyOf"][0]["items"][
-        "$ref"
-    ]
+    assignment_history = schemas["AssignmentUpdateRequest"]["properties"]["history"]["anyOf"][0][
+        "items"
+    ]["$ref"]
     ground_truth_history = schemas["GroundTruthUpdateRequest"]["properties"]["history"]["anyOf"][0][
         "items"
     ]["$ref"]
