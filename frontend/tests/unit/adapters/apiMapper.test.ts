@@ -5,6 +5,7 @@ import {
 	groundTruthToPatch,
 } from "../../../src/adapters/apiMapper";
 import type { GroundTruthItem } from "../../../src/models/groundTruth";
+import { getItemReferences } from "../../../src/models/groundTruth";
 
 function makeApiItem(overrides: Partial<ApiGroundTruth> = {}): ApiGroundTruth {
 	return {
@@ -108,7 +109,8 @@ describe("groundTruthFromApi", () => {
 			const result = groundTruthFromApi(api);
 
 			// Refs from history[1] should have messageIndex 1
-			const refsAt1 = result.references.filter((r) => r.messageIndex === 1);
+			const allRefs = getItemReferences(result);
+			const refsAt1 = allRefs.filter((r) => r.messageIndex === 1);
 			expect(refsAt1).toHaveLength(2);
 			expect(refsAt1.map((r) => r.url)).toEqual([
 				"https://ref1.com",
@@ -116,7 +118,7 @@ describe("groundTruthFromApi", () => {
 			]);
 
 			// Refs from history[3] should have messageIndex 3
-			const refsAt3 = result.references.filter((r) => r.messageIndex === 3);
+			const refsAt3 = allRefs.filter((r) => r.messageIndex === 3);
 			expect(refsAt3).toHaveLength(1);
 			expect(refsAt3[0].url).toBe("https://ref3.com");
 		});
@@ -141,7 +143,7 @@ describe("groundTruthFromApi", () => {
 				],
 			});
 			const result = groundTruthFromApi(api);
-			const ref = result.references[0];
+			const ref = getItemReferences(result)[0];
 
 			expect(ref.url).toBe("https://example.com");
 			expect(ref.title).toBe("Example Title");
@@ -200,8 +202,8 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			expect(result.references).toHaveLength(1);
-			expect(result.references[0].messageIndex).toBe(1);
+			expect(getItemReferences(result)).toHaveLength(1);
+			expect(getItemReferences(result)[0].messageIndex).toBe(1);
 		});
 
 		it("creates empty agent turn when answer is empty", () => {
@@ -230,8 +232,8 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			expect(result.references).toHaveLength(1);
-			expect(result.references[0].messageIndex).toBeUndefined();
+			expect(getItemReferences(result)).toHaveLength(1);
+			expect(getItemReferences(result)[0].messageIndex).toBeUndefined();
 		});
 	});
 
@@ -303,6 +305,39 @@ describe("groundTruthFromApi", () => {
 			expect(result.computedTags).toEqual([]);
 		});
 	});
+
+	describe("tool call handling", () => {
+		it("normalizes null tool call arguments to undefined", () => {
+			const api = makeApiItem({
+				toolCalls: [
+					{
+						id: "tc-1",
+						name: "search_docs",
+						callType: "tool",
+						arguments: null,
+					},
+				],
+			});
+			const result = groundTruthFromApi(api);
+
+			expect(result.toolCalls).toHaveLength(1);
+			expect(result.toolCalls?.[0]).toMatchObject({
+				id: "tc-1",
+				name: "search_docs",
+				callType: "tool",
+			});
+			expect(result.toolCalls?.[0].arguments).toBeUndefined();
+		});
+	});
+
+	describe("contextEntries handling", () => {
+		it("preserves explicit empty contextEntries arrays", () => {
+			const api = makeApiItem({ contextEntries: [] });
+			const result = groundTruthFromApi(api);
+
+			expect(result.contextEntries).toEqual([]);
+		});
+	});
 });
 
 describe("groundTruthToPatch", () => {
@@ -318,7 +353,6 @@ describe("groundTruthToPatch", () => {
 			deleted: false,
 			tags: [],
 			manualTags: [],
-			references: [],
 			...overrides,
 		};
 	}
@@ -345,10 +379,22 @@ describe("groundTruthToPatch", () => {
 					{ role: "user", content: "Q" },
 					{ role: "agent", content: "A" },
 				],
-				references: [
-					{ id: "r1", url: "https://ref.com", messageIndex: 1 },
-					{ id: "r2", url: "https://user-ref.com", messageIndex: 0 }, // Should be ignored
-				],
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							retrievals: {
+								_unassociated: {
+									candidates: [
+										{ url: "https://ref.com", messageIndex: 1 },
+										{ url: "https://user-ref.com", messageIndex: 0 },
+									],
+								},
+							},
+						},
+					},
+				},
 			});
 			const patch = groundTruthToPatch({ item });
 
@@ -370,10 +416,22 @@ describe("groundTruthToPatch", () => {
 					{ role: "user", content: "Q" },
 					{ role: "agent", content: "A" },
 				],
-				references: [
-					{ id: "r1", url: "https://legacy.ref", messageIndex: 1 },
-					{ id: "r2", url: "https://new.ref", messageIndex: 1 },
-				],
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							retrievals: {
+								_unassociated: {
+									candidates: [
+										{ url: "https://legacy.ref", messageIndex: 1 },
+										{ url: "https://new.ref", messageIndex: 1 },
+									],
+								},
+							},
+						},
+					},
+				},
 			});
 			const patch = groundTruthToPatch({ item, originalApi });
 
@@ -381,6 +439,42 @@ describe("groundTruthToPatch", () => {
 			expect(patch.refs).toHaveLength(2);
 			expect(patch.refs?.map((r) => r.url)).toContain("https://legacy.ref");
 			expect(patch.refs?.map((r) => r.url)).toContain("https://new.ref");
+		});
+
+		it("preserves top-level refs when legacy items use empty history arrays", () => {
+			const originalApi = makeApiItem({
+				history: [],
+				refs: [{ url: "https://legacy-empty.ref", bonus: false }],
+			});
+			const item = makeDomainItem({
+				history: [
+					{ role: "user", content: "Q" },
+					{ role: "agent", content: "A" },
+				],
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							retrievals: {
+								_unassociated: {
+									candidates: [
+										{ url: "https://legacy-empty.ref", messageIndex: 1 },
+										{ url: "https://new-empty.ref", messageIndex: 1 },
+									],
+								},
+							},
+						},
+					},
+				},
+			});
+			const patch = groundTruthToPatch({ item, originalApi });
+
+			expect(patch.refs).toHaveLength(2);
+			expect(patch.refs?.map((r) => r.url)).toContain(
+				"https://legacy-empty.ref",
+			);
+			expect(patch.refs?.map((r) => r.url)).toContain("https://new-empty.ref");
 		});
 
 		it("omits top-level refs for true multi-turn items", () => {
@@ -400,7 +494,19 @@ describe("groundTruthToPatch", () => {
 					{ role: "user", content: "Q" },
 					{ role: "agent", content: "A" },
 				],
-				references: [{ id: "r1", url: "https://turn.ref", messageIndex: 1 }],
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							retrievals: {
+								_unassociated: {
+									candidates: [{ url: "https://turn.ref", messageIndex: 1 }],
+								},
+							},
+						},
+					},
+				},
 			});
 			const patch = groundTruthToPatch({ item, originalApi });
 
@@ -417,17 +523,28 @@ describe("groundTruthToPatch", () => {
 					{ role: "user", content: "Q" },
 					{ role: "agent", content: "A" },
 				],
-				references: [
-					{
-						id: "r1",
-						url: "https://example.com",
-						title: "Title",
-						snippet: "Snippet",
-						keyParagraph: "Key",
-						bonus: true,
-						messageIndex: 1,
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							retrievals: {
+								_unassociated: {
+									candidates: [
+										{
+											url: "https://example.com",
+											title: "Title",
+											chunk: "Snippet",
+											keyParagraph: "Key",
+											bonus: true,
+											messageIndex: 1,
+										},
+									],
+								},
+							},
+						},
 					},
-				],
+				},
 			});
 			const patch = groundTruthToPatch({ item });
 			const ref = patch.history?.[1].refs?.[0];
@@ -527,6 +644,23 @@ describe("groundTruthToPatch", () => {
 			const item = makeDomainItem({ manualTags: ["tag1", "tag2"] });
 			const patch = groundTruthToPatch({ item });
 			expect(patch.manualTags).toEqual(["tag1", "tag2"]);
+		});
+	});
+
+	describe("contextEntries serialization", () => {
+		it("includes explicit empty contextEntries arrays in the patch", () => {
+			const item = makeDomainItem({ contextEntries: [] });
+			const patch = groundTruthToPatch({ item });
+
+			expect(patch).toHaveProperty("contextEntries");
+			expect((patch as Record<string, unknown>).contextEntries).toEqual([]);
+		});
+
+		it("omits undefined contextEntries from the patch", () => {
+			const item = makeDomainItem({ contextEntries: undefined });
+			const patch = groundTruthToPatch({ item });
+
+			expect("contextEntries" in patch).toBe(false);
 		});
 	});
 });

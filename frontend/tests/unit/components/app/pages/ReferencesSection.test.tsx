@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import ReferencesSection from "../../../../../src/components/app/pages/ReferencesSection";
 import type { Reference } from "../../../../../src/models/groundTruth";
 
@@ -41,7 +41,9 @@ describe("ReferencesSection", () => {
 		expect(onAddRefs).toHaveBeenCalled();
 
 		// Run search
-		fireEvent.click(screen.getAllByRole("button", { name: /Search/i })[1]);
+		await act(async () => {
+			fireEvent.click(screen.getAllByRole("button", { name: /Search/i })[1]);
+		});
 		expect(onRunSearch).toHaveBeenCalled();
 	});
 
@@ -69,5 +71,136 @@ describe("ReferencesSection", () => {
 		// Click the remove (trash) button which has title "Remove reference"
 		fireEvent.click(screen.getByTitle(/Remove reference/i));
 		expect(onRemoveReference).toHaveBeenCalled();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Phase 4: ReferencesSection as generic right pane
+// ---------------------------------------------------------------------------
+import type { GroundTruthItem } from "../../../../../src/models/groundTruth";
+import { getItemReferences } from "../../../../../src/models/groundTruth";
+
+const makeItem = (
+	overrides: Partial<GroundTruthItem> = {},
+): GroundTruthItem => ({
+	id: "i1",
+	question: "Q",
+	answer: "A",
+	status: "draft",
+	providerId: "test",
+	...overrides,
+});
+
+describe("ReferencesSection – generic right pane (Phase 4)", () => {
+	const noopProps = {
+		query: "",
+		setQuery: vi.fn(),
+		searching: false,
+		searchResults: [],
+		onRunSearch: vi.fn(),
+		onAddRefs: vi.fn(),
+		references: [],
+		onUpdateReference: vi.fn(),
+		onRemoveReference: vi.fn(),
+		onOpenReference: vi.fn(),
+	};
+
+	it("shows TracePanel when item has toolCalls", () => {
+		const item = makeItem({
+			toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
+		});
+		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
+	});
+
+	it("shows RAG compat panel when in single-turn mode", () => {
+		render(
+			<ReferencesSection {...noopProps} item={null} isMultiTurn={false} />,
+		);
+		// Search tab should be visible (RAG compat surface)
+		const searchBtns = screen.getAllByRole("button", { name: /Search/i });
+		expect(searchBtns.length).toBeGreaterThan(0);
+	});
+
+	it("shows empty state when multi-turn mode and no evidence or references", () => {
+		const item = makeItem(); // no toolCalls, no traceIds, etc.
+		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
+		// No references, no evidence data → empty state
+		expect(
+			screen.getByText(/No evidence or references available/i),
+		).toBeInTheDocument();
+	});
+
+	it("shows TracePanel header when item has expectedTools", () => {
+		const item = makeItem({
+			expectedTools: {
+				required: [{ name: "search" }],
+			},
+			toolCalls: [],
+		});
+		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
+	});
+
+	it("shows generic evidence for context-only items", () => {
+		const item = makeItem({
+			contextEntries: [
+				{ key: "customer_tier", value: "enterprise" },
+				{ key: "request", value: { region: "us" } },
+			],
+		});
+		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
+		// Context Entries is inside "More Details" collapsible
+		expect(screen.getByText(/More Details/i)).toBeInTheDocument();
+	});
+
+	it("shows generic plugin-owned details for plugin-only items", () => {
+		const item = makeItem({
+			plugins: {
+				"rag-compat": {
+					kind: "retrieval-review",
+					version: "1",
+					data: {
+						retrievalMode: "semantic",
+						latencyMs: 42,
+					},
+				},
+			},
+		});
+		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
+		// Plugin Details is inside "More Details" collapsible
+		expect(screen.getByText(/More Details/i)).toBeInTheDocument();
+	});
+
+	it("shows only evidence panel when multi-turn item has references", () => {
+		const item = makeItem({
+			toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
+			plugins: {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1.0",
+					data: {
+						retrievals: {
+							_unassociated: {
+								candidates: [{ url: "https://example.com" }],
+							},
+						},
+					},
+				},
+			},
+		});
+		render(
+			<ReferencesSection
+				{...noopProps}
+				item={item}
+				references={getItemReferences(item)}
+				isMultiTurn
+			/>,
+		);
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
+		// RAG references panel is hidden in multi-turn mode
+		expect(screen.queryByText(/Selected/i)).not.toBeInTheDocument();
 	});
 });

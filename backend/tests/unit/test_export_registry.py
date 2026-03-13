@@ -94,3 +94,20 @@ def test_resolve_chain_uses_default_order_when_missing() -> None:
     registry.register(OtherProcessor())
     resolved = registry.resolve_chain(None, ["merge_tags", "other"])
     assert [p.name for p in resolved] == ["merge_tags", "other"]
+
+
+def test_apply_transforms_runs_in_order() -> None:
+    registry = ExportProcessorRegistry()
+    docs = [{"id": "1", "tags": ["a"]}]
+    transforms = [
+        type("T1", (), {"transform": staticmethod(lambda doc: {**doc, "stage": 1})})(),
+        type(
+            "T2",
+            (),
+            {"transform": staticmethod(lambda doc: {**doc, "stage": doc["stage"] + 1})},
+        )(),
+    ]
+
+    transformed = registry.apply_transforms(docs, transforms)
+
+    assert transformed == [{"id": "1", "tags": ["a"], "stage": 2}]

@@ -8,6 +8,7 @@ export type SortColumn =
 	| "reviewedAt"
 	| "hasAnswer"
 	| "tagCount"
+	| "toolCallCount"
 	| null;
 export type SortDirection = "asc" | "desc";
 

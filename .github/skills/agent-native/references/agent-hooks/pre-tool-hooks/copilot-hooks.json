@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "./protect_linter_configs.sh",
+        "cwd": ".github/hooks",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "bash": "./enforce_package_managers.sh",
+        "cwd": ".github/hooks",
+        "timeoutSec": 15
+      }
+    ]
+  }
+}

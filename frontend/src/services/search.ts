@@ -61,11 +61,13 @@ function mapWireToReference(x: SearchResultWire): Reference | null {
 export async function searchReferences(
 	query: string,
 	top = 10,
+	signal?: AbortSignal,
 ): Promise<Reference[]> {
 	const q = query.trim();
 	if (!q) return [];
 	const { data, error } = await client.GET("/v1/search", {
 		params: { query: { q, top } },
+		signal,
 	});
 	if (error) throw error;
 	let arrUnknown: unknown[] = [];
@@ -94,21 +96,85 @@ export async function searchReferences(
 	return mapped;
 }
 
+function createAbortError(): DOMException {
+	return new DOMException("The operation was aborted.", "AbortError");
+}
+
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+	if (signal?.aborted) {
+		return Promise.reject(createAbortError());
+	}
+
+	return new Promise((resolve, reject) => {
+		const onAbort = () => {
+			window.clearTimeout(timeoutId);
+			reject(createAbortError());
+		};
+		const timeoutId = window.setTimeout(() => {
+			signal?.removeEventListener("abort", onAbort);
+			resolve();
+		}, ms);
+
+		signal?.addEventListener("abort", onAbort, { once: true });
+	});
+}
+
 // Mock for demo mode only
-export async function mockAiSearch(query: string): Promise<Reference[]> {
-	await new Promise((r) => setTimeout(r, 500));
-	const base = `https://example.com/product/${encodeURIComponent(
-		query.toLowerCase().replace(/\s+/g, "-"),
-	)}`;
-	const mk = (n: number): Reference => ({
+export async function mockAiSearch(
+	query: string,
+	signal?: AbortSignal,
+): Promise<Reference[]> {
+	await abortableDelay(500, signal);
+	const normalized = query.trim().toLowerCase();
+	const catalog = [
+		{
+			slug: "data-usage-check-usage",
+			title: "Check mobile data usage",
+			snippet:
+				"Compare current-cycle usage to the plan cap before treating a spike as a defect.",
+		},
+		{
+			slug: "wifi-assist",
+			title: "Reduce cellular usage with Wi-Fi",
+			snippet:
+				"Streaming and tethering over cellular are common causes of data overage charges.",
+		},
+		{
+			slug: "travel-pass-timing",
+			title: "Travel pass activation timing",
+			snippet:
+				"Roaming passes only apply after activation and do not retroactively cover earlier sessions.",
+		},
+		{
+			slug: "sim-swap-refresh",
+			title: "Refresh service after SIM swap",
+			snippet:
+				"If feature entitlements lag a SIM swap, run a targeted refresh before escalating.",
+		},
+		{
+			slug: "event-congestion",
+			title: "Understand temporary event congestion",
+			snippet:
+				"Large venues can saturate nearby sectors briefly without indicating a persistent outage.",
+		},
+	];
+
+	const ranked = catalog
+		.filter((entry) => {
+			if (!normalized) return true;
+			const haystack = `${entry.title} ${entry.snippet}`.toLowerCase();
+			return haystack.includes(normalized);
+		})
+		.slice(0, 5);
+
+	const res = (ranked.length ? ranked : catalog.slice(0, 5)).map((entry) => ({
 		id: randId("ref"),
-		title: `${query} – Result ${n}`,
-		url: `${base}-${n}`,
-		snippet: `Relevant snippet ${n} for ${query}. Mentions key commands, options, and caveats...`,
+		title: entry.title,
+		url: `https://telco.example.com/help/${entry.slug}`,
+		snippet: entry.snippet,
 		visitedAt: null,
 		keyParagraph: "",
-	});
-	const res = [mk(1), mk(2), mk(3), mk(4), mk(5)];
+	}));
 	try {
 		logEvent("gtc.search", {
 			queryLen: query.trim().length,

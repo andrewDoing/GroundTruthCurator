@@ -72,15 +72,20 @@ jobs:
           restore-keys: |
             uv-${{ runner.os }}-py311-
 
-      - name: Install backend dependencies (dev)
-        working-directory: backend
-        run: uv sync --frozen
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Backend unit tests
-        working-directory: backend
+      - name: Install dependencies through harness
+        run: make -f Makefile.harness setup
+
+      - name: Run app CI through harness
         env:
-          GTC_LLM_ENABLED: "False"
-        run: uv run pytest -q tests/unit -v --junitxml=pytest-unit-results.xml --cov=backend/src --cov-report=xml --cov-report=term 
+          HARNESS_TY_OUTPUT_FORMAT: github
+        run: make -f Makefile.harness ci
 
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2
@@ -90,32 +95,18 @@ jobs:
           check_name: "Backend Unit Test Results"
           comment_title: "GTC Backend Unit Test Results"
 
-      - name: Wait for Cosmos DB Emulator to be ready
-        run: |
-          for i in {1..60}; do
-            if curl -ksSf https://localhost:8081/_explorer/emulator.pem >/dev/null 2>&1 || curl -sS --max-time 2 http://localhost:8081/ >/dev/null 2>&1; then
-              echo "Emulator is ready"
-              break
-            fi
-            if [ "$i" -eq 60 ]; then
-              echo "Emulator not ready in time" >&2
-              # Dump container logs to help diagnose
-              docker logs $(docker ps -aqf "name=cosmos") || true
-              exit 1
-            fi
-            sleep 2
-          done
+      - name: Publish frontend test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: frontend/junit-results.xml
+          check_name: "Frontend Test Results"
+          comment_title: "GTC Frontend Test Results"
 
-      - name: Load integration test environment
-        run: |
-          grep -v '^[[:space:]]*#' backend/environments/integration-tests.env | sed 's/\r$//' >> "$GITHUB_ENV"
-
-      - name: Backend integration tests (Cosmos)
-        working-directory: backend
+      - name: Backend integration tests (Cosmos) through harness
         env:
-          GTC_LLM_ENABLED: "False"
-        run: |
-          uv run pytest -q tests/integration -v --junitxml=pytest-int-results.xml --cov=backend/src --cov-report=xml --cov-report=term
+          HARNESS_COSMOS_READY_URL: http://localhost:8081
+        run: make -f Makefile.harness backend-integration-test
 
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@v2
@@ -124,47 +115,6 @@ jobs:
           files: backend/pytest-int-results.xml
           check_name: "Backend Integration Test Results"
           comment_title: "GTC Backend Integration Test Results"
-
-      - name: ty (backend/app)
-        working-directory: backend
-        run: uv run ty check app --output-format github --exclude app/adapters/inference/inference.py --force-exclude
-
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci --no-audit --no-fund
-
-      - name: Export OpenAPI spec
-        working-directory: backend
-        run: uv run python scripts/export_openapi.py
-
-      - name: Check OpenAPI spec is up to date
-        working-directory: frontend
-        run: |
-          git --no-pager diff --exit-code -- src/api/openapi.json || (echo 'OpenAPI spec is out of date. Run: cd backend && uv run python scripts/export_openapi.py' && exit 1)
-
-      
-      - name: Check frontend OpenAPI types
-        working-directory: frontend
-        run: npm run api:types:check
-
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run test:run
-
-      - name: Publish frontend test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          files: frontend/junit-results.xml
-          check_name: "Frontend Test Results"
-          comment_title: "GTC Frontend Test Results"
 
   build-and-push:
     environment: dev

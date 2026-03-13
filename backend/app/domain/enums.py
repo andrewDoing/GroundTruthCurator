@@ -28,19 +28,22 @@ class DocType(str, Enum):
 
 
 class HistoryItemRole(str, Enum):
+    """Legacy RAG compatibility enum.
+
+    The generic host model accepts arbitrary role strings; this enum remains only for
+    compatibility helpers, older tests, and the future RAG pack.
+    """
+
     user = "user"
     assistant = "assistant"
 
 
 class ExpectedBehavior(str, Enum):
-    """Expected behavior tags for history items in ground truth evaluation.
+    """Legacy RAG compatibility enum for history annotations.
 
-    These tags describe what the agent should do at each turn of a conversation:
-    - tool:search: Agent should perform a search/retrieval operation
-    - generation:answer: Agent should generate a direct answer
-    - generation:need-context: Agent should ask for more context
-    - generation:clarification: Agent should ask for clarification
-    - generation:out-of-domain: Agent should indicate the query is out of domain
+    The generic host model uses `expectedTools` plus plugin-owned data instead of fixed
+    top-level expected-behavior assumptions. This enum remains only for compatibility
+    helpers, older tests, and the future RAG pack.
     """
 
     tool_search = "tool:search"

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { shouldUseDemoProvider } from "../../../config/demo";
 import type { GroundTruthItem } from "../../../models/groundTruth";
 import {
 	getGroundTruthStats,
@@ -20,7 +21,7 @@ export default function StatsPage({
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
-			if (demoMode) {
+			if (demoMode && shouldUseDemoProvider()) {
 				const data = await mockGetGroundTruthStats();
 				if (!cancelled) setStats(data);
 			} else {

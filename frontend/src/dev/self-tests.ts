@@ -12,14 +12,37 @@ export function runSelfTests() {
 		keyParagraph: "",
 		...over,
 	});
-	const mk = (refs: Reference[]): GroundTruthItem => ({
-		id: "T",
-		question: "q",
-		answer: "a",
-		references: refs,
-		status: "draft",
-		providerId: "json",
-	});
+	const mk = (refs: Reference[]): GroundTruthItem => {
+		const item: GroundTruthItem = {
+			id: "T",
+			question: "q",
+			answer: "a",
+			status: "draft",
+			providerId: "json",
+		};
+		if (refs.length > 0) {
+			item.plugins = {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1.0",
+					data: {
+						retrievals: {
+							_unassociated: {
+								candidates: refs.map((r) => ({
+									url: r.url,
+									title: r.title,
+									chunk: r.snippet,
+									visitedAt: r.visitedAt,
+									keyParagraph: r.keyParagraph,
+								})),
+							},
+						},
+					},
+				},
+			};
+		}
+		return item;
+	};
 
 	console.assert(
 		refsApprovalReady(mk([])),

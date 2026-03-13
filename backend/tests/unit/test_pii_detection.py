@@ -20,8 +20,9 @@ from app.services.pii_service import (
     _mask_match,
     _create_snippet,
 )
-from app.domain.models import GroundTruthItem, HistoryItem
+from app.domain.models import HistoryItem
 from app.domain.enums import HistoryItemRole
+from tests.test_helpers import make_test_entry
 
 
 class TestEmailDetection:
@@ -165,44 +166,51 @@ class TestGroundTruthItemScanning:
 
     def test_scans_synth_question(self):
         """Should detect PII in synthQuestion field."""
-        item = GroundTruthItem(
+        item = make_test_entry(
             id="test-1",
-            datasetName="test-dataset",
+            dataset_name="test-dataset",
             synth_question="Contact alice@example.com for help",
         )
         warnings = scan_item_for_pii(item)
-        assert len(warnings) == 1
-        assert warnings[0].field == "synthQuestion"
+        # Should find PII in multiple representations (history, plugin data, computed fields)
+        assert len(warnings) >= 1
+        # Check that at least one warning is for synthQuestion
+        assert any(w.field == "synthQuestion" for w in warnings)
+        assert any("email" in w.pattern_type for w in warnings)
 
     def test_scans_edited_question(self):
         """Should detect PII in editedQuestion field."""
-        item = GroundTruthItem(
+        item = make_test_entry(
             id="test-1",
-            datasetName="test-dataset",
+            dataset_name="test-dataset",
             synth_question="Original question",
             edited_question="Contact support@company.org for assistance",
         )
         warnings = scan_item_for_pii(item)
-        assert len(warnings) == 1
-        assert warnings[0].field == "editedQuestion"
+        # Should find PII in multiple representations
+        assert len(warnings) >= 1
+        assert any(w.field == "editedQuestion" for w in warnings)
+        assert any("email" in w.pattern_type for w in warnings)
 
     def test_scans_answer(self):
         """Should detect PII in answer field."""
-        item = GroundTruthItem(
+        item = make_test_entry(
             id="test-1",
-            datasetName="test-dataset",
+            dataset_name="test-dataset",
             synth_question="What is the contact?",
             answer="Call us at (555) 123-4567",
         )
         warnings = scan_item_for_pii(item)
-        assert len(warnings) == 1
-        assert warnings[0].field == "answer"
+        # Should find PII in multiple representations
+        assert len(warnings) >= 1
+        assert any(w.field == "answer" for w in warnings)
+        assert any("phone" in w.pattern_type for w in warnings)
 
     def test_scans_comment(self):
         """Should detect PII in comment field."""
-        item = GroundTruthItem(
+        item = make_test_entry(
             id="test-1",
-            datasetName="test-dataset",
+            dataset_name="test-dataset",
             synth_question="A question",
             comment="Reviewed by john@internal.com",
         )
@@ -212,9 +220,9 @@ class TestGroundTruthItemScanning:
 
     def test_scans_history_messages(self):
         """Should detect PII in history messages."""
-        item = GroundTruthItem(
+        item = make_test_entry(
             id="test-1",
-            datasetName="test-dataset",
+            dataset_name="test-dataset",
             synth_question="A question",
             history=[
                 HistoryItem(role=HistoryItemRole.user, msg="Contact alice@example.com"),
@@ -231,14 +239,50 @@ class TestGroundTruthItemScanning:
 
     def test_returns_empty_for_clean_item(self):
         """Should return empty list for item without PII."""
-        item = GroundTruthItem(
+        item = make_test_entry(
             id="test-1",
-            datasetName="test-dataset",
+            dataset_name="test-dataset",
             synth_question="What is the weather like today?",
             answer="The weather is sunny and warm.",
         )
         warnings = scan_item_for_pii(item)
         assert len(warnings) == 0
+
+    def test_scans_generic_context_entries_and_trace_payload(self):
+        item = make_test_entry(
+            id="test-1",
+            dataset_name="test-dataset",
+            contextEntries=[{"key": "customerEmail", "value": "alice@example.com"}],
+            tracePayload={"notes": "Call me at 555-123-4567"},
+        )
+
+        warnings = scan_item_for_pii(item)
+        fields = {warning.field for warning in warnings}
+        assert "contextEntries[0].value" in fields
+        assert "tracePayload.notes" in fields
+
+    def test_scans_generic_tool_calls_and_plugins(self):
+        item = make_test_entry(
+            id="test-1",
+            dataset_name="test-dataset",
+            toolCalls=[
+                {
+                    "name": "lookup_customer",
+                    "response": {"email": "agent@example.com"},
+                }
+            ],
+            plugins={
+                "rag-compat": {
+                    "kind": "rag-compat",
+                    "data": {"phone": "(555) 123-4567"},
+                }
+            },
+        )
+
+        warnings = scan_item_for_pii(item)
+        fields = {warning.field for warning in warnings}
+        assert "toolCalls[0].response.email" in fields
+        assert "plugins.rag-compat.data.phone" in fields
 
 
 class TestBulkScanning:
@@ -247,27 +291,30 @@ class TestBulkScanning:
     def test_scans_multiple_items(self):
         """Should scan all items and aggregate warnings."""
         items = [
-            GroundTruthItem(
+            make_test_entry(
                 id="item-1",
-                datasetName="test-dataset",
+                dataset_name="test-dataset",
                 synth_question="Contact alice@example.com",
             ),
-            GroundTruthItem(
+            make_test_entry(
                 id="item-2",
-                datasetName="test-dataset",
+                dataset_name="test-dataset",
                 synth_question="No PII here",
             ),
-            GroundTruthItem(
+            make_test_entry(
                 id="item-3",
-                datasetName="test-dataset",
+                dataset_name="test-dataset",
                 synth_question="Call (555) 123-4567",
             ),
         ]
         warnings = scan_bulk_items_for_pii(items)
-        assert len(warnings) == 2
+        # Should find PII in item-1 and item-3 (multiple representations each)
+        assert len(warnings) >= 2
         item_ids = {w.item_id for w in warnings}
         assert "item-1" in item_ids
         assert "item-3" in item_ids
+        # item-2 should not have any warnings
+        assert "item-2" not in item_ids
 
     def test_handles_empty_list(self):
         """Should return empty list for empty input."""
@@ -288,16 +335,17 @@ class TestEdgeCases:
 
     def test_handles_item_without_id(self):
         """Should handle item with missing/blank ID."""
-        item = GroundTruthItem(
+        item = make_test_entry(
             id="",
-            datasetName="test-dataset",
+            dataset_name="test-dataset",
             synth_question="Contact user@example.com",
         )
         # Need to set id after construction since blank is usually generated
         item.id = ""
         warnings = scan_item_for_pii(item)
-        assert len(warnings) == 1
-        assert warnings[0].item_id == "(no ID)"
+        # Should find PII with "(no ID)" as the item_id
+        assert len(warnings) >= 1
+        assert all(w.item_id == "(no ID)" for w in warnings)
 
     def test_mixed_pii_types_in_single_field(self):
         """Should detect multiple PII types in the same field."""

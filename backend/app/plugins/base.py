@@ -1,16 +1,87 @@
-"""Base classes for the computed tags plugin system.
+"""Base classes for the plugin system.
 
-This module defines the abstract base class for computed tag plugins
-and the registry for managing them.
+This module defines:
+- ComputedTagPlugin: abstract base for computed-tag plugins
+- TagPluginRegistry: registry for computed-tag plugins
+- PluginPack: abstract base for broader plugin packs (validators, explorer contributions)
+- PluginPackRegistry: startup-validated registry for plugin packs
+- ExplorerFieldDefinition / ImportTransform / ExportTransform: supporting types
+  for the PluginPack extension surfaces added in Phase 1.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from app.domain.models import GroundTruthItem
+    from app.domain.models import AgenticGroundTruthEntry
+
+
+# ---------------------------------------------------------------------------
+# Supporting types for plugin-pack extension surfaces
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ExplorerFieldDefinition:
+    """Describes a plugin-contributed column or filter in the explorer view.
+
+    Attributes:
+        key: Stable identifier for the field (e.g. "rag-compat:refCount").
+        label: Human-readable column header.
+        field_type: One of "string", "number", "boolean", "date".
+        sortable: Whether the explorer should allow sorting on this field.
+        filterable: Whether the explorer should allow filtering on this field.
+        pack_name: Owning plugin pack name (auto-populated by registry).
+    """
+
+    key: str
+    label: str
+    field_type: str = "string"
+    sortable: bool = False
+    filterable: bool = False
+    pack_name: str = ""
+
+
+@dataclass(frozen=True)
+class ImportTransform:
+    """A named transformation applied to a record during import.
+
+    Attributes:
+        name: Unique identifier for this transform (e.g. "rag-compat:legacy-refs").
+        description: Human-readable explanation of what the transform does.
+        transform: Callable that receives a raw dict and returns a transformed dict.
+        pack_name: Owning plugin pack name (auto-populated by registry).
+    """
+
+    name: str
+    description: str = ""
+    transform: Callable[[dict[str, Any]], dict[str, Any]] = field(
+        default_factory=lambda: (lambda d: d)
+    )
+    pack_name: str = ""
+
+
+@dataclass(frozen=True)
+class ExportTransform:
+    """A named transformation applied to a record during export.
+
+    Attributes:
+        name: Unique identifier for this transform (e.g. "rag-compat:flatten-refs").
+        description: Human-readable explanation of what the transform does.
+        transform: Callable that receives a record dict and returns a transformed dict.
+        pack_name: Owning plugin pack name (auto-populated by registry).
+    """
+
+    name: str
+    description: str = ""
+    transform: Callable[[dict[str, Any]], dict[str, Any]] = field(
+        default_factory=lambda: (lambda d: d)
+    )
+    pack_name: str = ""
 
 
 class ComputedTagPlugin(ABC):
@@ -29,7 +100,7 @@ class ComputedTagPlugin(ABC):
             def tag_key(self) -> str:
                 return "length:long"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 content = doc.answer or ""
                 return self.tag_key if len(content) > 10000 else None
 
@@ -39,7 +110,7 @@ class ComputedTagPlugin(ABC):
             def tag_key(self) -> str:
                 return "dataset:_dynamic"
 
-            def compute(self, doc: GroundTruthItem) -> str | None:
+            def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
                 return f"dataset:{doc.datasetName}" if doc.datasetName else None
     """
 
@@ -54,12 +125,13 @@ class ComputedTagPlugin(ABC):
         pass
 
     @abstractmethod
-    def compute(self, doc: GroundTruthItem) -> str | None:
+    def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
         """Compute the tag for this document.
 
         Args:
-            doc: The GroundTruthItem to evaluate.
-                 Contains fields like 'answer', 'synthQuestion', 'refs', 'history', etc.
+            doc: The AgenticGroundTruthEntry to evaluate.
+                 Contains fields like 'answer', 'history', 'refs', etc.
+                 Legacy fields like synthQuestion, editedQuestion are accessed via computed properties.
 
         Returns:
             The tag string if applicable, None otherwise.
@@ -107,14 +179,14 @@ class TagPluginRegistry:
         self._registered_keys.add(plugin.tag_key)
         self._plugins.append(plugin)
 
-    def compute_all(self, doc: GroundTruthItem) -> list[str]:
+    def compute_all(self, doc: AgenticGroundTruthEntry) -> list[str]:
         """Compute all applicable tags for a document.
 
         Iterates through all registered plugins and collects tags
         from plugins whose compute() method returns a tag string.
 
         Args:
-            doc: The GroundTruthItem to evaluate.
+            doc: The AgenticGroundTruthEntry to evaluate.
 
         Returns:
             A list of computed tag keys that apply to this document.
@@ -215,3 +287,434 @@ class TagPluginRegistry:
     def __len__(self) -> int:
         """Return the number of registered plugins."""
         return len(self._plugins)
+
+
+# ---------------------------------------------------------------------------
+# Plugin-pack contract (broader than computed tags)
+# ---------------------------------------------------------------------------
+
+
+class PluginPack(ABC):
+    """Abstract base class for plugin packs.
+
+    A plugin pack is a named unit of domain behavior that can contribute:
+    - Startup validation (via validate_registration)
+    - Approval-time error hooks (via collect_approval_errors)
+
+    The generic core hosts plugin packs without being aware of domain details.
+    Computed-tag plugins continue to work unchanged through TagPluginRegistry.
+
+    Example (minimal no-op pack)::
+
+        class MyDomainPack(PluginPack):
+            @property
+            def name(self) -> str:
+                return "my-domain"
+
+            def validate_registration(self) -> None:
+                # assert required config exists; raise ValueError on failure
+                pass
+
+    Example (approval-contributing pack)::
+
+        class StrictRefPack(PluginPack):
+            @property
+            def name(self) -> str:
+                return "strict-ref"
+
+            def collect_approval_errors(
+                self, item: AgenticGroundTruthEntry
+            ) -> list[str]:
+                errors: list[str] = []
+                if not item.refs:
+                    errors.append("strict-ref: at least one reference is required")
+                return errors
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Unique identifier for this plugin pack (e.g., 'rag-compat').
+
+        Used for duplicate-registration detection and telemetry.
+        Must be a non-empty string stable across restarts.
+        """
+
+    def validate_registration(self) -> None:
+        """Validate this pack's own registration contract at startup.
+
+        Called once during application startup by PluginPackRegistry.validate_all().
+        Raise ValueError with an actionable message if the pack is misconfigured.
+        The default implementation is a no-op.
+
+        Raises:
+            ValueError: If the pack is not correctly configured.
+        """
+
+    def collect_approval_errors(self, item: AgenticGroundTruthEntry) -> list[str]:
+        """Return pack-specific approval validation errors for an item.
+
+        Called after the generic core approval checks. Return an empty list
+        when the item is acceptable from this pack's perspective.
+
+        Args:
+            item: The item being evaluated for approval.
+
+        Returns:
+            A list of human-readable error messages, or an empty list on success.
+        """
+        return []
+
+    def collect_approval_waivers(
+        self, item: AgenticGroundTruthEntry, core_errors: list[str]
+    ) -> list[str]:
+        """Return core error messages that this pack waives for the given item.
+
+        Called after generic core approval checks produce ``core_errors``.
+        Return exact error strings from ``core_errors`` that this pack's
+        domain logic determines should be suppressed.
+
+        Args:
+            item: The item being evaluated for approval.
+            core_errors: Error messages produced by the generic core checks.
+
+        Returns:
+            A list of error strings to remove from core_errors, or empty list.
+        """
+        return []
+
+    # ------------------------------------------------------------------
+    # Extension surfaces (Phase 1 contract — default no-ops)
+    # ------------------------------------------------------------------
+
+    def get_stats_contribution(self, base_stats: dict[str, Any]) -> dict[str, Any]:
+        """Return plugin-specific stats to merge into the stats response.
+
+        Called by the stats endpoint to let each pack contribute domain-
+        specific aggregations alongside the generic core counts.
+
+        Args:
+            base_stats: The core stats dict already computed by the host.
+
+        Returns:
+            A dict of additional stats entries.  Keys must be namespaced
+            with the pack name (e.g. ``"rag-compat:refCount"``).
+        """
+        return {}
+
+    def get_explorer_fields(self) -> list[ExplorerFieldDefinition]:
+        """Return field definitions for plugin-contributed explorer columns/filters.
+
+        The host merges these into its own explorer column set so that
+        plugin-specific data can be browsed without hardcoding column
+        definitions in the core explorer.
+
+        Returns:
+            A list of field definitions.
+        """
+        return []
+
+    def get_import_transforms(self) -> list[ImportTransform]:
+        """Return transforms applied during record import.
+
+        Each transform receives the raw dict read from the import source
+        and must return a (possibly mutated) dict.  Transforms execute in
+        list order.
+
+        Returns:
+            A list of import transforms contributed by this pack.
+        """
+        return []
+
+    def get_export_transforms(self) -> list[ExportTransform]:
+        """Return transforms applied during record export.
+
+        Each transform receives the normalised record dict and must return
+        a (possibly mutated) dict suitable for the target export format.
+        Transforms execute in list order.
+
+        Returns:
+            A list of export transforms contributed by this pack.
+        """
+        return []
+
+
+class PluginPackRegistry:
+    """Registry for plugin packs with startup validation.
+
+    Maintains a named collection of PluginPack instances. Startup validation
+    calls each pack's validate_registration() method so misconfigured packs
+    fail fast with actionable errors rather than silently degrading behavior.
+
+    Example::
+
+        registry = PluginPackRegistry()
+        registry.register(RagCompatPack())
+        registry.validate_all()  # called once during app startup
+    """
+
+    def __init__(self) -> None:
+        self._packs: dict[str, PluginPack] = {}
+
+    def register(self, pack: PluginPack) -> None:
+        """Register a plugin pack.
+
+        Args:
+            pack: The plugin pack instance to register.
+
+        Raises:
+            ValueError: If a pack with the same name is already registered,
+                or if pack.name is empty.
+        """
+        pack_name = pack.name
+        if not pack_name or not pack_name.strip():
+            raise ValueError("Plugin pack name must be a non-empty string")
+        if pack_name in self._packs:
+            raise ValueError(
+                f"Duplicate plugin pack name '{pack_name}': "
+                "a pack with this name is already registered"
+            )
+        self._packs[pack_name] = pack
+
+    def validate_all(self) -> None:
+        """Run startup validation for all registered packs.
+
+        Calls validate_registration() on every registered pack. If any pack
+        raises, this method re-raises a ValueError with the pack name included
+        so the startup error is actionable.
+
+        Raises:
+            ValueError: If any pack's validate_registration() fails.
+        """
+        for name, pack in self._packs.items():
+            try:
+                pack.validate_registration()
+            except ValueError as exc:
+                raise ValueError(f"Plugin pack '{name}' failed startup validation: {exc}") from exc
+
+    def collect_approval_errors(self, item: AgenticGroundTruthEntry) -> list[str]:
+        """Gather approval errors from all registered packs.
+
+        Args:
+            item: The item being evaluated for approval.
+
+        Returns:
+            Combined list of approval error messages from all packs.
+        """
+        errors: list[str] = []
+        for pack in self._packs.values():
+            errors.extend(pack.collect_approval_errors(item))
+        return errors
+
+    def collect_approval_waivers(
+        self, item: AgenticGroundTruthEntry, core_errors: list[str]
+    ) -> list[str]:
+        """Gather core-error waivers from all registered packs.
+
+        Args:
+            item: The item being evaluated for approval.
+            core_errors: Error messages produced by the generic core checks.
+
+        Returns:
+            Combined list of core error strings that packs want suppressed.
+        """
+        waivers: list[str] = []
+        for pack in self._packs.values():
+            waivers.extend(pack.collect_approval_waivers(item, core_errors))
+        return waivers
+
+    def filter_core_errors(
+        self, item: AgenticGroundTruthEntry, core_errors: list[str]
+    ) -> list[str]:
+        """Apply pack waivers to core errors and return the filtered list.
+
+        Args:
+            item: The item being evaluated for approval.
+            core_errors: Error messages produced by the generic core checks.
+
+        Returns:
+            Core errors with waived entries removed.
+        """
+        waivers = set(self.collect_approval_waivers(item, core_errors))
+        return [e for e in core_errors if e not in waivers]
+
+    def get(self, name: str) -> PluginPack | None:
+        """Return the pack with the given name, or None if not registered."""
+        return self._packs.get(name)
+
+    def names(self) -> list[str]:
+        """Return sorted list of registered pack names."""
+        return sorted(self._packs.keys())
+
+    # ------------------------------------------------------------------
+    # Aggregation helpers for extension surfaces (Phase 1)
+    # ------------------------------------------------------------------
+
+    def collect_stats(self, base_stats: dict[str, Any]) -> dict[str, Any]:
+        """Aggregate stats contributions from all registered packs.
+
+        Args:
+            base_stats: Core stats dict already computed by the host.
+
+        Returns:
+            A merged dict containing base stats plus pack contributions.
+            Pack-contributed keys overwrite base keys on collision.
+        """
+        merged: dict[str, Any] = dict(base_stats)
+        for pack in self._packs.values():
+            merged.update(pack.get_stats_contribution(base_stats))
+        return merged
+
+    def collect_explorer_fields(self) -> list[ExplorerFieldDefinition]:
+        """Collect explorer field definitions from all registered packs.
+
+        Returns:
+            Combined list of field definitions with ``pack_name`` populated.
+        """
+        fields: list[ExplorerFieldDefinition] = []
+        for pack in self._packs.values():
+            for f in pack.get_explorer_fields():
+                populated = ExplorerFieldDefinition(
+                    key=f.key,
+                    label=f.label,
+                    field_type=f.field_type,
+                    sortable=f.sortable,
+                    filterable=f.filterable,
+                    pack_name=pack.name,
+                )
+                fields.append(populated)
+        return fields
+
+    def collect_import_transforms(self) -> list[ImportTransform]:
+        """Collect import transforms from all registered packs (ordered by pack name).
+
+        Returns:
+            Combined list of import transforms with ``pack_name`` populated.
+        """
+        transforms: list[ImportTransform] = []
+        for pack in self._packs.values():
+            for t in pack.get_import_transforms():
+                populated = ImportTransform(
+                    name=t.name,
+                    description=t.description,
+                    transform=t.transform,
+                    pack_name=pack.name,
+                )
+                transforms.append(populated)
+        return transforms
+
+    def collect_export_transforms(self) -> list[ExportTransform]:
+        """Collect export transforms from all registered packs (ordered by pack name).
+
+        Returns:
+            Combined list of export transforms with ``pack_name`` populated.
+        """
+        transforms: list[ExportTransform] = []
+        for pack in self._packs.values():
+            for t in pack.get_export_transforms():
+                populated = ExportTransform(
+                    name=t.name,
+                    description=t.description,
+                    transform=t.transform,
+                    pack_name=pack.name,
+                )
+                transforms.append(populated)
+        return transforms
+
+    def __len__(self) -> int:
+        """Return the number of registered packs."""
+        return len(self._packs)
+
+
+# ---------------------------------------------------------------------------
+# Trace adapter plugin system
+# ---------------------------------------------------------------------------
+
+
+class TraceAdapterPlugin(ABC):
+    """Abstract base class for trace-format adapter plugins.
+
+    Each plugin defines how a specific trace payload format is transformed
+    into ``AgenticGroundTruthEntry`` objects.  End users drop concrete
+    implementations into ``plugins/adapters/`` and they are auto-discovered
+    at startup.
+
+    Example::
+
+        class MyCustomAdapter(TraceAdapterPlugin):
+            @property
+            def name(self) -> str:
+                return "my-custom-format"
+
+            def adapt_payload(
+                self, payload: Mapping[str, Any], **kwargs: Any,
+            ) -> list[AgenticGroundTruthEntry]:
+                ...
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Unique identifier for this adapter (e.g. ``'trace-export'``)."""
+
+    @abstractmethod
+    def adapt_payload(
+        self,
+        payload: Mapping[str, Any],
+        **kwargs: Any,
+    ) -> list[AgenticGroundTruthEntry]:
+        """Transform a raw payload into ground-truth entries.
+
+        Args:
+            payload: The raw trace payload (format is adapter-specific).
+            **kwargs: Additional adapter-specific configuration
+                      (e.g. ``dataset_name``, ``bucket``).
+
+        Returns:
+            A list of adapted ground-truth entries.
+        """
+
+
+class TraceAdapterRegistry:
+    """Registry for auto-discovered trace adapter plugins.
+
+    Provides lookup-by-name and enumeration of all registered adapters.
+    """
+
+    def __init__(self) -> None:
+        self._adapters: dict[str, type[TraceAdapterPlugin]] = {}
+
+    def register(self, adapter_cls: type[TraceAdapterPlugin]) -> None:
+        """Register an adapter plugin class.
+
+        Args:
+            adapter_cls: A *class* (not instance) extending TraceAdapterPlugin.
+
+        Raises:
+            ValueError: If the adapter name is empty or already registered.
+        """
+        # Instantiate briefly to read the name property
+        instance = adapter_cls.__new__(adapter_cls)
+        name = instance.name
+        if not name:
+            raise ValueError("TraceAdapterPlugin.name must be non-empty")
+        if name in self._adapters:
+            raise ValueError(
+                f"Duplicate trace adapter name '{name}': "
+                f"{self._adapters[name].__name__} already registered"
+            )
+        self._adapters[name] = adapter_cls
+
+    def get(self, name: str) -> type[TraceAdapterPlugin] | None:
+        """Look up an adapter class by name."""
+        return self._adapters.get(name)
+
+    def names(self) -> list[str]:
+        """Return sorted list of all registered adapter names."""
+        return sorted(self._adapters)
+
+    def __len__(self) -> int:
+        return len(self._adapters)
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._adapters

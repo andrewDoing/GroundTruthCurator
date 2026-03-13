@@ -1,11 +1,13 @@
 import { Lock } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import useTags from "../../hooks/useTags";
 import type { GroundTruthItem } from "../../models/groundTruth";
+import { getLastAgentTurn, getQueuePreview } from "../../models/groundTruth";
 import { cn } from "../../models/utils";
+import { getExplorerExtensions } from "../../registry/ExplorerExtensions";
 import { fetchAvailableDatasets } from "../../services/datasets";
 import type { GroundTruthListPagination } from "../../services/groundTruths";
 import { listAllGroundTruths } from "../../services/groundTruths";
-import { fetchTagsWithComputed } from "../../services/tags";
 import type {
 	FilterState,
 	FilterType,
@@ -33,6 +35,19 @@ export interface QuestionsExplorerItem extends GroundTruthItem {
 	reviewedAt?: string | null;
 }
 
+// Module-level constant: stable reference so effects that read defaultFilter
+// do not need to list it as a dependency (it never changes).
+const defaultFilter: FilterState = {
+	status: "all",
+	dataset: "all",
+	tags: { include: [], exclude: [] },
+	itemId: "",
+	refUrl: "",
+	keyword: "",
+	sortColumn: null,
+	sortDirection: "desc",
+};
+
 interface QuestionsExplorerProps {
 	items?: QuestionsExplorerItem[];
 	onAssign: (item: QuestionsExplorerItem) => void | Promise<void>;
@@ -49,6 +64,9 @@ export default function QuestionsExplorer({
 	className,
 }: QuestionsExplorerProps) {
 	const datasetFilterId = useId();
+	const itemIdFilterId = useId();
+	const referenceUrlFilterId = useId();
+	const keywordFilterId = useId();
 	const itemsPerPageId = useId();
 
 	// Use a ref to track the previous filter state to detect when filters change
@@ -56,18 +74,7 @@ export default function QuestionsExplorer({
 
 	// Flag to track whether URL has been synchronized (prevent infinite loops)
 	const urlSyncedRef = useRef(false);
-
-	// Default filter state
-	const defaultFilter: FilterState = {
-		status: "all",
-		dataset: "all",
-		tags: { include: [], exclude: [] },
-		itemId: "",
-		refUrl: "",
-		keyword: "",
-		sortColumn: null,
-		sortDirection: "desc",
-	};
+	const listRequestIdRef = useRef(0);
 
 	// Initialize filter state from URL parameters
 	const initializeFilterStateFromUrl = (): FilterState => {
@@ -123,8 +130,7 @@ export default function QuestionsExplorer({
 	>(undefined);
 	const [isLoading, setIsLoading] = useState(false);
 	const [loadError, setLoadError] = useState<string | null>(null);
-	const [manualTags, setManualTags] = useState<string[]>([]);
-	const [computedTags, setComputedTags] = useState<string[]>([]);
+	const { manualTags, computedTags } = useTags();
 	const [availableDatasets, setAvailableDatasets] = useState<string[]>([]);
 	const [expandedTagRows, setExpandedTagRows] = useState<Set<string>>(
 		new Set(),
@@ -161,24 +167,23 @@ export default function QuestionsExplorer({
 		sortDirection,
 	]);
 
-	// Fetch available tags and datasets from backend
+	// Fetch available datasets from backend. Tag metadata now comes from the
+	// shared useTags() service-backed cache so explorer does not duplicate tag reads.
 	useEffect(() => {
-		let cancelled = false;
+		const controller = new AbortController();
 
-		Promise.all([fetchTagsWithComputed(), fetchAvailableDatasets()])
-			.then(([tagsResult, datasets]) => {
-				if (cancelled) return;
-				setManualTags(tagsResult.manualTags);
-				setComputedTags(tagsResult.computedTags);
+		fetchAvailableDatasets(false, controller.signal)
+			.then((datasets) => {
+				if (controller.signal.aborted) return;
 				setAvailableDatasets(datasets);
 			})
 			.catch((error) => {
-				if (cancelled) return;
-				console.error("Failed to fetch tags or datasets:", error);
+				if (controller.signal.aborted) return;
+				console.error("Failed to fetch datasets:", error);
 			});
 
 		return () => {
-			cancelled = true;
+			controller.abort();
 		};
 	}, []);
 
@@ -204,6 +209,9 @@ export default function QuestionsExplorer({
 			const filterChanged =
 				prev.status !== appliedFilter.status ||
 				prev.dataset !== appliedFilter.dataset ||
+				prev.itemId !== appliedFilter.itemId ||
+				prev.refUrl !== appliedFilter.refUrl ||
+				prev.keyword !== appliedFilter.keyword ||
 				prev.sortColumn !== appliedFilter.sortColumn ||
 				prev.sortDirection !== appliedFilter.sortDirection ||
 				JSON.stringify(prev.tags) !== JSON.stringify(appliedFilter.tags);
@@ -225,18 +233,23 @@ export default function QuestionsExplorer({
 			return;
 		}
 
-		let cancelled = false;
+		const controller = new AbortController();
+		const requestId = ++listRequestIdRef.current;
 		setIsLoading(true);
+		setLoadError(null);
 		// Clear previous items when starting a new fetch to avoid showing stale data
 		setFetchedItems([]);
 
 		// Build API parameters from applied filters
+		// Note: toolCallCount is a client-side sort only (not passed to API)
 		const sortByParam =
 			appliedFilter.sortColumn === "refs"
 				? "totalReferences"
 				: appliedFilter.sortColumn === "tagCount"
 					? "tagCount"
-					: appliedFilter.sortColumn;
+					: appliedFilter.sortColumn === "toolCallCount"
+						? null // client-side sort; do not pass to backend
+						: appliedFilter.sortColumn;
 
 		// Ensure page is at least 1
 		const safePage = Math.max(1, currentPage);
@@ -262,15 +275,25 @@ export default function QuestionsExplorer({
 			limit: itemsPerPage,
 		};
 
-		listAllGroundTruths(params)
+		listAllGroundTruths(params, controller.signal)
 			.then(({ items: loadedItems, pagination: paginationData }) => {
-				if (cancelled) return;
+				if (
+					controller.signal.aborted ||
+					requestId !== listRequestIdRef.current
+				) {
+					return;
+				}
 				setFetchedItems(loadedItems);
 				setPagination(paginationData);
 				setLoadError(null);
 			})
 			.catch((error) => {
-				if (cancelled) return;
+				if (
+					controller.signal.aborted ||
+					requestId !== listRequestIdRef.current
+				) {
+					return;
+				}
 				const message =
 					error instanceof Error
 						? error.message
@@ -278,12 +301,17 @@ export default function QuestionsExplorer({
 				setLoadError(message);
 			})
 			.finally(() => {
-				if (cancelled) return;
+				if (
+					controller.signal.aborted ||
+					requestId !== listRequestIdRef.current
+				) {
+					return;
+				}
 				setIsLoading(false);
 			});
 
 		return () => {
-			cancelled = true;
+			controller.abort();
 		};
 	}, [items, appliedFilter, currentPage, itemsPerPage]);
 
@@ -291,9 +319,20 @@ export default function QuestionsExplorer({
 	const totalItemsCount = pagination?.total ?? sourceItems.length;
 
 	const displayItems = useMemo(() => {
-		// Server handles all sorting now, no client-side sorting needed
+		// Client-side sort for toolCallCount (not supported by backend API)
+		if (appliedFilter.sortColumn === "toolCallCount") {
+			const sorted = [...sourceItems].sort((a, b) => {
+				const countA = a.toolCalls?.length ?? 0;
+				const countB = b.toolCalls?.length ?? 0;
+				return appliedFilter.sortDirection === "desc"
+					? countB - countA
+					: countA - countB;
+			});
+			return sorted;
+		}
+		// Server handles all other sorting
 		return sourceItems;
-	}, [sourceItems]);
+	}, [sourceItems, appliedFilter.sortColumn, appliedFilter.sortDirection]);
 
 	const handleFilterChange = (filter: FilterType) => {
 		setActiveFilter(filter);
@@ -343,12 +382,12 @@ export default function QuestionsExplorer({
 			sortDirection,
 		};
 
+		setCurrentPage(1);
 		setAppliedFilter(newFilter);
-		// Page reset is handled by useEffect that watches appliedFilter
 	};
 
 	const handleSort = (
-		column: "refs" | "reviewedAt" | "hasAnswer" | "tagCount",
+		column: "refs" | "reviewedAt" | "hasAnswer" | "tagCount" | "toolCallCount",
 	) => {
 		if (sortColumn === column) {
 			// If already sorting by this column, toggle direction
@@ -453,7 +492,7 @@ export default function QuestionsExplorer({
 					<div className="min-w-0">
 						<div className="flex items-center gap-2 mb-2">
 							<label
-								htmlFor="itemIdFilter"
+								htmlFor={itemIdFilterId}
 								className="text-base font-semibold text-slate-800"
 							>
 								Item ID:
@@ -526,7 +565,7 @@ export default function QuestionsExplorer({
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
 							<input
-								id={useId()}
+								id={itemIdFilterId}
 								type="text"
 								value={itemIdFilter}
 								onChange={(e) => setItemIdFilter(e.target.value)}
@@ -550,7 +589,7 @@ export default function QuestionsExplorer({
 					<div className="min-w-0">
 						<div className="flex items-center gap-2 mb-2">
 							<label
-								htmlFor="referenceUrlFilter"
+								htmlFor={referenceUrlFilterId}
 								className="text-base font-semibold text-slate-800"
 							>
 								Reference URL:
@@ -607,7 +646,7 @@ export default function QuestionsExplorer({
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
 							<input
-								id={useId()}
+								id={referenceUrlFilterId}
 								type="text"
 								value={referenceUrlFilter}
 								onChange={(e) => setReferenceUrlFilter(e.target.value)}
@@ -632,7 +671,7 @@ export default function QuestionsExplorer({
 					<div className="min-w-0">
 						<div className="flex items-center gap-2 mb-2">
 							<label
-								htmlFor="keywordFilter"
+								htmlFor={keywordFilterId}
 								className="text-base font-semibold text-slate-800"
 							>
 								Keyword Search:
@@ -640,7 +679,7 @@ export default function QuestionsExplorer({
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
 							<input
-								id={useId()}
+								id={keywordFilterId}
 								type="text"
 								value={keywordFilter}
 								onChange={(e) => setKeywordFilter(e.target.value)}
@@ -905,7 +944,13 @@ export default function QuestionsExplorer({
 									</th>
 									<th className="px-3 py-3 text-left min-w-[60px]">Status</th>
 									<th className="px-3 py-3 text-left min-w-[160px] sm:min-w-[200px]">
-										Question
+										Question / Message
+									</th>
+									<th
+										className="px-3 py-3 text-center min-w-[50px] hidden lg:table-cell"
+										title="Number of conversation turns"
+									>
+										Turns
 									</th>
 									<th className="px-3 py-3 text-left min-w-[120px] hidden lg:table-cell">
 										Tags
@@ -996,6 +1041,41 @@ export default function QuestionsExplorer({
 												)}
 										</button>
 									</th>
+									{/* Tool Calls column – generic evidence indicator */}
+									<th className="px-3 py-3 text-center min-w-[60px] hidden xl:table-cell">
+										<button
+											type="button"
+											onClick={() => handleSort("toolCallCount")}
+											className="inline-flex items-center gap-1 transition-colors hover:text-violet-700 w-full justify-center"
+											aria-label="Sort by Tool Call Count"
+											title="Number of tool calls captured in the trace"
+										>
+											Tools
+											{appliedFilter.sortColumn === "toolCallCount" && (
+												<span className="text-violet-600">
+													{appliedFilter.sortDirection === "desc" ? "↓" : "↑"}
+												</span>
+											)}
+											{sortColumn === "toolCallCount" &&
+												sortColumn !== appliedFilter.sortColumn && (
+													<span className="text-amber-500 opacity-50">
+														{sortDirection === "desc" ? "↓" : "↑"}
+													</span>
+												)}
+										</button>
+									</th>
+									{/* Plugin-contributed columns (headers) */}
+									{getExplorerExtensions().flatMap((ext) =>
+										(ext.columns ?? []).map((col) => (
+											<th
+												key={col.key}
+												className="px-3 py-3 text-center hidden xl:table-cell"
+												style={col.width ? { minWidth: col.width } : undefined}
+											>
+												{col.header}
+											</th>
+										)),
+									)}
 									<th className="px-3 py-3 text-right min-w-[140px] sm:min-w-[180px] lg:min-w-[240px]">
 										Actions
 									</th>
@@ -1005,7 +1085,7 @@ export default function QuestionsExplorer({
 								{loadError ? (
 									<tr>
 										<td
-											colSpan={9}
+											colSpan={11}
 											className="px-4 py-8 text-center text-sm text-rose-600"
 										>
 											Failed to load items: {loadError}
@@ -1014,7 +1094,7 @@ export default function QuestionsExplorer({
 								) : isLoading && sourceItems.length === 0 ? (
 									<tr>
 										<td
-											colSpan={9}
+											colSpan={11}
 											className="px-4 py-8 text-center text-sm text-slate-500"
 										>
 											Loading ground truths…
@@ -1023,7 +1103,7 @@ export default function QuestionsExplorer({
 								) : displayItems.length === 0 ? (
 									<tr>
 										<td
-											colSpan={9}
+											colSpan={11}
 											className="px-4 py-8 text-center text-sm text-slate-500"
 										>
 											No items to display
@@ -1069,14 +1149,18 @@ export default function QuestionsExplorer({
 													)}
 												</div>
 											</td>
-											{/* Question */}
+											{/* Question / first user message */}
 											<td className="px-3 py-3 text-sm">
 												<div
 													className="truncate font-medium text-slate-800 max-w-[180px] sm:max-w-[240px] lg:max-w-[300px]"
-													title={item.question}
+													title={getQueuePreview(item)}
 												>
-													{item.question || "(no question)"}
+													{getQueuePreview(item)}
 												</div>
+											</td>
+											{/* Turns count */}
+											<td className="px-3 py-3 text-xs text-center hidden lg:table-cell text-slate-500">
+												{item.history?.length ? item.history.length : "—"}
 											</td>
 											{/* Tags */}
 											<td className="px-3 py-3 hidden lg:table-cell">
@@ -1140,7 +1224,7 @@ export default function QuestionsExplorer({
 											</td>
 											{/* Has Answer */}
 											<td className="px-3 py-3 text-center text-sm font-medium hidden xl:table-cell">
-												{item.answer && item.answer.trim().length > 0 ? (
+												{getLastAgentTurn(item).trim().length > 0 ? (
 													<span className="text-emerald-700">Yes</span>
 												) : (
 													<span className="text-slate-400">No</span>
@@ -1166,6 +1250,44 @@ export default function QuestionsExplorer({
 														)
 													: "-"}
 											</td>
+											{/* Tool Calls (generic evidence indicator) */}
+											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden xl:table-cell">
+												{(item.toolCalls?.length ?? 0) > 0 ? (
+													<span
+														className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800"
+														title={`${item.toolCalls?.length} tool call(s) captured`}
+													>
+														{item.toolCalls?.length}
+													</span>
+												) : item.expectedTools ? (
+													<span
+														className="text-xs text-amber-600"
+														title="Expected tools defined but no tool calls recorded"
+													>
+														⚠
+													</span>
+												) : (
+													<span className="text-xs text-slate-400">—</span>
+												)}
+											</td>
+											{/* Plugin-contributed columns (cells) */}
+											{getExplorerExtensions().flatMap((ext) =>
+												(ext.columns ?? []).map((col) => (
+													<td
+														key={col.key}
+														className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden xl:table-cell"
+														style={
+															col.width ? { minWidth: col.width } : undefined
+														}
+													>
+														{col.cellRenderer ? (
+															<col.cellRenderer item={item} />
+														) : (
+															(col.getValue(item) ?? "—")
+														)}
+													</td>
+												)),
+											)}
 											{/* Actions */}
 											<td className="px-3 py-3">
 												<div className="flex flex-wrap items-center justify-end gap-2">

@@ -10,13 +10,15 @@ import useModalKeys from "../../../hooks/useModalKeys";
 import { useToasts } from "../../../hooks/useToasts";
 import type { Reference } from "../../../models/groundTruth";
 import { cn, normalizeUrl, urlToTitle } from "../../../models/utils";
-import { getCachedConfig } from "../../../services/runtimeConfig";
+import { getReferenceApprovalRequirements } from "../../../models/validators";
+import { useRuntimeConfig } from "../../../services/runtimeConfig";
 import ModalPortal from "../../modals/ModalPortal";
 
 type Props = {
 	isOpen: boolean;
 	onClose: () => void;
 	messageIndex: number;
+	turnId?: string;
 	references: Reference[];
 	onUpdateReference: (refId: string, partial: Partial<Reference>) => void;
 	onRemoveReference: (refId: string) => void;
@@ -35,6 +37,7 @@ export default function TurnReferencesModal({
 	isOpen,
 	onClose,
 	messageIndex,
+	turnId,
 	references,
 	onUpdateReference,
 	onRemoveReference,
@@ -53,9 +56,11 @@ export default function TurnReferencesModal({
 		new Set(),
 	);
 
-	const config = getCachedConfig();
-	const requireVisit = config?.requireReferenceVisit ?? true;
-	const requireKeyPara = config?.requireKeyParagraph ?? false;
+	const runtimeConfig = useRuntimeConfig();
+	const {
+		requireReferenceVisit: requireVisit,
+		requireKeyParagraph: requireKeyPara,
+	} = getReferenceApprovalRequirements(runtimeConfig);
 	const { toasts, showToast, dismiss } = useToasts();
 	const undoTimerRef = useRef<number | null>(null);
 
@@ -93,8 +98,11 @@ export default function TurnReferencesModal({
 
 	// Filter references for this specific turn only
 	const turnRefs = useMemo(
-		() => references.filter((r) => r.messageIndex === messageIndex),
-		[references, messageIndex],
+		() =>
+			references.filter((r) =>
+				turnId ? r.turnId === turnId : r.messageIndex === messageIndex,
+			),
+		[messageIndex, references, turnId],
 	);
 
 	// References already added to this turn (by URL for duplicate prevention)
@@ -121,8 +129,7 @@ export default function TurnReferencesModal({
 	};
 
 	const handleAddSearchResult = (ref: Reference, silent = false) => {
-		// Assign messageIndex automatically
-		onAddSearchResult({ ...ref, messageIndex });
+		onAddSearchResult({ ...ref, messageIndex, turnId });
 		setSelectedSearchIds((prev) => {
 			const next = new Set(prev);
 			next.delete(ref.id);
@@ -141,7 +148,7 @@ export default function TurnReferencesModal({
 			selectedSearchIds.has(r.id),
 		);
 		chosen.forEach((r) => {
-			onAddSearchResult({ ...r, messageIndex });
+			onAddSearchResult({ ...r, messageIndex, turnId });
 		});
 		setSelectedSearchIds(new Set());
 		showToast(

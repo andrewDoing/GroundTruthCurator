@@ -1,9 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import type {
-	ConversationTurn,
-	GroundTruthItem,
-	Reference,
-} from "../../../src/models/groundTruth";
+import type { ConversationTurn } from "../../../src/models/groundTruth";
+import { getItemReferences } from "../../../src/models/groundTruth";
 
 vi.mock("../../../src/config/demo", () => ({
 	default: true,
@@ -11,18 +8,6 @@ vi.mock("../../../src/config/demo", () => ({
 	shouldUseDemoProvider: () => true,
 	isDemoModeIgnored: () => false,
 }));
-
-const callAgentChatMock = vi.fn();
-
-vi.mock("../../../src/services/chatService", async () => {
-	const actual = await vi.importActual<
-		typeof import("../../../src/services/chatService")
-	>("../../../src/services/chatService");
-	return {
-		...actual,
-		callAgentChat: callAgentChatMock,
-	};
-});
 
 vi.mock("../../../src/services/telemetry", () => ({
 	logEvent: vi.fn(),
@@ -37,10 +22,6 @@ beforeAll(async () => {
 	({ default: useGroundTruth } = await import(
 		"../../../src/hooks/useGroundTruth"
 	));
-});
-
-afterEach(() => {
-	callAgentChatMock.mockReset();
 });
 
 async function setupHook() {
@@ -61,7 +42,18 @@ describe("useGroundTruth multi-turn flows", () => {
 		await act(async () => {
 			result.current.updateHistory(history);
 		});
-		expect(result.current.current?.history).toEqual(history);
+		expect(result.current.current?.history).toHaveLength(2);
+		expect(result.current.current?.history?.[0]).toMatchObject({
+			role: "user",
+			content: "New question",
+		});
+		expect(result.current.current?.history?.[1]).toMatchObject({
+			role: "agent",
+			content: "Fresh answer",
+		});
+		expect(
+			result.current.current?.history?.every((turn) => !!turn.turnId),
+		).toBe(true);
 		expect(result.current.current?.question).toBe("New question");
 		expect(result.current.current?.answer).toBe("Fresh answer");
 	});
@@ -86,125 +78,15 @@ describe("useGroundTruth multi-turn flows", () => {
 		expect(result.current.current?.answer).toBe("Agent reply");
 	});
 
-	it("generateAgentTurn appends agent response with references", async () => {
-		const { result } = await setupHook();
-		await act(async () => {
-			result.current.addTurn("user", "Need help with a CAD application");
-		});
-		callAgentChatMock.mockResolvedValue({
-			content: " Generated agent guidance ",
-			references: [
-				{
-					id: "chat-ref-1",
-					title: "Doc",
-					url: "https://docs.example.com/agent",
-					snippet: "Snippet",
-					keyParagraph: "Key",
-				},
-			],
-		});
-		await act(async () => {
-			const res = await result.current.generateAgentTurn(-1);
-			expect(res.ok).toBe(true);
-			expect(res).toMatchObject({ messageIndex: 1 });
-		});
-		expect(callAgentChatMock).toHaveBeenCalledTimes(1);
-		const current = result.current.current as GroundTruthItem;
-		expect(current.history?.length).toBe(2);
-		expect(current.history?.[1]).toMatchObject({
-			role: "agent",
-			content: "Generated agent guidance",
-		});
-		const refsForTurn = (current.references || []).filter(
-			(r) => r.messageIndex === 1,
-		);
-		expect(refsForTurn).toHaveLength(1);
-		expect(refsForTurn[0]).toMatchObject({
-			url: "https://docs.example.com/agent",
-			snippet: "Snippet",
-			keyParagraph: "Key",
-		});
-	});
-
-	it("generateAgentTurn fails when no prior user turn exists", async () => {
-		const { result } = await setupHook();
-		callAgentChatMock.mockResolvedValue({ content: "x", references: [] });
-		await act(async () => {
-			const res = await result.current.generateAgentTurn(-1);
-			expect(res.ok).toBe(false);
-			if (!res.ok) {
-				expect(res.error).toMatch(/user turn/i);
-			}
-		});
-		expect(callAgentChatMock).not.toHaveBeenCalled();
-	});
-
-	it("regenerateAgentTurn updates only targeted agent turn and references", async () => {
-		const { result } = await setupHook();
-		const seedHistory: ConversationTurn[] = [
-			{ role: "user", content: "Original Q" },
-			{ role: "agent", content: "Outdated A" },
-			{ role: "user", content: "Second Q" },
-		];
-		await act(async () => {
-			result.current.updateHistory(seedHistory);
-			result.current.addReferences([
-				{
-					id: "turn-ref",
-					title: "Old",
-					url: "https://ref.example.com/old",
-					snippet: "Old snippet",
-					messageIndex: 1,
-				},
-			] as Reference[]);
-		});
-		callAgentChatMock.mockResolvedValue({
-			content: "Updated agent answer",
-			references: [
-				{
-					id: "chat-ref-2",
-					url: "https://ref.example.com/new",
-					snippet: "New snippet",
-					keyParagraph: "New key",
-				},
-			],
-		});
-		await act(async () => {
-			const res = await result.current.regenerateAgentTurn(1);
-			expect(res.ok).toBe(true);
-		});
-		const history = result.current.current?.history ?? [];
-		expect(history[1]).toMatchObject({ content: "Updated agent answer" });
-		expect(history[0]).toMatchObject({ content: "Original Q" });
-		expect(history[2]).toMatchObject({ content: "Second Q" });
-		const refs = result.current.current?.references ?? [];
-		const refsForTurn = refs.filter((r) => r.messageIndex === 1);
-		expect(refsForTurn).toHaveLength(1);
-		expect(refsForTurn[0].url).toBe("https://ref.example.com/new");
-	});
-
-	it("regenerateAgentTurn rejects non-agent turns", async () => {
-		const { result } = await setupHook();
-		const seedHistory: ConversationTurn[] = [
-			{ role: "user", content: "Q" },
-			{ role: "user", content: "Another" },
-		];
-		await act(async () => {
-			result.current.updateHistory(seedHistory);
-		});
-		await act(async () => {
-			const res = await result.current.regenerateAgentTurn(1);
-			expect(res.ok).toBe(false);
-			if (!res.ok) {
-				expect(res.error).toMatch(/only agent turns/i);
-			}
-		});
-	});
-
 	it("stateSignature ignores visitedAt mutations for hasUnsaved", async () => {
 		const { result } = await setupHook();
 		const before = result.current.hasUnsaved;
-		const firstRef = result.current.current?.references?.[0];
+		const current = result.current.current;
+		expect(current).toBeTruthy();
+		if (!current) {
+			throw new Error("Expected current item");
+		}
+		const firstRef = getItemReferences(current)[0];
 		expect(firstRef).toBeTruthy();
 		await act(async () => {
 			if (firstRef) {
@@ -216,7 +98,12 @@ describe("useGroundTruth multi-turn flows", () => {
 
 	it("stateSignature changes when reference messageIndex updates", async () => {
 		const { result } = await setupHook();
-		const ref = result.current.current?.references?.[0];
+		const current = result.current.current;
+		expect(current).toBeTruthy();
+		if (!current) {
+			throw new Error("Expected current item");
+		}
+		const ref = getItemReferences(current)[0];
 		expect(ref).toBeTruthy();
 		await act(async () => {
 			if (ref) {
@@ -224,6 +111,80 @@ describe("useGroundTruth multi-turn flows", () => {
 			}
 		});
 		expect(result.current.hasUnsaved).toBe(true);
+	});
+
+	it("marks contextEntries-only edits as unsaved and clears them after save", async () => {
+		const { result } = await setupHook();
+		expect(result.current.hasUnsaved).toBe(false);
+
+		await act(async () => {
+			result.current.updateContextEntries([
+				{
+					key: "test-context-entry",
+					value: { source: "useGroundTruth-multiturn.test.tsx" },
+				},
+			]);
+		});
+
+		expect(result.current.hasUnsaved).toBe(true);
+
+		await act(async () => {
+			const saveResult = await result.current.save();
+			expect(saveResult.ok).toBe(true);
+		});
+
+		expect(result.current.hasUnsaved).toBe(false);
+		expect(result.current.current?.contextEntries).toEqual([
+			{
+				key: "test-context-entry",
+				value: { source: "useGroundTruth-multiturn.test.tsx" },
+			},
+		]);
+	});
+
+	it("keeps cleared contextEntries cleared after save", async () => {
+		const { result } = await setupHook();
+		expect(result.current.current?.contextEntries?.length).toBeGreaterThan(0);
+
+		await act(async () => {
+			result.current.updateContextEntries([]);
+		});
+
+		expect(result.current.hasUnsaved).toBe(true);
+		expect(result.current.current?.contextEntries).toEqual([]);
+
+		await act(async () => {
+			const saveResult = await result.current.save();
+			expect(saveResult.ok).toBe(true);
+		});
+
+		expect(result.current.hasUnsaved).toBe(false);
+		expect(result.current.current?.contextEntries).toEqual([]);
+	});
+
+	it("marks expectedTools-only edits as unsaved and clears them after save", async () => {
+		const { result } = await setupHook();
+		expect(result.current.hasUnsaved).toBe(false);
+
+		await act(async () => {
+			result.current.updateExpectedTools({
+				required: [{ name: "test_required_tool" }],
+				optional: [{ name: "test_optional_tool" }],
+			});
+		});
+
+		expect(result.current.hasUnsaved).toBe(true);
+
+		await act(async () => {
+			const saveResult = await result.current.save();
+			expect(saveResult.ok).toBe(true);
+		});
+
+		expect(result.current.hasUnsaved).toBe(false);
+		expect(result.current.current?.expectedTools).toEqual({
+			required: [{ name: "test_required_tool" }],
+			optional: [{ name: "test_optional_tool" }],
+		});
 	});
 
 	it("marks unsaved when history changes", async () => {

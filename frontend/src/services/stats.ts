@@ -51,11 +51,11 @@ export async function getGroundTruthStats(): Promise<StatsPayload> {
 export async function mockGetGroundTruthStats(): Promise<StatsPayload> {
 	await new Promise((r) => setTimeout(r, 150));
 	return {
-		total: { approved: 12, draft: 7, deleted: 2 },
+		total: { approved: 9, draft: 6, deleted: 2 },
 		perSprint: [
-			{ sprint: "Sprint 24.7", approved: 3, draft: 1, deleted: 0 },
-			{ sprint: "Sprint 24.8", approved: 5, draft: 2, deleted: 1 },
-			{ sprint: "Sprint 24.9", approved: 4, draft: 4, deleted: 1 },
+			{ sprint: "Trace Batch 26.1", approved: 2, draft: 1, deleted: 0 },
+			{ sprint: "Trace Batch 26.2", approved: 4, draft: 3, deleted: 1 },
+			{ sprint: "Trace Batch 26.3", approved: 3, draft: 2, deleted: 1 },
 		],
 	};
 }

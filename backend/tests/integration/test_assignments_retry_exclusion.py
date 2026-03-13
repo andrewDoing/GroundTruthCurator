@@ -15,7 +15,7 @@ from httpx import AsyncClient
 from pydantic.type_adapter import TypeAdapter
 import pytest
 
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
 from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo
 
 
@@ -110,7 +110,9 @@ async def test_skipped_items_excluded_from_user_resampling(
         "/v1/assignments/self-serve", json={"limit": 2}, headers=user_headers
     )
     assert r.status_code == 200
-    first_batch = TypeAdapter(list[GroundTruthItem]).validate_python(r.json().get("assigned") or [])
+    first_batch = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(
+        r.json().get("assigned") or []
+    )
     assert len(first_batch) == 2
 
     # Skip one item
@@ -127,7 +129,7 @@ async def test_skipped_items_excluded_from_user_resampling(
         "/v1/assignments/self-serve", json={"limit": 3}, headers=user_headers
     )
     assert r.status_code == 200
-    second_batch = TypeAdapter(list[GroundTruthItem]).validate_python(
+    second_batch = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(
         r.json().get("assigned") or []
     )
     assert len(second_batch) == 3

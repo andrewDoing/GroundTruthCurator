@@ -13,6 +13,7 @@ import app.core.config as config
 from app.core.config import log_settings
 from app.core.telemetry import init_telemetry
 from app.core.auth import install_ezauth_middleware, require_user
+from app.core.harness_observability import install_harness_jsonl_middleware
 from app.core.logging import setup_logging, user_logging_middleware, attach_trace_log_filter
 from app.api.v1.router import api_router
 from app.container import container
@@ -59,14 +60,21 @@ async def lifespan(app: FastAPI):
 
     # Lazily initialize repo (creates Cosmos DB/container if configured)
     try:
-        # In test mode, fixtures configure the repo/tags repo and we must not
-        # re-initialize here (it can rebind clients to a different event loop
-        # and overwrite per-test DB names). Only initialize in non-test mode.
-        if not config.settings.COSMOS_TEST_MODE:
-            # Wire repository and services based on configured backend
-            if config.settings.REPO_BACKEND.lower() == "cosmos":
+        repo_backend = config.settings.REPO_BACKEND.lower()
+
+        # In test mode, Cosmos fixtures configure the repo/tags repo and we must
+        # not re-initialize them here. Memory-backed demo mode is different: some
+        # tests intentionally clear the container and rely on lifespan startup to
+        # rebuild the in-memory services.
+        if repo_backend == "cosmos":
+            if not config.settings.COSMOS_TEST_MODE:
                 await container.startup_cosmos()
-            # Seed built-in tags into global tag registry (idempotent add)
+        elif repo_backend == "memory" and getattr(container, "repo", None) is None:
+            container.init_memory_repo(enable_demo_data=config.settings.DEMO_MODE)
+
+        # Seed built-in tags into global tag registry (idempotent add). Keep the
+        # existing test-mode guard so Cosmos integration fixtures stay isolated.
+        if not config.settings.COSMOS_TEST_MODE:
             try:
                 defaults = sorted(
                     f"{group}:{value}"
@@ -156,6 +164,10 @@ def create_app() -> FastAPI:
         # Never block app creation due to auth middleware
         pass
 
+    # Emit local harness JSONL telemetry during harness-enabled runs.
+    if config.settings.HARNESS_JSONL_ENABLED:
+        install_harness_jsonl_middleware(app)
+
     # Inject user identity into logging for every request (after auth middleware)
     try:
         user_logging_middleware(app)
@@ -169,11 +181,6 @@ def create_app() -> FastAPI:
         container.init_search()
     except Exception:
         # Don't block app creation if search isn't configured
-        pass
-    try:
-        container.init_chat()
-    except Exception:
-        # Chat wiring is optional and should not block startup
         pass
 
     # Convenience aliases at the root for Swagger UI

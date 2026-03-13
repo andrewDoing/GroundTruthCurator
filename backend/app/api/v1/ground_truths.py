@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Header, Query
@@ -10,23 +11,42 @@ from uuid import UUID
 import randomname  # type: ignore
 
 from pydantic import BaseModel, Field, ConfigDict
+from pydantic.json_schema import SkipJsonSchema
 from fastapi.responses import JSONResponse
 
 from app.core.auth import get_current_user, UserContext
 from app.core.config import settings
 from app.domain.models import (
-    GroundTruthItem,
-    Reference,
+    AgenticGroundTruthEntry,
+    ContextEntry,
+    ExpectedTools,
+    FeedbackEntry,
     GroundTruthListResponse,
     HistoryItem,
+    PluginPayload,
+    ToolCallRecord,
     BulkImportError,
+    BulkImportPersistenceError,
     ValidationSummary,
 )
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.plugins import get_default_registry
 from app.container import container
 from app.exports.models import SnapshotExportRequest
-from app.services.validation_service import validate_bulk_items
+from app.api.v1.update_models import HistoryEntryPatch
+from app.services.ground_truth_update_service import (
+    ETagMismatchError,
+    ETagRequiredError,
+    apply_shared_update,
+    persist_shared_update,
+    read_legacy_compat_update,
+)
+from app.services.validation_service import (
+    ApprovalValidationError,
+    ValidationError,
+    validate_bulk_items,
+    validate_item_for_approval,
+)
 from app.services.pii_service import PIIWarning, scan_bulk_items_for_pii
 from app.services.duplicate_detection_service import (
     DuplicateWarning,
@@ -38,6 +58,15 @@ from app.services.tagging_service import apply_computed_tags
 logger = logging.getLogger("gtc.ground_truths")
 
 router = APIRouter()
+_PERSISTENCE_ERROR_ITEM_ID_RE = re.compile(r"\bid:\s*([^)]+?)\)")
+
+
+def _extract_persistence_error_item_id(error_msg: str) -> str | None:
+    match = _PERSISTENCE_ERROR_ITEM_ID_RE.search(error_msg)
+    if match is None:
+        return None
+    item_id = match.group(1).strip()
+    return item_id or None
 
 
 class ImportBulkResponse(BaseModel):
@@ -90,9 +119,41 @@ class RecomputeTagsResponse(BaseModel):
     duration_ms: int = Field(description="Operation duration in milliseconds.")
 
 
+class GroundTruthUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    status: GroundTruthStatus | str | SkipJsonSchema[None] = None
+    comment: str | None = None
+    history: list[HistoryEntryPatch] | None = None
+    context_entries: list[ContextEntry] | None = Field(default=None, alias="contextEntries")
+    tool_calls: list[ToolCallRecord] | None = Field(default=None, alias="toolCalls")
+    expected_tools: ExpectedTools | SkipJsonSchema[None] = Field(
+        default=None, alias="expectedTools"
+    )
+    feedback: list[FeedbackEntry] | None = None
+    metadata: dict[str, Any] | None = None
+    plugins: dict[str, PluginPayload] | None = None
+    manual_tags: list[str] | None = Field(default=None, alias="manualTags")
+    trace_ids: dict[str, str] | None = Field(default=None, alias="traceIds")
+    trace_payload: dict[str, Any] | None = Field(default=None, alias="tracePayload")
+    scenario_id: str | None = Field(default=None, alias="scenarioId")
+    etag: str | None = Field(default=None, alias="etag")
+
+
+def _coerce_history_for_internal_use(item: AgenticGroundTruthEntry) -> None:
+    if not item.history:
+        return
+    item.history = [
+        entry
+        if isinstance(entry, HistoryItem)
+        else HistoryItem.model_validate(entry.model_dump(by_alias=True))
+        for entry in item.history
+    ]
+
+
 @router.post("", response_model=ImportBulkResponse)
 async def import_bulk(
-    items: list[GroundTruthItem],
+    items: list[AgenticGroundTruthEntry],
     user: UserContext = Depends(get_current_user),
     buckets: int | None = Query(default=None, ge=1, le=50),
     approve: bool = Query(
@@ -111,7 +172,8 @@ async def import_bulk(
     """
     errors: list[BulkImportError] = []
     uuids: list[str] = []
-    gt_items: list[GroundTruthItem] = []
+    gt_items: list[AgenticGroundTruthEntry] = []
+    unknown_persistence_failures: int = 0
 
     # Ensure IDs in input order, preserving provided IDs when present
     for it in items:
@@ -122,21 +184,34 @@ async def import_bulk(
         it.id = item_id
         uuids.append(item_id)
 
+    # Track failed request-entry positions for accurate per-entry failed counting.
+    # Using a set[int] of original request indices avoids undercounting when
+    # duplicate IDs appear in the same request.
+    failed_request_indices: set[int] = set()
+    # Parallel list of original request indices for items that reach gt_items;
+    # maintains a 1-to-1 correspondence with gt_items throughout the pipeline.
+    gt_item_orig_indices: list[int] = []
+
     # Validate all items before processing
+    # validate_bulk_items is keyed by request-position index (not item.id) so
+    # duplicate IDs in one request do not collapse per-entry error attribution.
     validation_errors = await validate_bulk_items(items)
 
     # If there are validation errors, filter out invalid items and collect errors
     if validation_errors:
-        for item in items:
-            if item.id in validation_errors:
-                # Collect all validation errors for this item
-                errors.extend(validation_errors[item.id])
+        for req_idx, item in enumerate(items):
+            if req_idx in validation_errors:
+                # Collect all validation errors for this request entry
+                errors.extend(validation_errors[req_idx])
+                failed_request_indices.add(req_idx)
             else:
                 # Only include valid items
                 gt_items.append(item)
+                gt_item_orig_indices.append(req_idx)
     else:
         # All items are valid
-        gt_items = items
+        gt_items = list(items)
+        gt_item_orig_indices = list(range(len(items)))
 
     # Optionally set approval metadata
     if approve:
@@ -147,28 +222,110 @@ async def import_bulk(
             it.reviewed_at = now
             it.updatedBy = updater
 
+        # Enforce generic approval validation for approved items.
+        # validate_bulk_items returns results keyed by position within gt_items here
+        # (not by item.id) so duplicate IDs in the filtered list remain distinct.
+        approval_validation_errors = await validate_bulk_items(gt_items)
+
+        # Check generic approval invariants plus plugin-pack hooks for each item
+        approval_ready_items: list[AgenticGroundTruthEntry] = []
+        approval_ready_orig_indices: list[int] = []
+        for gt_pos, item in enumerate(gt_items):
+            orig_idx = gt_item_orig_indices[gt_pos]
+            item_errors = []
+
+            # Add tag validation errors if present; fix index to original request position
+            if gt_pos in approval_validation_errors:
+                for err in approval_validation_errors[gt_pos]:
+                    err.index = orig_idx
+                item_errors.extend(approval_validation_errors[gt_pos])
+
+            # Run the shared approval path (generic core + plugin-pack hooks).
+            # validate_item_for_approval combines collect_approval_validation_errors
+            # with container.plugin_pack_registry.collect_approval_errors so that
+            # plugin-owned constraints (e.g. RagCompatPack) are enforced here too.
+            try:
+                validate_item_for_approval(item)
+            except ApprovalValidationError as exc:
+                for err_msg in exc.errors:
+                    item_errors.append(
+                        BulkImportError(
+                            index=orig_idx,
+                            item_id=item.id,
+                            field="approval",
+                            code="APPROVAL_VALIDATION_FAILED",
+                            message=err_msg,
+                        )
+                    )
+
+            if item_errors:
+                errors.extend(item_errors)
+                failed_request_indices.add(orig_idx)
+            else:
+                approval_ready_items.append(item)
+                approval_ready_orig_indices.append(orig_idx)
+
+        gt_items = approval_ready_items
+        gt_item_orig_indices = approval_ready_orig_indices
+
     # Persist only validated items
     if gt_items:
         # Apply computed tags to each item before persisting
         # Fetch registry once for performance (avoids O(n) singleton lookups)
         registry = get_default_registry()
         for it in gt_items:
+            _coerce_history_for_internal_use(it)
             apply_computed_tags(it, registry)
 
         result = await container.repo.import_bulk_gt(gt_items, buckets=buckets)
 
-        # Convert repository errors (plain strings) to structured errors
-        # Repository doesn't provide index, so we can't map back to original position
-        # These are persistence errors after validation passed
-        for error_msg in result.errors:
+        # Convert repository errors (plain strings) to structured errors.
+        # Cosmos error messages include the item id when available, so recover it
+        # to preserve original request indices and per-entry failed-item counting.
+        # Build a per-id ordered list of original indices from the items submitted
+        # to persistence so duplicate IDs get distinct request positions.
+        id_to_orig_indices: dict[str, list[int]] = {}
+        for orig_idx, it in zip(gt_item_orig_indices, gt_items):
+            id_to_orig_indices.setdefault(it.id, []).append(orig_idx)
+        id_consumed: dict[str, int] = {}  # tracks how many errors per id we've consumed
+        unknown_persistence_failures = 0
+        persistence_errors = result.persistence_errors or [
+            BulkImportPersistenceError(
+                message=error_msg,
+                item_id=_extract_persistence_error_item_id(error_msg),
+            )
+            for error_msg in result.errors
+        ]
+        for persistence_error in persistence_errors:
+            error_msg = persistence_error.message
+            item_id = persistence_error.item_id or _extract_persistence_error_item_id(error_msg)
+            error_code = "CREATE_FAILED" if "create_failed" in error_msg.lower() else "DUPLICATE_ID"
+            if (
+                persistence_error.persistence_index is not None
+                and 0 <= persistence_error.persistence_index < len(gt_item_orig_indices)
+            ):
+                error_index = gt_item_orig_indices[persistence_error.persistence_index]
+                failed_request_indices.add(error_index)
+            elif item_id and item_id in id_to_orig_indices:
+                consumed = id_consumed.get(item_id, 0)
+                indices = id_to_orig_indices[item_id]
+                # Use the consumed-th matching index; clamp to last for extra errors.
+                error_index = indices[consumed] if consumed < len(indices) else indices[-1]
+                id_consumed[item_id] = consumed + 1
+                failed_request_indices.add(error_index)
+            elif item_id:
+                # item_id was in the error but not in our submission set; use -1
+                error_index = -1
+                failed_request_indices.add(-1)
+            else:
+                error_index = -1
+                unknown_persistence_failures += 1
             errors.append(
                 BulkImportError(
-                    index=-1,  # Index unknown for persistence errors
-                    item_id=None,  # Parse from error message if needed
+                    index=error_index,
+                    item_id=item_id,
                     field=None,
-                    code="CREATE_FAILED"
-                    if "create_failed" in error_msg.lower()
-                    else "DUPLICATE_ID",
+                    code=error_code,
                     message=error_msg,
                 )
             )
@@ -191,7 +348,7 @@ async def import_bulk(
         try:
             # Fetch all approved items from the same dataset(s) to check against
             datasets = {item.datasetName for item in items}
-            approved_items: list[GroundTruthItem] = []
+            existing_approved_items: list[AgenticGroundTruthEntry] = []
             for dataset in datasets:
                 # Fetch approved items from this dataset
                 items_list, _ = await container.repo.list_gt_paginated(
@@ -202,9 +359,9 @@ async def import_bulk(
                     sort_by=SortField.updated_at,
                     sort_order=SortOrder.desc,
                 )
-                approved_items.extend(items_list)
+                existing_approved_items.extend(items_list)
 
-            duplicate_warnings = detect_duplicates_for_bulk_items(items, approved_items)
+            duplicate_warnings = detect_duplicates_for_bulk_items(items, existing_approved_items)
             if duplicate_warnings:
                 logger.info(
                     f"api.import_bulk.duplicates_detected - "
@@ -218,7 +375,10 @@ async def import_bulk(
 
     # Build validation summary
     total_items = len(items)
-    failed_count = len(errors)
+    # Count unique failed request entries (not raw error count — one item may produce
+    # multiple errors, and duplicate IDs in one request each count independently).
+    # unknown_persistence_failures counts errors with no recoverable item id.
+    failed_count = len(failed_request_indices) + unknown_persistence_failures
     validation_summary = ValidationSummary(
         total=total_items,
         succeeded=imported_count,
@@ -412,7 +572,7 @@ async def list_ground_truths(
     datasetName: str,
     status: GroundTruthStatus | None = None,
     user: UserContext = Depends(get_current_user),
-) -> list[GroundTruthItem]:
+) -> list[AgenticGroundTruthEntry]:
     try:
         items = await container.repo.list_gt_by_dataset(datasetName, status)
     except ValueError as e:
@@ -428,7 +588,7 @@ async def get_ground_truth(
     bucket: UUID,
     item_id: str,
     user: UserContext = Depends(get_current_user),
-) -> GroundTruthItem:
+) -> AgenticGroundTruthEntry:
     item = await container.repo.get_gt(datasetName, bucket, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -440,112 +600,66 @@ async def update_ground_truth(
     datasetName: str,
     bucket: UUID,
     item_id: str,
-    payload: dict[str, Any],
+    payload: GroundTruthUpdateRequest,
     user: UserContext = Depends(get_current_user),
     if_match: str | None = Header(default=None, alias="If-Match"),
-) -> GroundTruthItem:
+) -> AgenticGroundTruthEntry:
     it = await container.repo.get_gt(datasetName, bucket, item_id)
     if not it:
         raise HTTPException(status_code=404, detail="Item not found")
-    # Apply updates including references
-    for k in ["edited_question", "answer", "status"]:
-        if k in payload:
-            if k == "status":
-                # Coerce string status to GroundTruthStatus enum to keep the
-                # model consistent and avoid Pydantic serializer warnings.
-                try:
-                    val = payload[k]
-                    if isinstance(val, GroundTruthStatus):
-                        status_val = val
-                    else:
-                        status_val = GroundTruthStatus(val)
-                    setattr(it, "status", status_val)
-                except Exception:
-                    # Let Pydantic / API validation handle invalid values
-                    setattr(it, "status", payload[k])
-            else:
-                setattr(it, k, payload[k])
-    if "comment" in payload:
-        it.comment = payload["comment"]
-    if "refs" in payload and isinstance(payload["refs"], list):
-        # Validate minimal Reference structure; rely on Pydantic validation when saving
-        refs_payload = cast(list[Reference | dict[str, Any]], payload["refs"])
-        it.refs = [r if isinstance(r, Reference) else Reference(**r) for r in refs_payload]
-        # Reset totalReferences to force recalculation by model_validator
-        it.totalReferences = 0
+    provided_fields = set(payload.model_fields_set)
+    payload_extras = payload.model_extra or {}
 
-    # Tags handling: Only accept 'manualTags' in payload
-    # computedTags are system-generated and cannot be set by clients
-    # Explicitly reject 'computedTags' and legacy 'tags' fields
-    if "computedTags" in payload:
+    # Tags handling: Only accept 'manualTags' in the generic contract
+    if "computedTags" in payload_extras:
         raise HTTPException(
             status_code=400,
             detail="computedTags cannot be set directly; they are system-generated",
         )
-    if "tags" in payload:
+    if "tags" in payload_extras:
         raise HTTPException(
             status_code=400,
             detail="'tags' field is deprecated; use 'manualTags' instead",
         )
-    if "manualTags" in payload:
-        try:
-            it.manual_tags = payload["manualTags"]
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    # History (with refs in agent messages)
-    if "history" in payload:
-        if payload["history"] is None:
-            it.history = None
-            # Reset totalReferences to force recalculation by model_validator
-            it.totalReferences = 0
-        elif isinstance(payload["history"], list):
-            try:
-                # Convert dict representations to HistoryItem models
-                history_items = []
-                for h in payload["history"]:
-                    # Parse refs if present in the history item
-                    refs_data = h.get("refs")
-                    refs_list = None
-                    if refs_data is not None:
-                        refs_list = [
-                            r if isinstance(r, Reference) else Reference(**r) for r in refs_data
-                        ]
-                    # Parse expected_behavior if present in the history item
-                    expected_behavior_data = h.get("expected_behavior") or h.get("expectedBehavior")
-                    history_items.append(
-                        HistoryItem(
-                            role=h["role"],
-                            msg=h.get("msg")
-                            or h.get("content", ""),  # Support both 'msg' and 'content'
-                            refs=refs_list,
-                            expected_behavior=expected_behavior_data
-                            if isinstance(expected_behavior_data, list)
-                            else None,
-                        )
-                    )
-                it.history = history_items
-                # Reset totalReferences to force recalculation by model_validator
-                it.totalReferences = 0
-            except (KeyError, ValueError) as e:
-                raise HTTPException(status_code=400, detail=f"Invalid history format: {str(e)}")
-    # Concurrency: use If-Match header or etag field in body
-    provided_etag: str | None = cast(str | None, payload.get("etag"))
-    if not if_match and not provided_etag:
-        # Require ETag to perform update
-        raise HTTPException(status_code=412, detail="ETag required")
-    if if_match:
-        it.etag = if_match
-    elif provided_etag:
-        it.etag = provided_etag
     try:
-        # Apply computed tags before saving
-        apply_computed_tags(it)
-        await container.repo.upsert_gt(it)
+        apply_shared_update(
+            it,
+            provided_fields=provided_fields,
+            comment=payload.comment,
+            history_entries=payload.history,
+            context_entries=payload.context_entries,
+            tool_calls=payload.tool_calls,
+            expected_tools=payload.expected_tools,
+            feedback=payload.feedback,
+            metadata=payload.metadata,
+            plugins=payload.plugins,
+            trace_ids=payload.trace_ids,
+            trace_payload=payload.trace_payload,
+            scenario_id=payload.scenario_id,
+            manual_tags=payload.manual_tags,
+            status=payload.status,
+            actor_user_id=user.user_id,
+            legacy_update=read_legacy_compat_update(payload_extras),
+        )
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=e.message)
+    try:
+        await persist_shared_update(
+            container.repo,
+            it,
+            if_match=if_match,
+            payload_etag=payload.etag,
+        )
+    except ApprovalValidationError as e:
+        raise HTTPException(
+            status_code=400, detail={"code": "INVALID_APPROVAL", "errors": e.errors}
+        )
+    except ETagRequiredError:
+        raise HTTPException(status_code=412, detail="ETag required")
+    except ETagMismatchError:
+        raise HTTPException(status_code=412, detail="ETag mismatch")
     except ValueError as e:
-        if str(e) == "etag_mismatch":
-            raise HTTPException(status_code=412, detail="ETag mismatch")
-        raise
+        raise HTTPException(status_code=400, detail=str(e))
     # Fetch and return the updated item so the response includes the fresh ETag
     # and any server-populated fields (mirrors assignments API behavior).
     latest = await container.repo.get_gt(datasetName, bucket, item_id)

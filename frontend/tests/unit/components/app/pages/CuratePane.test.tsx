@@ -1,13 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import CuratePane from "../../../../../src/components/app/pages/CuratePane";
-import type { AgentGenerationResult } from "../../../../../src/hooks/useGroundTruth";
 import type { GroundTruthItem } from "../../../../../src/models/groundTruth";
 
 const item: GroundTruthItem = {
 	id: "1",
 	question: "What is this software?",
 	answer: "",
-	references: [],
 	status: "draft",
 	providerId: "json",
 	tags: [],
@@ -21,24 +19,15 @@ describe("CuratePane", () => {
 				canApprove={true}
 				saving={false}
 				onDuplicate={vi.fn()}
-				onUpdateQuestion={vi.fn()}
-				onUpdateAnswer={vi.fn()}
 				onUpdateComment={vi.fn()}
 				onUpdateTags={vi.fn()}
 				onUpdateHistory={vi.fn()}
 				onDeleteTurn={vi.fn()}
-				onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
-					ok: true as const,
-					messageIndex: 0,
-				})}
 				onSaveDraft={vi.fn()}
 				onApprove={vi.fn()}
 				onSkip={vi.fn()}
 				onDelete={vi.fn()}
 				onRestore={vi.fn()}
-				onUpdateReference={vi.fn()}
-				onRemoveReference={vi.fn()}
-				onOpenReference={vi.fn()}
 			/>,
 		);
 
@@ -60,24 +49,15 @@ describe("CuratePane", () => {
 				canApprove={true}
 				saving={false}
 				onDuplicate={vi.fn()}
-				onUpdateQuestion={vi.fn()}
-				onUpdateAnswer={vi.fn()}
 				onUpdateComment={vi.fn()}
 				onUpdateTags={vi.fn()}
 				onUpdateHistory={vi.fn()}
 				onDeleteTurn={vi.fn()}
-				onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
-					ok: true as const,
-					messageIndex: 0,
-				})}
 				onSaveDraft={vi.fn()}
 				onApprove={vi.fn()}
 				onSkip={vi.fn()}
 				onDelete={vi.fn()}
 				onRestore={vi.fn()}
-				onUpdateReference={vi.fn()}
-				onRemoveReference={vi.fn()}
-				onOpenReference={vi.fn()}
 			/>,
 		);
 
@@ -86,5 +66,40 @@ describe("CuratePane", () => {
 		// Traditional Q/A fields should not be present
 		expect(screen.queryByLabelText("Question")).not.toBeInTheDocument();
 		expect(screen.queryByLabelText("Answer")).not.toBeInTheDocument();
+	});
+
+	it("allows adding any turn type after a preserved non-user role", () => {
+		const itemWithHistory: GroundTruthItem = {
+			...item,
+			history: [
+				{ role: "user", content: "What is this software?" },
+				{ role: "output-agent", content: "It is a CAD software." },
+			],
+		};
+
+		render(
+			<CuratePane
+				current={itemWithHistory}
+				canApprove={true}
+				saving={false}
+				onDuplicate={vi.fn()}
+				onUpdateComment={vi.fn()}
+				onUpdateTags={vi.fn()}
+				onUpdateHistory={vi.fn()}
+				onDeleteTurn={vi.fn()}
+				onSaveDraft={vi.fn()}
+				onApprove={vi.fn()}
+				onSkip={vi.fn()}
+				onDelete={vi.fn()}
+				onRestore={vi.fn()}
+			/>,
+		);
+
+		expect(
+			screen.getByRole("button", { name: /Add User Turn/i }),
+		).toBeEnabled();
+		expect(
+			screen.getByRole("button", { name: /Add Agent Turn/i }),
+		).toBeEnabled();
 	});
 });

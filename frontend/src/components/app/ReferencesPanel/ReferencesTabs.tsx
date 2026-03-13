@@ -51,10 +51,12 @@ export default function ReferencesTabs({
 	isMultiTurn = false,
 	readOnly = false,
 }: Props) {
-	// Phase 2: In multi-turn mode, disable search tab and force 'selected' view
-	if (isMultiTurn && rightTab !== "selected") {
-		setRightTab("selected");
-	}
+	useEffect(() => {
+		if (isMultiTurn && rightTab !== "selected") {
+			setRightTab("selected");
+		}
+	}, [isMultiTurn, rightTab, setRightTab]);
+
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			const target = e.target as HTMLElement | null;
@@ -63,7 +65,7 @@ export default function ReferencesTabs({
 				return;
 			const isMod = e.metaKey || e.ctrlKey;
 			if (!isMod) return;
-			if (e.key === "1") {
+			if (e.key === "1" && !isMultiTurn) {
 				e.preventDefault();
 				setRightTab("search");
 			} else if (e.key === "2") {
@@ -73,7 +75,7 @@ export default function ReferencesTabs({
 		}
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [setRightTab]);
+	}, [isMultiTurn, setRightTab]);
 	return (
 		<aside
 			className={cn(

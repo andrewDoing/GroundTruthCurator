@@ -1,4 +1,7 @@
-import type { GroundTruthItem } from "../../../models/groundTruth";
+import {
+	type GroundTruthItem,
+	getQueuePreview,
+} from "../../../models/groundTruth";
 import { cn } from "../../../models/utils";
 
 export default function QuestionsList({
@@ -43,9 +46,9 @@ export default function QuestionsList({
 								</div>
 								<div
 									className="text-sm font-medium truncate"
-									title={it.question}
+									title={getQueuePreview(it)}
 								>
-									{it.question || "(no question)"}
+									{getQueuePreview(it)}
 								</div>
 							</div>
 							<div className="flex items-center gap-2 flex-none">

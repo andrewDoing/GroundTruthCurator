@@ -8,8 +8,8 @@ from app.services.duplicate_detection_service import (
     detect_duplicates_for_item,
     detect_duplicates_for_bulk_items,
 )
-from app.domain.models import GroundTruthItem
 from app.domain.enums import GroundTruthStatus
+from tests.test_helpers import make_test_entry
 
 
 def test_normalize_text_basic():
@@ -28,9 +28,9 @@ def test_normalize_text_none_and_empty():
 
 def test_get_question_text_edited_preferred():
     """Test that edited question is preferred over synth question."""
-    item = GroundTruthItem(
+    item = make_test_entry(
         id="test-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="Original question",
         edited_question="Edited question",
         status=GroundTruthStatus.draft,
@@ -40,9 +40,9 @@ def test_get_question_text_edited_preferred():
 
 def test_get_question_text_synth_fallback():
     """Test fallback to synth question when edited is missing."""
-    item = GroundTruthItem(
+    item = make_test_entry(
         id="test-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="Original question",
         status=GroundTruthStatus.draft,
     )
@@ -51,15 +51,15 @@ def test_get_question_text_synth_fallback():
 
 def test_items_are_duplicates_exact_question_match():
     """Test detection of exact question match."""
-    draft = GroundTruthItem(
+    draft = make_test_entry(
         id="draft-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="What is the capital of France?",
         status=GroundTruthStatus.draft,
     )
-    approved = GroundTruthItem(
+    approved = make_test_entry(
         id="approved-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="WHAT IS THE CAPITAL OF FRANCE?",  # Different case
         status=GroundTruthStatus.approved,
     )
@@ -71,16 +71,16 @@ def test_items_are_duplicates_exact_question_match():
 
 def test_items_are_duplicates_question_and_answer_match():
     """Test detection with both question and answer match."""
-    draft = GroundTruthItem(
+    draft = make_test_entry(
         id="draft-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="What is 2+2?",
         answer="The answer is 4",
         status=GroundTruthStatus.draft,
     )
-    approved = GroundTruthItem(
+    approved = make_test_entry(
         id="approved-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="what is 2+2?",
         answer="THE ANSWER IS 4",
         status=GroundTruthStatus.approved,
@@ -93,15 +93,15 @@ def test_items_are_duplicates_question_and_answer_match():
 
 def test_items_are_duplicates_whitespace_normalized():
     """Test that whitespace differences don't prevent match."""
-    draft = GroundTruthItem(
+    draft = make_test_entry(
         id="draft-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="What   is\n\nthe    answer?",
         status=GroundTruthStatus.draft,
     )
-    approved = GroundTruthItem(
+    approved = make_test_entry(
         id="approved-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="What is the answer?",
         status=GroundTruthStatus.approved,
     )
@@ -113,15 +113,15 @@ def test_items_are_duplicates_whitespace_normalized():
 
 def test_items_are_not_duplicates_different_questions():
     """Test that different questions are not flagged."""
-    draft = GroundTruthItem(
+    draft = make_test_entry(
         id="draft-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="What is the capital of France?",
         status=GroundTruthStatus.draft,
     )
-    approved = GroundTruthItem(
+    approved = make_test_entry(
         id="approved-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="What is the capital of Germany?",
         status=GroundTruthStatus.approved,
     )
@@ -133,15 +133,15 @@ def test_items_are_not_duplicates_different_questions():
 
 def test_items_are_not_duplicates_missing_question():
     """Test that items without questions are not flagged."""
-    draft = GroundTruthItem(
+    draft = make_test_entry(
         id="draft-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="",
         status=GroundTruthStatus.draft,
     )
-    approved = GroundTruthItem(
+    approved = make_test_entry(
         id="approved-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="What is the answer?",
         status=GroundTruthStatus.approved,
     )
@@ -152,22 +152,22 @@ def test_items_are_not_duplicates_missing_question():
 
 def test_detect_duplicates_for_item_finds_match():
     """Test detecting duplicates for a single item."""
-    draft = GroundTruthItem(
+    draft = make_test_entry(
         id="draft-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="What is Python?",
         status=GroundTruthStatus.draft,
     )
     approved_items = [
-        GroundTruthItem(
+        make_test_entry(
             id="approved-1",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is Java?",
             status=GroundTruthStatus.approved,
         ),
-        GroundTruthItem(
+        make_test_entry(
             id="approved-2",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is Python?",
             status=GroundTruthStatus.approved,
         ),
@@ -182,16 +182,16 @@ def test_detect_duplicates_for_item_finds_match():
 
 def test_detect_duplicates_for_item_respects_max_results():
     """Test that max_results limit is enforced."""
-    draft = GroundTruthItem(
+    draft = make_test_entry(
         id="draft-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="Common question",
         status=GroundTruthStatus.draft,
     )
     approved_items = [
-        GroundTruthItem(
+        make_test_entry(
             id=f"approved-{i}",
-            datasetName="test",
+            dataset_name="test",
             synth_question="Common question",
             status=GroundTruthStatus.approved,
         )
@@ -204,22 +204,22 @@ def test_detect_duplicates_for_item_respects_max_results():
 
 def test_detect_duplicates_for_item_ignores_non_approved():
     """Test that non-approved items are ignored."""
-    draft = GroundTruthItem(
+    draft = make_test_entry(
         id="draft-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="What is the answer?",
         status=GroundTruthStatus.draft,
     )
     other_items = [
-        GroundTruthItem(
+        make_test_entry(
             id="draft-2",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is the answer?",
             status=GroundTruthStatus.draft,  # Not approved
         ),
-        GroundTruthItem(
+        make_test_entry(
             id="deleted-1",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is the answer?",
             status=GroundTruthStatus.deleted,  # Not approved
         ),
@@ -231,9 +231,9 @@ def test_detect_duplicates_for_item_ignores_non_approved():
 
 def test_detect_duplicates_for_item_ignores_self():
     """Test that an item is not flagged as duplicate of itself."""
-    item = GroundTruthItem(
+    item = make_test_entry(
         id="same-id",
-        datasetName="test",
+        dataset_name="test",
         synth_question="What is the answer?",
         status=GroundTruthStatus.approved,
     )
@@ -246,29 +246,29 @@ def test_detect_duplicates_for_item_ignores_self():
 def test_detect_duplicates_for_bulk_items():
     """Test bulk duplicate detection."""
     draft_items = [
-        GroundTruthItem(
+        make_test_entry(
             id="draft-1",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is Python?",
             status=GroundTruthStatus.draft,
         ),
-        GroundTruthItem(
+        make_test_entry(
             id="draft-2",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is Java?",
             status=GroundTruthStatus.draft,
         ),
     ]
     approved_items = [
-        GroundTruthItem(
+        make_test_entry(
             id="approved-1",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is Python?",
             status=GroundTruthStatus.approved,
         ),
-        GroundTruthItem(
+        make_test_entry(
             id="approved-2",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is C++?",
             status=GroundTruthStatus.approved,
         ),
@@ -283,23 +283,23 @@ def test_detect_duplicates_for_bulk_items():
 def test_detect_duplicates_for_bulk_items_only_checks_drafts():
     """Test that only draft items are checked for duplicates."""
     items = [
-        GroundTruthItem(
+        make_test_entry(
             id="approved-new",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is Python?",
             status=GroundTruthStatus.approved,  # Not a draft
         ),
-        GroundTruthItem(
+        make_test_entry(
             id="draft-1",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is Java?",
             status=GroundTruthStatus.draft,
         ),
     ]
     approved_items = [
-        GroundTruthItem(
+        make_test_entry(
             id="approved-1",
-            datasetName="test",
+            dataset_name="test",
             synth_question="What is Python?",
             status=GroundTruthStatus.approved,
         ),
@@ -330,16 +330,16 @@ def test_duplicate_warning_model():
 
 def test_detect_duplicates_uses_edited_question():
     """Test that edited question is used when present."""
-    draft = GroundTruthItem(
+    draft = make_test_entry(
         id="draft-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="Original question",
         edited_question="What is the edited question?",
         status=GroundTruthStatus.draft,
     )
-    approved = GroundTruthItem(
+    approved = make_test_entry(
         id="approved-1",
-        datasetName="test",
+        dataset_name="test",
         synth_question="Different original",
         edited_question="What is the edited question?",
         status=GroundTruthStatus.approved,
@@ -348,3 +348,51 @@ def test_detect_duplicates_uses_edited_question():
     warnings = detect_duplicates_for_item(draft, [approved])
     assert len(warnings) == 1
     assert warnings[0].duplicate_id == "approved-1"
+
+
+def test_detect_duplicates_for_generic_history_match():
+    draft = make_test_entry(
+        id="draft-1",
+        dataset_name="test",
+        status=GroundTruthStatus.draft,
+        history=[
+            {"role": "user", "msg": "Summarize the incident"},
+            {"role": "assistant", "msg": "The service restarted automatically."},
+        ],
+    )
+    approved = make_test_entry(
+        id="approved-1",
+        dataset_name="test",
+        status=GroundTruthStatus.approved,
+        history=[
+            {"role": "user", "msg": "Summarize the incident"},
+            {"role": "assistant", "msg": "The service restarted automatically."},
+        ],
+    )
+
+    warnings = detect_duplicates_for_item(draft, [approved])
+    assert len(warnings) == 1
+    assert warnings[0].match_reason == "exact question and answer match"
+
+
+def test_detect_duplicates_for_generic_structured_fields_match():
+    draft = make_test_entry(
+        id="draft-1",
+        dataset_name="test",
+        status=GroundTruthStatus.draft,
+        contextEntries=[{"key": "customerEmail", "value": "alice@example.com"}],
+        toolCalls=[{"name": "lookup_customer", "response": {"ticket": "INC-42"}}],
+        tracePayload={"ticketSummary": "Needs escalation"},
+    )
+    approved = make_test_entry(
+        id="approved-1",
+        dataset_name="test",
+        status=GroundTruthStatus.approved,
+        contextEntries=[{"key": "customerEmail", "value": "alice@example.com"}],
+        toolCalls=[{"name": "lookup_customer", "response": {"ticket": "INC-42"}}],
+        tracePayload={"ticketSummary": "Needs escalation"},
+    )
+
+    warnings = detect_duplicates_for_item(draft, [approved])
+    assert len(warnings) == 1
+    assert warnings[0].match_reason == "exact generic fields match"

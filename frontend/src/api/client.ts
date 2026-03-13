@@ -1,4 +1,5 @@
 import createClient from "openapi-fetch";
+import { prefixAppBasePath } from "../services/http";
 import type { paths } from "./generated";
 
 // Typed OpenAPI client configured for our backend
@@ -12,7 +13,19 @@ const defaultHeaders = (() => {
 
 // Wrap fetch to ensure JSON payloads are emitted as UTF-8 with charset declared.
 // We do NOT manually craft \uXXXX sequences; we rely on JSON.stringify and send bytes as-is.
+function withAppBasePath(input: RequestInfo | URL): RequestInfo | URL {
+	if (typeof input === "string") {
+		return prefixAppBasePath(input);
+	}
+	if (typeof Request !== "undefined" && input instanceof Request) {
+		const nextUrl = prefixAppBasePath(input.url);
+		return nextUrl === input.url ? input : new Request(nextUrl, input);
+	}
+	return input;
+}
+
 const utf8JsonFetch: typeof fetch = (input, init) => {
+	const resolvedInput = withAppBasePath(input);
 	if (init && init.body != null) {
 		const hdrs = new Headers(init.headers as HeadersInit | undefined);
 		const contentType = hdrs.get("Content-Type") || hdrs.get("content-type");
@@ -32,7 +45,7 @@ const utf8JsonFetch: typeof fetch = (input, init) => {
 				init.body instanceof ArrayBuffer
 			) {
 				// Already a binary payload; leave it alone
-				return fetch(input, { ...init, headers: hdrs });
+				return fetch(resolvedInput, { ...init, headers: hdrs });
 			} else {
 				try {
 					// Best effort stringify
@@ -41,17 +54,17 @@ const utf8JsonFetch: typeof fetch = (input, init) => {
 					);
 				} catch {
 					// Fall back to default
-					return fetch(input, { ...init, headers: hdrs });
+					return fetch(resolvedInput, { ...init, headers: hdrs });
 				}
 			}
 			// Send as Blob with explicit type to avoid any implicit re-encoding quirks
 			const blob = new Blob([bodyStr], {
 				type: hdrs.get("Content-Type") || "application/json; charset=utf-8",
 			});
-			return fetch(input, { ...init, headers: hdrs, body: blob });
+			return fetch(resolvedInput, { ...init, headers: hdrs, body: blob });
 		}
 	}
-	return fetch(input, init as RequestInit);
+	return fetch(resolvedInput, init as RequestInit);
 };
 
 export const client = createClient<paths>({

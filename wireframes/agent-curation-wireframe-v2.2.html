@@ -1,0 +1,2100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ground Truth Curator — Agentic Curation Wireframe</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        violet: {
+          50: '#f5f3ff', 100: '#ede9fe', 200: '#ddd6fe', 300: '#c4b5fd',
+          400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9',
+          800: '#5b21b6', 900: '#4c1d95',
+        }
+      }
+    }
+  }
+}
+</script>
+<style>
+  [x-cloak] { display: none !important; }
+  .line-clamp-1 { overflow: hidden; display: -webkit-box; line-clamp: 1; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+  .line-clamp-2 { overflow: hidden; display: -webkit-box; line-clamp: 2; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #c4b5fd; border-radius: 3px; }
+
+  /* Resizable gutter for split pane */
+  .gutter { cursor: col-resize; user-select: none; transition: background 0.15s; }
+  .gutter:hover, .gutter.dragging { background: #7c3aed !important; }
+
+  /* Evidence drawer for mobile */
+  .evidence-drawer { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  .evidence-drawer.closed { transform: translateX(100%); }
+
+  /* Cross-reference flash highlight */
+  @keyframes flash-highlight {
+    0% { background: #ede9fe; }
+    100% { background: transparent; }
+  }
+  .flash-ref { animation: flash-highlight 1.2s ease-out; }
+</style>
+</head>
+<body class="bg-gradient-to-b from-violet-50 via-white to-white text-slate-900 h-screen overflow-hidden">
+
+<div id="app"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// DUMMY DATA — Agentic Ground Truth Schema (ADR-045)
+// ═══════════════════════════════════════════════════════════════
+
+const AVAILABLE_TAGS = [
+  'domain:billing', 'domain:connectivity', 'domain:account', 'domain:device',
+  'intent:troubleshoot', 'intent:informational', 'intent:action-request',
+  'quality:high', 'quality:medium', 'quality:low',
+  'custom:needs-review', 'custom:edge-case',
+];
+
+function createDummyItems() {
+  return [
+    {
+      id: 'GT-0001',
+      datasetName: 'synthetic-agent-evals',
+      status: 'draft',
+      deleted: false,
+      schemaVersion: 'v3',
+      history: [
+        { role: 'user', msg: "Synthia cannot keep her learning tablet connected to the holo-wifi. She needs a clear reason and next step." },
+        { role: 'orchestrator-agent', msg: "The synthetic triage flow shows the wifi hub throttled traffic after repeated firmware retries. Recommend toggling adaptive mode and pausing background syncs." },
+        { role: 'output-agent', msg: "Status: Active. Device: HoloTab Mini 9. Connection: sandbox-wifi-42. Root cause: auto-updates saturating demo network. Resolution: enable adaptive mode + pause download queue." },
+      ],
+      groundingDataSummary: 'Fictional learner profile inside the demo sandbox where adaptive throttling activated during queued updates.',
+      evaluationCriteria: [
+        { agent: 'orchestrator-agent', contains: ['adaptive mode', 'demo network'], notContains: ['live customer data'], semanticInstructions: 'Keep explanations sandbox-only and call out throttling clearly.' },
+        { agent: 'output-agent', contains: ['Root cause', 'Resolution'], notContains: ['ticket'], semanticInstructions: 'Use concise paragraphs with neutral tone.' },
+      ],
+      manualTags: ['demo:connectivity', 'priority:medium'],
+      computedTags: ['quality:placeholder'],
+      comment: 'Synthetic QA sample for UI smoke tests.',
+      metadata: {
+        traceIds: { conversationId: 'SYNTH-CONVO-0001', sessionId: 'SYNTH-SESSION-0001' },
+        userFeedback: { issueResolved: true, feedbackText: 'Placeholder thumbs up', rating: 5 },
+        traceSource: { agentVersion: 'sandbox-bot-v0.3', environment: 'demo-sandbox' },
+      },
+      trace: {
+        id: 'SYNTH-TRACE-0001',
+        cid_list: ['SYNTH-CID-0001'],
+        uid: 'demo-user-0001',
+        impacted_device_type: 'virtual-line',
+        impacted_device: 'demo-line-0001',
+        metric_name: 'demo feedback',
+        type: 'praise',
+        comment: 'All data below is fictional for UI testing.',
+        additional_feedback: {
+          'Resolution clarity': 2,
+          'Steps reproducible': 2,
+          'Tone friendly': 2,
+          'Data sufficient': 2,
+        },
+        resolution: 'Learner resumed class after adaptive toggle.',
+        feedback_date: 1771405033,
+        feedback_datetime_utc: '2026-02-18T08:57:13+00:00',
+        chat_history: [{
+          user_query: 'Tablet keeps dropping off demo wifi.',
+          chat_response: 'Adaptive throttling engaged after queued downloads. Pause the sync queue, reboot the tablet, and resume one update at a time.',
+          context: [
+            { id: 'gt1-tool-01', run_id: 'SYNTH-RUN-0001', function_name: 'demo_signal_probe', function_arguments: "subject='demo-line-0001'", function_result: '{"signal":"stable","latencyMs":32}', execution_time: '0.42' },
+            { id: 'gt1-tool-02', run_id: 'SYNTH-RUN-0001', function_name: 'demo_plan_lookup', function_arguments: "subject='demo-line-0001'", function_result: '{"planTier":"adaptive-lite","throttleAfterMb":5120}', execution_time: '0.35' },
+            { id: 'gt1-tool-03', run_id: 'SYNTH-RUN-0001', function_name: 'demo_usage_summary', function_arguments: "window='7d'", function_result: '{"usageMb":5120,"peaks":["19:00Z"]}', execution_time: '0.18' },
+          ],
+          rca: 'Throttle triggered because queued updates saturated the sandbox router.',
+        }],
+      },
+    },
+    {
+      id: 'GT-0002',
+      datasetName: 'synthetic-agent-evals',
+      status: 'in-review',
+      deleted: false,
+      schemaVersion: 'v3',
+      history: [
+        { role: 'user', msg: "Demo resident wonders why auto-pay emailed a warning even though credits remain." },
+        { role: 'orchestrator-agent', msg: "Ledger review shows the autopay run occurred during a sandbox maintenance window; the dry-run snapshot momentarily showed zero credits even though the live pull succeeded." },
+        { role: 'output-agent', msg: "Account: Synth-Residency-447. Auto-pay pipeline: delayed < 1 min. Action: none; send reassurance explaining timing." },
+      ],
+      groundingDataSummary: 'Sandbox wallet triggered a caution email because a dry-run saw stale ledger data for forty seconds.',
+      evaluationCriteria: [
+        { agent: 'orchestrator-agent', contains: ['maintenance window'], notContains: ['escalation'], semanticInstructions: 'Highlight synthetic timing offsets only.' },
+        { agent: 'output-agent', contains: ['Action'], notContains: ['panic'], semanticInstructions: 'Deliver precise reassurance with simple status labels.' },
+      ],
+      manualTags: ['demo:billing', 'priority:low'],
+      computedTags: ['quality:placeholder'],
+      comment: 'Synthetic ledger scenario; public-safe demo data.',
+      metadata: {
+        traceIds: { conversationId: 'SYNTH-CONVO-0002', sessionId: 'SYNTH-SESSION-0002' },
+        userFeedback: { issueResolved: true, feedbackText: 'Thanks for confirming auto-pay!', rating: 5 },
+        traceSource: { agentVersion: 'sandbox-bot-v0.3', environment: 'demo-sandbox' },
+      },
+      trace: {
+        id: 'SYNTH-TRACE-0002',
+        cid_list: ['SYNTH-CID-0002'],
+        uid: 'demo-user-0002',
+        impacted_device_type: 'virtual-ledger',
+        impacted_device: 'demo-wallet-0002',
+        metric_name: 'demo feedback',
+        type: 'info',
+        comment: 'Fictional entries for UI only.',
+        additional_feedback: {
+          'Resolution clarity': 2,
+          'Steps reproducible': 1,
+          'Tone friendly': 2,
+          'Data sufficient': 2,
+        },
+        resolution: 'Explained that the warning was informational.',
+        feedback_date: 1771500000,
+        feedback_datetime_utc: '2026-02-19T08:00:00+00:00',
+        chat_history: [{
+          user_query: 'Auto-pay warning even though credits exist.',
+          chat_response: 'Maintenance window triggered a temporary warning; payment succeeded automatically.',
+          context: [
+            { id: 'gt2-tool-01', run_id: 'SYNTH-RUN-0002', function_name: 'demo_ledger_snapshot', function_arguments: "account='Synth-Residency-447'", function_result: '{"balanceCredits":120,"status":"posted"}', execution_time: '0.29' },
+            { id: 'gt2-tool-02', run_id: 'SYNTH-RUN-0002', function_name: 'demo_autopay_audit', function_arguments: "account='Synth-Residency-447'", function_result: '{"attemptTimestamp":"2026-02-19T07:59:00Z","state":"completed"}', execution_time: '0.31' },
+            { id: 'gt2-tool-03', run_id: 'SYNTH-RUN-0002', function_name: 'demo_notification_log', function_arguments: "type='warning'", function_result: '{"emailsSent":1,"reason":"maintenance-dry-run"}', execution_time: '0.22' },
+          ],
+          rca: 'Dry-run snapshot lacked the latest ledger row, so the notifier erred on the side of caution.',
+        }],
+      },
+    },
+    {
+      id: 'GT-0003',
+      datasetName: 'synthetic-agent-evals',
+      status: 'draft',
+      deleted: false,
+      schemaVersion: 'v3',
+      history: [
+        { role: 'user', msg: "Demo curator asks whether the SwitchFlex plan keeps timeline editing after migrating seats." },
+        { role: 'orchestrator-agent', msg: "Synthetic entitlement grid shows SwitchFlex retains editing but requires a nightly re-index of references before approval resumes." },
+        { role: 'output-agent', msg: "Summary: SwitchFlex keeps timeline editing. Action: schedule autop migration and review re-index report in the morning." },
+      ],
+      groundingDataSummary: 'SwitchFlex is a fictional plan used purely for UI training; migration pauses reference lookups for one job cycle.',
+      evaluationCriteria: [
+        { agent: 'orchestrator-agent', contains: ['re-index'], notContains: ['downtime'], semanticInstructions: 'Emphasize automation instead of manual lifts.' },
+        { agent: 'output-agent', contains: ['Action'], notContains: ['backlog'], semanticInstructions: 'Offer a single clear step in declarative voice.' },
+      ],
+      manualTags: ['demo:upgrade', 'priority:medium'],
+      computedTags: ['quality:placeholder'],
+      comment: 'Synthetic upgrade inquiry.',
+      metadata: {
+        traceIds: { conversationId: 'SYNTH-CONVO-0003', sessionId: 'SYNTH-SESSION-0003' },
+        userFeedback: { issueResolved: true, feedbackText: 'Great, thanks!', rating: 4 },
+        traceSource: { agentVersion: 'sandbox-bot-v0.3', environment: 'demo-sandbox' },
+      },
+      trace: {
+        id: 'SYNTH-TRACE-0003',
+        cid_list: ['SYNTH-CID-0003'],
+        uid: 'demo-user-0003',
+        impacted_device_type: 'virtual-plan',
+        impacted_device: 'demo-seat-0003',
+        metric_name: 'demo feedback',
+        type: 'info',
+        comment: 'Entire payload fabricated for design discussion.',
+        additional_feedback: {
+          'Resolution clarity': 2,
+          'Steps reproducible': 2,
+          'Tone friendly': 2,
+          'Data sufficient': 1,
+        },
+        resolution: 'Migration scheduled with reminder to verify re-index job.',
+        feedback_date: 1771600000,
+        feedback_datetime_utc: '2026-02-20T08:00:00+00:00',
+        chat_history: [{
+          user_query: 'Does SwitchFlex keep editing?',
+          chat_response: 'Yes. A nightly re-index syncs references, so expect a brief read-only window.',
+          context: [
+            { id: 'gt3-tool-01', run_id: 'SYNTH-RUN-0003', function_name: 'demo_plan_matrix', function_arguments: "plan='SwitchFlex'", function_result: '{"supportsTimelineEditing":true}', execution_time: '0.26' },
+            { id: 'gt3-tool-02', run_id: 'SYNTH-RUN-0003', function_name: 'demo_usage_heatmap', function_arguments: "plan='SwitchFlex'", function_result: '{"activeSeats":42,"inactiveSeats":3}', execution_time: '0.30' },
+            { id: 'gt3-tool-03', run_id: 'SYNTH-RUN-0003', function_name: 'demo_contract_rules', function_arguments: "plan='SwitchFlex'", function_result: '{"reindexHours":["02:00Z"]}', execution_time: '0.21' },
+          ],
+          rca: 'Re-index job temporarily locks editing, but retains access afterward.',
+        }],
+      },
+    },
+    {
+      id: 'GT-0004',
+      datasetName: 'synthetic-curation-lab',
+      status: 'draft',
+      deleted: false,
+      schemaVersion: 'v3',
+      history: [
+        { role: 'user', msg: "Placeholder supervisor wants a refund summary for a training session that was never charged." },
+        { role: 'orchestrator-agent', msg: "Sandbox ledger shows no invoice; respond with a synthetic explanation and mark as informational." },
+        { role: 'output-agent', msg: "No charge found in sandbox ledger. Action: reassure supervisor that no refund is necessary." },
+      ],
+      groundingDataSummary: 'Fictional supervisor scenario reminding curators to verify ledgers before promising refunds.',
+      evaluationCriteria: [
+        { agent: 'orchestrator-agent', contains: ['no invoice'], notContains: ['real account'], semanticInstructions: 'Keep it obviously hypothetical.' },
+      ],
+      manualTags: ['demo:refund'],
+      computedTags: [],
+      comment: 'Synthetic reminder card.',
+      metadata: {
+        traceIds: { conversationId: 'SYNTH-CONVO-0004', sessionId: 'SYNTH-SESSION-0004' },
+        userFeedback: null,
+        traceSource: { agentVersion: 'sandbox-bot-v0.3', environment: 'demo-sandbox' },
+      },
+      trace: {
+        id: 'SYNTH-TRACE-0004',
+        cid_list: ['SYNTH-CID-0004'],
+        uid: 'demo-user-0004',
+        impacted_device_type: 'virtual-ledger',
+        impacted_device: 'demo-ledger-0004',
+        metric_name: 'demo feedback',
+        type: 'note',
+        comment: 'Synthetic placeholder trace.',
+        additional_feedback: {},
+        resolution: 'Explained nothing was billed.',
+        feedback_date: 1771700000,
+        feedback_datetime_utc: '2026-02-21T08:00:00+00:00',
+        chat_history: [{
+          user_query: 'Need refund?',
+          chat_response: 'No billing event exists in the sandbox ledger, so a refund is unnecessary.',
+          context: [
+            { id: 'gt4-tool-01', run_id: 'SYNTH-RUN-0004', function_name: 'demo_invoice_lookup', function_arguments: "invoice='demo-void-0004'", function_result: '{"found":false}', execution_time: '0.19' },
+          ],
+          rca: 'Ledger empty; refund request purely informational.',
+        }],
+      },
+    },
+    {
+      id: 'GT-0005',
+      datasetName: 'synthetic-curation-lab',
+      status: 'draft',
+      deleted: true,
+      schemaVersion: 'v3',
+      history: [
+        { role: 'user', msg: "Archived example showing how deleted items appear in the UI." },
+        { role: 'orchestrator-agent', msg: "Marking for deletion to simulate moderation clean-up." },
+        { role: 'output-agent', msg: "Record hidden from assignment queue; no action required." },
+      ],
+      groundingDataSummary: 'Demonstrates UI for deleted rows.',
+      evaluationCriteria: [],
+      manualTags: [],
+      computedTags: [],
+      comment: 'Tombstone sample.',
+      metadata: {
+        traceIds: { conversationId: 'SYNTH-CONVO-0005', sessionId: 'SYNTH-SESSION-0005' },
+        userFeedback: null,
+        traceSource: { agentVersion: 'sandbox-bot-v0.3', environment: 'demo-sandbox' },
+      },
+      trace: {
+        id: 'SYNTH-TRACE-0005',
+        cid_list: ['SYNTH-CID-0005'],
+        uid: 'demo-user-0005',
+        impacted_device_type: 'virtual-line',
+        impacted_device: 'demo-line-0005',
+        metric_name: 'demo feedback',
+        type: 'note',
+        comment: 'Deleted example with minimal content.',
+        additional_feedback: {},
+        resolution: 'Record hidden.',
+        feedback_date: 1771800000,
+        feedback_datetime_utc: '2026-02-22T08:00:00+00:00',
+        chat_history: [{
+          user_query: 'Why is this deleted?',
+          chat_response: 'This sample was removed to keep the queue focused on newer artifacts.',
+          context: [],
+          rca: 'Intentional archival.',
+        }],
+      },
+    },
+    {
+      id: 'GT-0006',
+      datasetName: 'synthetic-agent-evals',
+      status: 'ready',
+      deleted: false,
+      schemaVersion: 'v3',
+      history: [
+        { role: 'user', msg: "Sample duplicate of GT-0001 to show comparison tooling." },
+        { role: 'orchestrator-agent', msg: "Sandbox duplication detected; keep entry for reviewers to practice merging decisions." },
+        { role: 'output-agent', msg: "Marked as duplicate. Action: reference GT-0001 reasoning and keep metadata aligned." },
+      ],
+      groundingDataSummary: 'Shows how duplicates inherit context while remaining obviously synthetic.',
+      evaluationCriteria: [
+        { agent: 'orchestrator-agent', contains: ['duplicate'], notContains: ['trace labels'], semanticInstructions: 'Point reviewers to the canonical record.' },
+      ],
+      manualTags: ['demo:duplicate'],
+      computedTags: ['quality:placeholder'],
+      comment: 'Duplicate of GT-0001 within sandbox.',
+      metadata: {
+        traceIds: { conversationId: 'SYNTH-CONVO-0006', sessionId: 'SYNTH-SESSION-0006' },
+        userFeedback: null,
+        traceSource: { agentVersion: 'sandbox-bot-v0.3', environment: 'demo-sandbox' },
+      },
+      trace: {
+        id: 'SYNTH-TRACE-0006',
+        cid_list: ['SYNTH-CID-0006'],
+        uid: 'demo-user-0006',
+        impacted_device_type: 'virtual-line',
+        impacted_device: 'demo-line-0006',
+        metric_name: 'demo feedback',
+        type: 'note',
+        comment: 'Duplicate practice item.',
+        additional_feedback: {},
+        resolution: 'Linked to GT-0001.',
+        feedback_date: 1771900000,
+        feedback_datetime_utc: '2026-02-23T08:00:00+00:00',
+        chat_history: [{
+          user_query: 'Why duplicate?',
+          chat_response: 'Maintains parity with canonical sandbox case for reviewer drills.',
+          context: [
+            { id: 'gt6-tool-01', run_id: 'SYNTH-RUN-0006', function_name: 'demo_duplicate_scan', function_arguments: "candidate='GT-0006'", function_result: '{"match":"GT-0001","confidence":0.98}', execution_time: '0.25' },
+            { id: 'gt6-tool-02', run_id: 'SYNTH-RUN-0006', function_name: 'demo_metadata_compare', function_arguments: "left='GT-0001' right='GT-0006'", function_result: '{"fieldsAligned":true}', execution_time: '0.27' },
+            { id: 'gt6-tool-03', run_id: 'SYNTH-RUN-0006', function_name: 'demo_resolution_log', function_arguments: "source='duplicate-lab'", function_result: '{"action":"link-only"}', execution_time: '0.19' },
+          ],
+          rca: 'Duplicate retained for reviewer practice only.',
+        }],
+      },
+    },
+  ];
+}
+
+const DEFAULT_REQUIRED_TOOL = {
+  'GT-0001': 'gt1-tool-02',
+  'GT-0002': 'gt2-tool-02',
+  'GT-0003': 'gt3-tool-02',
+  'GT-0006': 'gt6-tool-02',
+};
+
+function getTraceContextEntries(item) {
+  const trace = item && item.trace;
+  return trace && trace.chat_history && trace.chat_history[0] ? (trace.chat_history[0].context || []) : [];
+}
+
+function hydrateItem(item) {
+  item.userContextEntries = Array.isArray(item.userContextEntries)
+    ? item.userContextEntries
+    : (DEFAULT_USER_CONTEXT[item.id] ? DEFAULT_USER_CONTEXT[item.id].map(entry => ({ ...entry })) : []);
+
+  item.toolCallDecisions = item.toolCallDecisions ? { ...item.toolCallDecisions } : {};
+  const contextEntries = getTraceContextEntries(item);
+  for (const tc of contextEntries) {
+    if (!item.toolCallDecisions[tc.id]) item.toolCallDecisions[tc.id] = 'optional';
+  }
+
+  const requiredIds = Object.entries(item.toolCallDecisions)
+    .filter(([, decision]) => decision === 'required')
+    .map(([id]) => id);
+
+  if (requiredIds.length === 0 && DEFAULT_REQUIRED_TOOL[item.id]) {
+    item.toolCallDecisions[DEFAULT_REQUIRED_TOOL[item.id]] = 'required';
+  }
+
+  return item;
+}
+
+const DEFAULT_USER_CONTEXT = {
+  'GT-0001': [
+    { key: 'customer_segment', value: 'synthetic individual' },
+    { key: 'issue_type', value: 'connectivity demo' },
+  ],
+  'GT-0002': [
+    { key: 'plan_tier', value: 'sandbox autopay' },
+    { key: 'symptom_window', value: 'maintenance' },
+  ],
+  'GT-0003': [
+    { key: 'customer_intent', value: 'plan upgrade practice' },
+  ],
+};
+
+const TOOL_CALL_LAYOUTS = {
+  'GT-0001': {
+    'gt1-tool-01': { order: 1 },
+    'gt1-tool-02': { order: 2 },
+    'gt1-tool-03': { order: 3 },
+  },
+  'GT-0002': {
+    'gt2-tool-01': { order: 1 },
+    'gt2-tool-02': { order: 2 },
+    'gt2-tool-03': { order: 3 },
+  },
+  'GT-0003': {
+    'gt3-tool-01': { order: 1 },
+    'gt3-tool-02': { order: 2 },
+    'gt3-tool-03': { order: 3 },
+  },
+  'GT-0006': {
+    'gt6-tool-01': { order: 1 },
+    'gt6-tool-02': { order: 2 },
+    'gt6-tool-03': { order: 3 },
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+
+let state = {
+  items: createDummyItems().map(hydrateItem),
+  selectedId: 'GT-0001',
+  viewMode: 'curate',
+  sidebarOpen: true,
+  saving: false,
+  // Modal state
+  tagsModalOpen: false,
+  toolCallsExpanded: true,
+  // Toasts
+  toasts: [],
+  toastCounter: 0,
+  // Collapsed turns
+  collapsedTurns: new Set(),
+  // Editing turns
+  editingTurns: new Map(),
+  // Expanded tool call details
+  expandedToolCalls: new Set(),
+  // Evidence drawer for mobile split pane
+  evidenceDrawerOpen: false,
+  // Editor modal
+  editorOpen: false,
+  editorPrompt: '',
+  editorSuggestions: [],
+  editorManualMode: false,
+  editorManualTarget: 'orchestrator-agent',
+  editorManualText: '',
+};
+
+function getCurrent() {
+  return state.items.find(i => i.id === state.selectedId) || null;
+}
+
+function toast(kind, msg, duration = 3000) {
+  const id = ++state.toastCounter;
+  state.toasts.push({ id, kind, msg });
+  setTimeout(() => {
+    state.toasts = state.toasts.filter(t => t.id !== id);
+    render();
+  }, duration);
+  render();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VALIDATION
+// ═══════════════════════════════════════════════════════════════
+
+function validateHistory(history) {
+  if (!history || history.length === 0) return { valid: false, errors: ['Conversation must have at least one turn'] };
+  const errors = [];
+  if (history[0].role !== 'user') errors.push('First turn must be a user message');
+  const roles = history.map(t => t.role);
+  if (!roles.includes('output-agent')) errors.push('Missing output-agent response');
+  if (!roles.includes('orchestrator-agent')) errors.push('Missing orchestrator-agent response');
+  for (const t of history) {
+    if (!t.msg || t.msg.trim() === '') errors.push(`Empty message for ${t.role}`);
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+function canApprove(item) {
+  if (!item || item.deleted) return false;
+  const hist = item.history || [];
+  const hv = validateHistory(hist);
+  if (!hv.valid) return false;
+  return validateRequiredToolSelection(item).valid;
+}
+
+function getToolCallDecision(item, callId) {
+  return item && item.toolCallDecisions && item.toolCallDecisions[callId]
+    ? item.toolCallDecisions[callId]
+    : 'optional';
+}
+
+function getOrderedToolCalls(item) {
+  return getTraceContextEntries(item)
+    .map((tc, index) => {
+      const layout = (TOOL_CALL_LAYOUTS[item.id] && TOOL_CALL_LAYOUTS[item.id][tc.id]) || {};
+      return {
+        ...tc,
+        order: layout.order || (index + 1),
+        parallelGroup: layout.parallelGroup || null,
+        originalIndex: index,
+      };
+    })
+    .sort((left, right) => left.order - right.order || left.originalIndex - right.originalIndex);
+}
+
+function validateRequiredToolSelection(item) {
+  const orderedCalls = getOrderedToolCalls(item);
+  if (orderedCalls.length === 0) {
+    return { valid: false, error: 'Trace must contain at least one tool call' };
+  }
+
+  const requiredCount = orderedCalls.filter(tc => getToolCallDecision(item, tc.id) === 'required').length;
+  if (requiredCount >= 1) return { valid: true, error: '' };
+  return { valid: false, error: 'Mark at least one tool call as required' };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════════════
+
+function selectItem(id) {
+  state.selectedId = id;
+  state.collapsedTurns = new Set();
+  state.editingTurns = new Map();
+  state.expandedToolCalls = new Set();
+  state.toolCallsExpanded = true;
+  state.evidenceDrawerOpen = false;
+  state.editorOpen = false;
+  state.editorSuggestions = [];
+  state.editorManualMode = false;
+  render();
+}
+
+function updateTurnMsg(index, msg) {
+  const item = getCurrent();
+  if (!item) return;
+  item.history[index] = { ...item.history[index], msg };
+  render();
+}
+
+function setToolCallDecision(callId, decision) {
+  const item = getCurrent();
+  if (!item) return;
+  item.toolCallDecisions[callId] = decision;
+  render();
+}
+
+const DECISION_SEGMENTS = [
+  { value: 'required',   symbol: '★', label: '★ Required',   title: 'Needed to reach the correct answer',    activeClasses: 'bg-emerald-600 text-white shadow-sm', dotClasses: 'bg-emerald-600 text-white' },
+  { value: 'optional',   symbol: '○', label: '○ Optional',   title: 'Fine to call but not essential',         activeClasses: 'bg-sky-600 text-white shadow-sm',     dotClasses: 'bg-sky-600 text-white' },
+  { value: 'not-needed', symbol: '✕', label: '✕ Not needed',  title: 'Should not have been called',            activeClasses: 'bg-rose-600 text-white shadow-sm',    dotClasses: 'bg-rose-600 text-white' },
+];
+
+function renderMiniDecisionBadge(callId, selectedDecision) {
+  const seg = DECISION_SEGMENTS.find(s => s.value === selectedDecision) || DECISION_SEGMENTS[1];
+  return h('span', {
+    className: `inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold ${seg.dotClasses}`,
+    title: seg.title,
+    onclick: (e) => e.stopPropagation(),
+  }, seg.symbol);
+}
+
+function renderSegmentedToggle(callId, selectedDecision) {
+  const segments = DECISION_SEGMENTS;
+
+  const wrapper = h('div', {
+    className: 'inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5',
+    role: 'radiogroup',
+    'aria-label': 'Tool call relevance',
+  });
+
+  for (const seg of segments) {
+    const isActive = selectedDecision === seg.value;
+    wrapper.appendChild(h('button', {
+      type: 'button',
+      className: `relative select-none rounded-md px-3 py-1.5 text-xs font-semibold transition-all duration-150 ${
+        isActive
+          ? seg.activeClasses
+          : 'text-slate-500 hover:text-slate-700'
+      }`,
+      'aria-pressed': isActive ? 'true' : 'false',
+      title: seg.title,
+      onclick: () => setToolCallDecision(callId, seg.value),
+    }, seg.label));
+  }
+
+  return wrapper;
+}
+
+function addUserContextEntry() {
+  const item = getCurrent();
+  if (!item) return;
+  item.userContextEntries.push({ key: '', value: '' });
+  render();
+}
+
+function updateUserContextEntry(index, field, value) {
+  const item = getCurrent();
+  if (!item || !item.userContextEntries[index]) return;
+  item.userContextEntries[index][field] = value;
+  render();
+}
+
+function removeUserContextEntry(index) {
+  const item = getCurrent();
+  if (!item) return;
+  item.userContextEntries.splice(index, 1);
+  render();
+}
+
+function openEditor() {
+  const item = getCurrent();
+  if (!item) return;
+  const orchestratorTurn = (item.history || []).find(turn => turn.role === 'orchestrator-agent');
+  state.editorOpen = true;
+  state.editorPrompt = '';
+  state.editorSuggestions = [];
+  state.editorManualMode = false;
+  state.editorManualTarget = 'orchestrator-agent';
+  state.editorManualText = orchestratorTurn ? orchestratorTurn.msg : '';
+  render();
+}
+
+function closeEditor() {
+  state.editorOpen = false;
+  state.editorPrompt = '';
+  state.editorSuggestions = [];
+  state.editorManualMode = false;
+  state.editorManualTarget = 'orchestrator-agent';
+  state.editorManualText = '';
+  render();
+}
+
+function buildEditorSuggestions(item, prompt) {
+  const lowerPrompt = prompt.trim().toLowerCase();
+  const suggestions = [];
+  const orderedCalls = getOrderedToolCalls(item);
+
+  if (lowerPrompt.includes('required') || lowerPrompt.includes('tool')) {
+    const targetTool = orderedCalls.find(tc => /billing|outage|cellsector|comparison/i.test(tc.function_name)) || orderedCalls[0];
+    if (targetTool) {
+      suggestions.push({
+        type: 'toolDecision',
+        label: 'Required tool call',
+        callId: targetTool.id,
+        functionName: targetTool.function_name,
+        value: 'required',
+      });
+    }
+  }
+
+  if (lowerPrompt.includes('context')) {
+    suggestions.push({
+      type: 'userContext',
+      label: 'User context entry',
+      key: 'operator_note',
+      value: prompt.trim() || 'Needs curator review',
+    });
+  }
+
+  if (lowerPrompt.includes('output')) {
+    const turnIndex = (item.history || []).findIndex(turn => turn.role === 'output-agent');
+    if (turnIndex >= 0) {
+      suggestions.push({
+        type: 'turnEdit',
+        label: 'Output agent response',
+        turnIndex,
+        role: 'output-agent',
+        value: item.history[turnIndex].msg + '\n\nClarified per curator editor request.',
+      });
+    }
+  }
+
+  if (lowerPrompt.includes('orchestrator') || suggestions.length === 0) {
+    const turnIndex = (item.history || []).findIndex(turn => turn.role === 'orchestrator-agent');
+    if (turnIndex >= 0) {
+      suggestions.push({
+        type: 'turnEdit',
+        label: 'Orchestrator response',
+        turnIndex,
+        role: 'orchestrator-agent',
+        value: item.history[turnIndex].msg + '\n\nCurator edit pending confirmation.',
+      });
+    }
+  }
+
+  return suggestions;
+}
+
+function generateEditorSuggestions() {
+  const item = getCurrent();
+  if (!item) return;
+  state.editorSuggestions = buildEditorSuggestions(item, state.editorPrompt);
+  if (state.editorSuggestions.length === 0) {
+    toast('info', 'No editor suggestions generated');
+  }
+  render();
+}
+
+function updateEditorSuggestion(index, field, value) {
+  const suggestion = state.editorSuggestions[index];
+  if (!suggestion) return;
+  suggestion[field] = value;
+  render();
+}
+
+function applyEditorSuggestions() {
+  const item = getCurrent();
+  if (!item) return;
+
+  for (const suggestion of state.editorSuggestions) {
+    if (suggestion.type === 'toolDecision') {
+      setToolCallDecision(suggestion.callId, suggestion.value);
+      continue;
+    }
+
+    if (suggestion.type === 'userContext') {
+      item.userContextEntries.push({ key: suggestion.key, value: suggestion.value });
+      continue;
+    }
+
+    if (suggestion.type === 'turnEdit' && item.history[suggestion.turnIndex]) {
+      item.history[suggestion.turnIndex].msg = suggestion.value;
+    }
+  }
+
+  toast('success', 'Applied editor suggestions');
+  closeEditor();
+}
+
+function denyEditorSuggestions() {
+  state.editorSuggestions = [];
+  state.editorManualMode = false;
+  render();
+}
+
+function syncEditorManualTarget(target) {
+  const item = getCurrent();
+  state.editorManualTarget = target;
+  if (!item) {
+    state.editorManualText = '';
+    render();
+    return;
+  }
+  const turn = (item.history || []).find(entry => entry.role === target);
+  state.editorManualText = turn ? turn.msg : '';
+  render();
+}
+
+function applyManualEditorChange() {
+  const item = getCurrent();
+  if (!item) return;
+  const turnIndex = (item.history || []).findIndex(turn => turn.role === state.editorManualTarget);
+  if (turnIndex >= 0) {
+    item.history[turnIndex].msg = state.editorManualText;
+    toast('success', 'Manual edit applied');
+  }
+  render();
+}
+
+function saveDraft() {
+  const item = getCurrent();
+  if (!item) return;
+  state.saving = true;
+  render();
+  setTimeout(() => {
+    item.status = 'draft';
+    state.saving = false;
+    toast('success', `Saved ${item.id} as draft`);
+  }, 500);
+}
+
+function approveItem() {
+  const item = getCurrent();
+  if (!item || !canApprove(item)) return;
+  state.saving = true;
+  render();
+  setTimeout(() => {
+    item.status = 'approved';
+    state.saving = false;
+    toast('success', `Approved ${item.id}`);
+  }, 500);
+}
+
+function skipItem() {
+  const item = getCurrent();
+  if (!item) return;
+  item.status = 'skipped';
+  const idx = state.items.findIndex(i => i.id === item.id);
+  const next = idx < state.items.length - 1 ? state.items[idx + 1] : state.items[0];
+  state.selectedId = next.id;
+  toast('info', `Skipped ${item.id}`);
+}
+
+function deleteItem() {
+  const item = getCurrent();
+  if (!item) return;
+  item.deleted = true;
+  toast('info', `Marked ${item.id} as deleted`);
+}
+
+function restoreItem() {
+  const item = getCurrent();
+  if (!item) return;
+  item.deleted = false;
+  toast('success', `Restored ${item.id}`);
+}
+
+function duplicateItem() {
+  const item = getCurrent();
+  if (!item) return;
+  const newItem = JSON.parse(JSON.stringify(item));
+  newItem.id = 'GT-' + String(state.items.length + 1).padStart(4, '0');
+  newItem.status = 'draft';
+  newItem.deleted = false;
+  state.items.push(newItem);
+  state.selectedId = newItem.id;
+  toast('success', `Created duplicate ${newItem.id}`);
+}
+
+function updateComment(val) {
+  const item = getCurrent();
+  if (item) item.comment = val;
+  render();
+}
+
+function toggleEvidenceDrawer() {
+  state.evidenceDrawerOpen = !state.evidenceDrawerOpen;
+  render();
+}
+
+function toggleTag(tag) {
+  const item = getCurrent();
+  if (!item) return;
+  if (!item.manualTags) item.manualTags = [];
+  const idx = item.manualTags.indexOf(tag);
+  if (idx >= 0) item.manualTags.splice(idx, 1);
+  else item.manualTags.push(tag);
+  render();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+function h(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  if (tag === 'button' && !Object.prototype.hasOwnProperty.call(attrs, 'type')) {
+    el.type = 'button';
+  }
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'className') el.className = v;
+    else if (k === 'onclick' || k === 'onchange' || k === 'oninput' || k === 'onkeydown') el[k] = v;
+    else if (k === 'checked' || k === 'disabled' || k === 'selected') el[k] = Boolean(v);
+    else if (k === 'value') el.value = v;
+    else if (k === 'innerHTML') el.innerHTML = v;
+    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else el.setAttribute(k, v);
+  }
+  for (const c of children) {
+    if (typeof c === 'string') el.appendChild(document.createTextNode(c));
+    else if (c) el.appendChild(c);
+  }
+  return el;
+}
+
+function statusBadge(status, deleted) {
+  const colors = {
+    draft: 'bg-amber-100 text-amber-900',
+    approved: 'bg-emerald-100 text-emerald-900',
+    skipped: 'bg-slate-200 text-slate-800',
+    deleted: 'bg-rose-100 text-rose-900',
+  };
+  const frag = document.createDocumentFragment();
+  frag.appendChild(h('span', { className: `rounded-full px-2 py-0.5 text-xs font-medium ${colors[status] || ''}` }, status));
+  if (deleted && status !== 'deleted') {
+    frag.appendChild(h('span', { className: 'ml-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-900' }, 'deleted'));
+  }
+  return frag;
+}
+
+function roleBadge(role) {
+  const config = {
+    'user': { label: 'User', bg: 'bg-blue-500 text-white' },
+    'output-agent': { label: 'Output Agent', bg: 'bg-amber-500 text-white' },
+    'orchestrator-agent': { label: 'Orchestrator Agent', bg: 'bg-violet-500 text-white' },
+  };
+  const c = config[role] || { label: role, bg: 'bg-slate-500 text-white' };
+  return h('span', { className: `rounded-full px-3 py-1 text-xs font-medium ${c.bg}` }, c.label);
+}
+
+function renderMarkdown(text) {
+  if (!text) return '<span class="text-slate-400 italic">(empty)</span>';
+  // Process line-by-line for block-level elements
+  const lines = text.split('\n');
+  const result = [];
+  for (const line of lines) {
+    if (/^### (.+)$/.test(line)) {
+      result.push(line.replace(/^### (.+)$/, '<h3 class="text-sm font-bold text-slate-800 mt-3 mb-1">$1</h3>'));
+    } else if (/^## (.+)$/.test(line)) {
+      result.push(line.replace(/^## (.+)$/, '<h2 class="text-base font-bold text-slate-800 mt-3 mb-1">$1</h2>'));
+    } else if (/^# (.+)$/.test(line)) {
+      result.push(line.replace(/^# (.+)$/, '<h1 class="text-lg font-bold text-slate-800 mt-4 mb-1">$1</h1>'));
+    } else if (/^- (.+)$/.test(line)) {
+      result.push(line.replace(/^- (.+)$/, '<div class="ml-4 flex items-start gap-1.5"><span class="text-slate-400 mt-0.5">•</span><span>$1</span></div>'));
+    } else if (/^\d+\. (.+)$/.test(line)) {
+      result.push(line.replace(/^(\d+)\. (.+)$/, '<div class="ml-4 flex items-start gap-1.5"><span class="font-mono text-slate-500 shrink-0">$1.</span><span>$2</span></div>'));
+    } else {
+      result.push(line || '<br>');
+    }
+  }
+  return result.join('\n')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code class="rounded bg-slate-200 px-1 py-0.5 text-xs font-mono">$1</code>')
+    .replace(/"([^"]+)"/g, '&ldquo;$1&rdquo;');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════
+
+function renderHeader() {
+  const header = h('header', { className: 'sticky top-0 z-10 border-b bg-white/80 backdrop-blur' });
+  const inner = h('div', { className: 'mx-auto flex w-full flex-wrap items-center gap-3 px-4 py-3' });
+
+  inner.appendChild(h('div', { className: 'text-xl font-semibold' }, 'Ground Truth Curator ',
+    h('span', { className: 'ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900' }, 'AGENTIC WIREFRAME')
+  ));
+
+  const btns = h('div', { className: 'ml-auto flex flex-wrap items-center gap-2' });
+
+  // Evidence drawer toggle (mobile only)
+  if (window.innerWidth < 1024) {
+    btns.appendChild(h('button', {
+      className: 'rounded-xl border border-violet-300 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-50',
+      onclick: toggleEvidenceDrawer
+    }, '📋 Evidence'));
+  }
+
+  btns.appendChild(h('button', {
+    className: 'rounded-xl border px-3 py-1.5 text-sm hover:bg-violet-50',
+    onclick: () => { state.sidebarOpen = !state.sidebarOpen; render(); }
+  }, state.sidebarOpen ? 'Hide Sidebar' : 'Show Sidebar'));
+
+  btns.appendChild(h('button', {
+    className: 'rounded-xl border px-3 py-1.5 text-sm hover:bg-violet-50',
+    onclick: () => { state.viewMode = state.viewMode === 'curate' ? 'explorer' : 'curate'; render(); }
+  }, state.viewMode === 'curate' ? 'Explorer' : 'Back to Curation'));
+
+  btns.appendChild(h('button', {
+    className: 'rounded-xl border px-3 py-1.5 text-sm hover:bg-violet-50',
+    onclick: () => { state.viewMode = 'stats'; render(); }
+  }, 'Stats'));
+
+  inner.appendChild(btns);
+  header.appendChild(inner);
+  return header;
+}
+
+function renderQueueSidebar() {
+  const aside = h('aside', { className: 'self-start h-[calc(100vh-5.5rem)] rounded-2xl border bg-white p-3 shadow-sm flex flex-col overflow-hidden col-span-3' });
+
+  const headerRow = h('div', { className: 'mb-2 flex items-center justify-between' });
+  headerRow.appendChild(h('div', { className: 'font-medium' }, 'Queue'));
+  headerRow.appendChild(h('button', {
+    className: 'rounded-lg border px-2 py-1 text-xs hover:bg-violet-50',
+    onclick: () => toast('info', 'Refreshed queue')
+  }, '↻ Refresh'));
+  aside.appendChild(headerRow);
+
+  const list = h('div', { className: 'flex-1 min-h-0 overflow-auto pr-1 space-y-2' });
+
+  for (const item of state.items) {
+    const isSelected = state.selectedId === item.id;
+    const userMsg = (item.history || []).find(t => t.role === 'user');
+    const preview = userMsg ? userMsg.msg : '(no user message)';
+
+    const card = h('div', {
+      className: `w-full rounded-xl border p-3 text-left cursor-pointer hover:bg-violet-50 transition-colors ${isSelected ? 'border-violet-400 bg-violet-50' : ''} ${item.deleted ? 'opacity-60' : ''}`,
+      onclick: () => selectItem(item.id)
+    });
+
+    const top = h('div', { className: 'flex items-center justify-between gap-2' });
+    const left = h('div', { className: 'font-medium text-sm flex items-center gap-2 line-clamp-1' });
+    left.appendChild(h('span', {}, item.id));
+    const catTag = (item.computedTags || []).find(t => t.startsWith('category:'));
+    if (catTag) {
+      left.appendChild(h('span', { className: 'rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-800' }, catTag.replace('category:', '')));
+    }
+    if (item.deleted) {
+      left.appendChild(h('span', { className: 'rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-900' }, 'deleted'));
+    }
+    top.appendChild(left);
+
+    const badge = h('span', {});
+    badge.appendChild(statusBadge(item.status, false));
+    top.appendChild(badge);
+    card.appendChild(top);
+
+    card.appendChild(h('div', { className: 'truncate text-xs text-slate-600 mt-1' }, preview));
+    list.appendChild(card);
+  }
+
+  aside.appendChild(list);
+
+  aside.appendChild(h('div', { className: 'pt-2 mt-2 border-t' },
+    h('button', {
+      className: 'w-full rounded-xl border border-violet-300 bg-violet-600 px-3 py-2 text-sm text-white shadow hover:bg-violet-700',
+      onclick: () => toast('info', 'Self-serve: would request more items')
+    }, 'Request More (Self-serve)')
+  ));
+
+  return aside;
+}
+
+// ── Conversation Turn ──────────────────────────────────────────
+
+function renderConversationTurn(turn, index, item) {
+  const isUser = turn.role === 'user';
+  const isCollapsed = state.collapsedTurns.has(index);
+  const isEditing = state.editingTurns.has(index);
+
+  const borderColor = {
+    'user': 'border-blue-200 bg-blue-50',
+    'output-agent': 'border-amber-200 bg-amber-50',
+    'orchestrator-agent': 'border-violet-200 bg-violet-50',
+  }[turn.role] || 'border-slate-200 bg-slate-50';
+
+  const div = h('div', { className: `mb-3 rounded-xl border p-4 ${borderColor}` });
+
+  // Header row
+  const header = h('div', { className: 'mb-2 flex items-center justify-between flex-wrap gap-2' });
+  const leftGroup = h('div', { className: 'flex items-center gap-2 flex-wrap' });
+
+  leftGroup.appendChild(roleBadge(turn.role));
+
+  // Collapse/Expand
+  leftGroup.appendChild(h('button', {
+    className: 'ml-1 flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50',
+    onclick: () => { isCollapsed ? state.collapsedTurns.delete(index) : state.collapsedTurns.add(index); render(); }
+  }, isCollapsed ? '▸ Expand' : '▾ Collapse'));
+
+  header.appendChild(leftGroup);
+
+  // Edit buttons
+  const rightGroup = h('div', { className: 'flex items-center gap-1' });
+  if (!isEditing && !item.deleted) {
+    rightGroup.appendChild(h('button', {
+      className: 'flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-white',
+      onclick: () => { state.editingTurns.set(index, turn.msg); render(); }
+    }, '✏️ Edit'));
+  }
+  if (isEditing) {
+    rightGroup.appendChild(h('button', {
+      className: 'flex items-center gap-1 rounded-lg border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50',
+      onclick: () => { updateTurnMsg(index, state.editingTurns.get(index)); state.editingTurns.delete(index); render(); }
+    }, '✓ Save'));
+    rightGroup.appendChild(h('button', {
+      className: 'flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50',
+      onclick: () => { state.editingTurns.delete(index); render(); }
+    }, '✕ Cancel'));
+  }
+  header.appendChild(rightGroup);
+  div.appendChild(header);
+
+  // Content (collapsible)
+  if (!isCollapsed) {
+    if (isEditing) {
+      const ta = h('textarea', {
+        className: 'w-full rounded-lg border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300',
+        rows: '6',
+        oninput: (e) => state.editingTurns.set(index, e.target.value)
+      });
+      ta.value = state.editingTurns.get(index) || '';
+      div.appendChild(ta);
+    } else {
+      div.appendChild(h('div', { className: 'rounded-lg px-1 py-0.5 text-sm', innerHTML: renderMarkdown(turn.msg) }));
+    }
+  }
+
+  return div;
+}
+
+// ── Trace Data Panel ───────────────────────────────────────────
+
+function renderTracePanel(item) {
+  const container = h('div', { className: 'rounded-2xl border bg-white shadow-sm' });
+  const trace = item.trace;
+  const contextEntries = getOrderedToolCalls(item);
+
+  // Header (always visible, acts as toggle)
+  const header = h('div', {
+    className: 'flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50 rounded-2xl select-none',
+    onclick: () => { state.toolCallsExpanded = !state.toolCallsExpanded; render(); }
+  });
+
+  const headerLeft = h('div', { className: 'flex items-center gap-2 flex-wrap' });
+  headerLeft.appendChild(h('span', { className: 'text-sm font-medium text-slate-700' },
+    `📋 Trace Data (${contextEntries.length} tool calls)`
+  ));
+  if (trace) {
+    headerLeft.appendChild(h('span', {
+      className: `rounded-full px-2 py-0.5 text-xs font-medium ${trace.type === 'like' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`
+    }, trace.type === 'like' ? '👍 Positive' : '👎 Negative'));
+  }
+  header.appendChild(headerLeft);
+  header.appendChild(h('span', { className: 'text-xs text-slate-500' }, state.toolCallsExpanded ? '▾ Collapse' : '▸ Expand'));
+  container.appendChild(header);
+
+  if (!state.toolCallsExpanded) return container;
+
+  const content = h('div', { className: 'border-t px-4 pb-4 space-y-3' });
+
+  if (!trace) {
+    content.appendChild(h('div', { className: 'rounded-xl border border-slate-200 bg-slate-50 p-4 text-center mt-3' },
+      h('p', { className: 'text-sm text-slate-600' }, 'No trace data available for this ground truth.')
+    ));
+    container.appendChild(content);
+    return container;
+  }
+
+  // Trace metadata summary
+  const metaDiv = h('div', { className: 'mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1' });
+  metaDiv.appendChild(h('div', { className: 'text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1' }, 'Trace Info'));
+  const metaGrid = h('div', { className: 'grid grid-cols-2 gap-x-4 gap-y-1 text-xs' });
+  metaGrid.appendChild(h('div', {},
+    h('span', { className: 'font-mono text-slate-500' }, 'trace_id: '),
+    h('span', { className: 'text-slate-700 font-mono' }, trace.id.substring(0, 18) + '…')
+  ));
+  metaGrid.appendChild(h('div', {},
+    h('span', { className: 'font-mono text-slate-500' }, 'device: '),
+    h('span', { className: 'text-slate-700' }, `${trace.impacted_device_type} ${trace.impacted_device}`)
+  ));
+  metaGrid.appendChild(h('div', {},
+    h('span', { className: 'font-mono text-slate-500' }, 'feedback: '),
+    h('span', { className: 'text-slate-700' }, trace.type)
+  ));
+  metaGrid.appendChild(h('div', {},
+    h('span', { className: 'font-mono text-slate-500' }, 'date: '),
+    h('span', { className: 'text-slate-700' }, trace.feedback_datetime_utc)
+  ));
+  if (trace.resolution) {
+    const resDiv = h('div', { className: 'col-span-2' });
+    resDiv.appendChild(h('span', { className: 'font-mono text-slate-500' }, 'resolution: '));
+    resDiv.appendChild(h('span', { className: 'text-slate-700' }, trace.resolution));
+    metaGrid.appendChild(resDiv);
+  }
+  metaDiv.appendChild(metaGrid);
+  content.appendChild(metaDiv);
+
+  // Additional feedback scores
+  if (trace.additional_feedback && Object.keys(trace.additional_feedback).length > 0) {
+    const fbDiv = h('div', { className: 'rounded-xl border border-slate-200 bg-slate-50 p-3' });
+    fbDiv.appendChild(h('div', { className: 'text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1' }, 'Feedback Scores'));
+    for (const [question, score] of Object.entries(trace.additional_feedback)) {
+      const scoreColor = score <= 1 ? 'text-emerald-700' : score <= 2 ? 'text-amber-700' : 'text-rose-700';
+      fbDiv.appendChild(h('div', { className: 'flex items-center justify-between text-xs py-0.5' },
+        h('span', { className: 'text-slate-600 mr-2' }, question),
+        h('span', { className: `font-medium ${scoreColor}` }, String(score))
+      ));
+    }
+    fbDiv.appendChild(h('p', { className: 'mt-1 text-xs text-slate-400 italic' }, 'Scale: 1 = Strongly Agree, 5 = Strongly Disagree'));
+    content.appendChild(fbDiv);
+  }
+
+  // Tool calls from context
+  if (contextEntries.length === 0) {
+    content.appendChild(h('div', { className: 'rounded-xl border border-slate-200 bg-slate-50 p-4 text-center' },
+      h('p', { className: 'text-sm text-slate-600' }, 'No tool calls in this trace.')
+    ));
+  } else {
+    content.appendChild(h('div', { className: 'text-xs font-semibold text-slate-600 uppercase tracking-wide mt-2' }, `Tool Calls (${contextEntries.length})`));
+
+    for (const tc of contextEntries) {
+      const isExpanded = state.expandedToolCalls.has(tc.id);
+      const tcDiv = h('div', { className: 'mt-2 rounded-xl border border-slate-200 bg-white' });
+
+      // Tool call header — CSS Grid for consistent column alignment across rows
+      const selectedDecision = getToolCallDecision(item, tc.id);
+      const tcHeader = h('div', {
+        className: 'grid items-center p-3 cursor-pointer hover:bg-slate-50/50 rounded-xl gap-x-2',
+        style: 'grid-template-columns: 2rem minmax(0,1fr) 3.5rem 4rem 1.25rem 0.75rem;',
+        onclick: () => { isExpanded ? state.expandedToolCalls.delete(tc.id) : state.expandedToolCalls.add(tc.id); render(); }
+      });
+      tcHeader.appendChild(h('span', { className: 'rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800 text-center' }, `#${tc.order}`));
+      tcHeader.appendChild(h('span', { className: 'rounded-lg bg-slate-700 px-2 py-0.5 text-xs font-mono text-white truncate', title: tc.function_name }, tc.function_name));
+      tcHeader.appendChild(tc.parallelGroup
+        ? h('span', { className: 'text-xs font-medium text-amber-600 text-center whitespace-nowrap' }, `‖ ${tc.parallelGroup}`)
+        : h('span'));
+      tcHeader.appendChild(h('span', { className: 'text-xs text-slate-400 text-right whitespace-nowrap tabular-nums' }, `${tc.execution_time}s`));
+      tcHeader.appendChild(renderMiniDecisionBadge(tc.id, selectedDecision));
+      tcHeader.appendChild(h('span', { className: 'text-xs text-slate-400 text-center' }, isExpanded ? '▾' : '▸'));
+      tcDiv.appendChild(tcHeader);
+
+      // Expanded detail
+      if (isExpanded) {
+        const decisionRow = h('div', { className: 'border-t border-slate-100 px-3 py-3 text-xs text-slate-700' });
+        decisionRow.appendChild(h('div', { className: 'mb-2 font-semibold uppercase tracking-wide text-slate-500' }, 'Was this call needed for the correct answer?'));
+        decisionRow.appendChild(renderSegmentedToggle(tc.id, selectedDecision));
+
+        const detail = h('div', { className: 'border-t p-3 space-y-2' });
+
+        // Arguments
+        detail.appendChild(h('div', { className: 'text-xs font-semibold text-slate-600 uppercase tracking-wide' }, 'Arguments'));
+        const argsPre = h('pre', { className: 'rounded-lg bg-slate-800 p-3 text-xs text-green-400 overflow-x-auto whitespace-pre-wrap' });
+        argsPre.textContent = tc.function_arguments;
+        detail.appendChild(argsPre);
+
+        // Result
+        detail.appendChild(h('div', { className: 'text-xs font-semibold text-slate-600 uppercase tracking-wide mt-2' }, 'Result'));
+        let resultText = tc.function_result;
+        try { resultText = JSON.stringify(JSON.parse(tc.function_result), null, 2); } catch(e) { /* use raw */ }
+        const resultPre = h('pre', { className: 'rounded-lg bg-slate-800 p-3 text-xs text-green-400 overflow-x-auto max-h-60 overflow-y-auto' });
+        resultPre.textContent = resultText;
+        detail.appendChild(resultPre);
+
+        tcDiv.appendChild(decisionRow);
+        tcDiv.appendChild(detail);
+      }
+
+      content.appendChild(tcDiv);
+    }
+  }
+
+  container.appendChild(content);
+  return container;
+}
+
+// ── Removed Legacy Criteria Pane ───────────────────────────────
+
+function renderEvaluationCriteria(item) {
+  return null;
+}
+
+// ── Conversation + Grounding ───────────────────────────────────
+
+function renderConversationEditor(item) {
+  const container = h('div', { className: 'rounded-2xl border bg-white p-4 shadow-sm' });
+  const history = item.history || [];
+
+  // Header
+  const headerRow = h('div', { className: 'mb-2 flex items-center justify-between' });
+  headerRow.appendChild(h('div', { className: 'text-sm font-medium text-slate-700' }, `Conversation (${history.length} turns)`));
+
+  const headerActions = h('div', { className: 'flex items-center gap-2' });
+  headerActions.appendChild(h('button', {
+    className: 'rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100',
+    onclick: openEditor,
+  }, 'Editor'));
+
+  if (history.length > 0) {
+    const hv = validateHistory(history);
+    const validBadge = h('div', { className: 'flex items-center gap-1.5 text-xs' });
+    if (hv.valid) {
+      validBadge.appendChild(h('span', { className: 'text-emerald-700' }, '✓ Valid'));
+    } else {
+      validBadge.appendChild(h('span', { className: 'text-amber-700', title: hv.errors.join('; ') }, `⚠ ${hv.errors.length} issue${hv.errors.length !== 1 ? 's' : ''}`));
+    }
+    headerActions.appendChild(validBadge);
+  }
+  headerRow.appendChild(headerActions);
+  container.appendChild(headerRow);
+
+  // User context key/value entries
+  const contextDiv = h('div', { className: 'mb-4 border-b border-slate-200 pb-4' });
+  const contextHeader = h('div', { className: 'mb-2 flex items-center justify-between gap-3' });
+  contextHeader.appendChild(h('div', {},
+    h('div', { className: 'text-sm font-medium text-slate-700' }, 'User Context'),
+    h('p', { className: 'text-xs text-slate-500 mt-1' }, 'Attach simple key/value context to this ground truth for later review or prompt construction.')
+  ));
+  contextHeader.appendChild(h('button', {
+    className: 'rounded-lg border border-violet-300 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-50',
+    onclick: addUserContextEntry,
+  }, '+ Add Entry'));
+  contextDiv.appendChild(contextHeader);
+
+  if (!item.userContextEntries.length) {
+    contextDiv.appendChild(h('div', { className: 'rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500' }, 'No user context added yet.'));
+  } else {
+    const contextList = h('div', { className: 'space-y-2' });
+    for (let i = 0; i < item.userContextEntries.length; i++) {
+      const entry = item.userContextEntries[i];
+      const row = h('div', { className: 'grid grid-cols-1 gap-2 rounded-xl border border-slate-200 p-3 md:grid-cols-[1fr,1.5fr,auto]' });
+
+      row.appendChild(h('input', {
+        className: 'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300',
+        value: entry.key,
+        placeholder: 'key',
+        oninput: (e) => updateUserContextEntry(i, 'key', e.target.value),
+      }));
+
+      row.appendChild(h('input', {
+        className: 'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300',
+        value: entry.value,
+        placeholder: 'value',
+        oninput: (e) => updateUserContextEntry(i, 'value', e.target.value),
+      }));
+
+      row.appendChild(h('button', {
+        className: 'rounded-lg border border-rose-200 px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50',
+        onclick: () => removeUserContextEntry(i),
+      }, 'Remove'));
+
+      contextList.appendChild(row);
+    }
+    contextDiv.appendChild(contextList);
+  }
+  container.appendChild(contextDiv);
+
+  // Turns
+  if (history.length === 0) {
+    container.appendChild(h('div', { className: 'rounded-xl border border-slate-200 bg-slate-50 p-6 text-center' },
+      h('p', { className: 'text-sm text-slate-600' }, 'No conversation history. This item may need trace re-ingestion.')
+    ));
+  } else {
+    for (let i = 0; i < history.length; i++) {
+      container.appendChild(renderConversationTurn(history[i], i, item));
+    }
+  }
+
+  // Tags section
+  const tagsSection = h('div', { className: 'mt-4 border-t border-slate-200 pt-4' });
+  const tagsHeader = h('div', { className: 'mb-2 flex items-center justify-between' });
+  tagsHeader.appendChild(h('div', { className: 'text-sm font-medium text-slate-700' }, 'Tags'));
+  tagsHeader.appendChild(h('button', {
+    className: 'rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50',
+    onclick: () => { state.tagsModalOpen = true; render(); }
+  }, 'Manage Tags'));
+  tagsSection.appendChild(tagsHeader);
+
+  const tagsWrap = h('div', { className: 'flex flex-wrap gap-2' });
+  if (item.computedTags) {
+    for (const tag of item.computedTags) {
+      tagsWrap.appendChild(h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-xs text-slate-600' }, '🔒 ' + tag));
+    }
+  }
+  if (item.manualTags) {
+    for (const tag of item.manualTags) {
+      tagsWrap.appendChild(h('span', { className: 'rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-800' }, tag));
+    }
+  }
+  if ((!item.computedTags || item.computedTags.length === 0) && (!item.manualTags || item.manualTags.length === 0)) {
+    tagsWrap.appendChild(h('p', { className: 'text-sm text-slate-500' }, 'No tags added yet'));
+  }
+  tagsSection.appendChild(tagsWrap);
+  container.appendChild(tagsSection);
+
+  return container;
+}
+
+// ── Metadata Panel ─────────────────────────────────────────────
+
+function renderMetadataPanel(item) {
+  const container = h('details', { className: 'rounded-2xl border bg-white shadow-sm' });
+  container.appendChild(h('summary', { className: 'p-4 cursor-pointer text-sm font-medium select-none' }, 'Metadata & Trace Info'));
+
+  const content = h('div', { className: 'px-4 pb-4 space-y-3' });
+  const meta = item.metadata || {};
+
+  // Trace IDs
+  if (meta.traceIds) {
+    const traceDiv = h('div', { className: 'rounded-lg border border-slate-200 bg-slate-50 p-3' });
+    traceDiv.appendChild(h('div', { className: 'text-xs font-semibold text-slate-600 mb-1' }, 'Trace IDs'));
+    for (const [k, v] of Object.entries(meta.traceIds)) {
+      traceDiv.appendChild(h('div', { className: 'text-xs text-slate-700' },
+        h('span', { className: 'font-mono text-slate-500' }, `${k}: `),
+        h('span', {}, v)
+      ));
+    }
+    content.appendChild(traceDiv);
+  }
+
+  // Trace Source
+  if (meta.traceSource) {
+    const srcDiv = h('div', { className: 'rounded-lg border border-slate-200 bg-slate-50 p-3' });
+    srcDiv.appendChild(h('div', { className: 'text-xs font-semibold text-slate-600 mb-1' }, 'Trace Source'));
+    for (const [k, v] of Object.entries(meta.traceSource)) {
+      srcDiv.appendChild(h('div', { className: 'text-xs text-slate-700' },
+        h('span', { className: 'font-mono text-slate-500' }, `${k}: `),
+        h('span', {}, v)
+      ));
+    }
+    content.appendChild(srcDiv);
+  }
+
+  // User Feedback
+  if (meta.userFeedback) {
+    const fb = meta.userFeedback;
+    const resolvedColor = fb.issueResolved ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50';
+    const fbDiv = h('div', { className: `rounded-lg border p-3 ${resolvedColor}` });
+    fbDiv.appendChild(h('div', { className: 'text-xs font-semibold text-slate-600 mb-1' }, 'User Feedback (from care employee)'));
+    fbDiv.appendChild(h('div', { className: 'flex items-center gap-3 text-xs' },
+      h('span', { className: fb.issueResolved ? 'text-emerald-800' : 'text-amber-800' }, fb.issueResolved ? '✓ Resolved' : '✗ Unresolved'),
+      fb.rating ? h('span', { className: 'text-slate-600' }, '★'.repeat(fb.rating) + '☆'.repeat(5 - fb.rating)) : null
+    ));
+    if (fb.feedbackText) {
+      fbDiv.appendChild(h('p', { className: 'mt-1 text-xs text-slate-700 italic' }, `"${fb.feedbackText}"`));
+    }
+    content.appendChild(fbDiv);
+  } else {
+    content.appendChild(h('div', { className: 'rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500 italic' }, 'No user feedback available.'));
+  }
+
+
+
+  container.appendChild(content);
+  return container;
+}
+
+// ── Main Curate Pane ───────────────────────────────────────────
+
+function renderCuratePane(item) {
+  const isNarrow = window.innerWidth < 1024;
+  const container = h('div', { className: 'flex h-[calc(100vh-5.5rem)] min-h-0' });
+
+  if (!item) {
+    container.appendChild(h('div', { className: 'flex h-full w-full items-center justify-center text-slate-400' }, 'Select an item from the queue'));
+    return container;
+  }
+
+  // ── LEFT PANE: Conversation & Curation ──
+  const leftPane = h('div', {
+    id: 'conversation-pane',
+    className: 'min-w-0 overflow-y-auto space-y-3 p-1',
+    style: { flex: '5' }
+  });
+
+  // Deleted banner
+  if (item.deleted) {
+    leftPane.appendChild(h('div', { className: 'rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900' },
+      'This ground truth is marked as deleted. You can restore it or leave it deleted.'
+    ));
+  }
+
+  // Conversation editor (includes user context and tags)
+  leftPane.appendChild(renderConversationEditor(item));
+
+  // Comments
+  const commentDiv = h('div', { className: 'rounded-2xl border bg-white p-4 shadow-sm' });
+  const commentHeader = h('div', { className: 'mb-1 flex items-center gap-2' });
+  commentHeader.appendChild(h('div', { className: 'text-sm font-medium' }, 'Curator Notes'));
+  commentHeader.appendChild(h('span', { className: 'ml-1 rounded-full border px-2 py-0.5 text-xs text-slate-500' }, 'Optional'));
+  commentDiv.appendChild(commentHeader);
+  commentDiv.appendChild(h('p', { className: 'mb-2 text-xs text-slate-500 leading-relaxed' },
+    'As an SME reviewing this ground truth, use this space to document your reasoning — for example: why you edited an agent response, what domain knowledge informed your corrections, caveats about edge cases or data quality, whether the trace is representative of typical scenarios, or flags for other curators to review.'
+  ));
+  const commentTa = h('textarea', {
+    className: 'h-20 w-full resize-y rounded-xl border p-3 focus:outline-none focus:ring-2 focus:ring-violet-300 text-sm',
+    placeholder: 'e.g. "Corrected orchestrator RCA — original missed that roaming on 2G/3G explains the slow speeds, not just plan overage. Verified against SOC B25D200T1 provisioning rules."',
+    oninput: (e) => updateComment(e.target.value)
+  });
+  commentTa.value = item.comment || '';
+  commentDiv.appendChild(commentTa);
+  leftPane.appendChild(commentDiv);
+
+  // Approval status
+  const approved = canApprove(item);
+  if (!approved) {
+    const warnDiv = h('div', { className: 'rounded-2xl border border-amber-200 bg-amber-50 p-4' });
+    warnDiv.appendChild(h('h3', { className: 'mb-2 text-sm font-semibold text-amber-900' }, '⚠️ Issues Preventing Approval'));
+    const issues = h('div', { className: 'space-y-2 text-sm text-amber-800' });
+
+    if (item.deleted) {
+      issues.appendChild(h('p', {}, '✗ Item is deleted: Restore before approving'));
+    }
+
+    const hv = validateHistory(item.history || []);
+    if (!hv.valid) {
+      for (const err of hv.errors) {
+        issues.appendChild(h('p', {}, `✗ ${err}`));
+      }
+    }
+
+    const toolValidation = validateRequiredToolSelection(item);
+    if (!toolValidation.valid) {
+      issues.appendChild(h('p', {}, `✗ ${toolValidation.error}`));
+    }
+
+    warnDiv.appendChild(issues);
+    leftPane.appendChild(warnDiv);
+  } else {
+    leftPane.appendChild(h('div', { className: 'rounded-2xl border border-emerald-200 bg-emerald-50 p-4' },
+      h('h3', { className: 'mb-1 text-sm font-semibold text-emerald-900' }, '✓ Ready for Approval'),
+      h('p', { className: 'text-sm text-emerald-800' }, 'Conversation is valid and at least one tool call is marked required.')
+    ));
+  }
+
+  // Action buttons
+  const actions = h('div', { className: 'flex items-center gap-2 flex-wrap' });
+
+  actions.appendChild(h('button', {
+    className: 'inline-flex items-center gap-2 rounded-2xl border bg-white px-4 py-2 hover:bg-violet-50 disabled:opacity-50 text-sm',
+    onclick: saveDraft
+  }, state.saving ? 'Saving…' : '💾 Save Draft'));
+
+  actions.appendChild(h('button', {
+    className: `inline-flex items-center gap-2 rounded-2xl border border-violet-300 bg-violet-600 px-4 py-2 text-white shadow hover:bg-violet-700 text-sm ${(!approved || item.deleted) ? 'opacity-50 cursor-not-allowed' : ''}`,
+    onclick: approved && !item.deleted ? approveItem : null
+  }, '✓ Approve'));
+
+  actions.appendChild(h('button', {
+    className: 'inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2 text-slate-700 hover:bg-slate-50 text-sm',
+    onclick: duplicateItem
+  }, '↻ Duplicate'));
+
+  actions.appendChild(h('button', {
+    className: 'inline-flex items-center gap-2 rounded-2xl border bg-white px-4 py-2 hover:bg-violet-50 text-sm',
+    onclick: skipItem
+  }, 'Skip'));
+
+  if (!item.deleted) {
+    actions.appendChild(h('button', {
+      className: 'ml-auto inline-flex items-center gap-2 rounded-2xl border border-rose-300 bg-white px-4 py-2 text-rose-700 hover:bg-rose-50 text-sm',
+      onclick: deleteItem
+    }, '🗑 Delete'));
+  } else {
+    actions.appendChild(h('button', {
+      className: 'ml-auto inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 py-2 text-emerald-700 hover:bg-emerald-50 text-sm',
+      onclick: restoreItem
+    }, '↻ Restore'));
+  }
+
+  leftPane.appendChild(actions);
+  container.appendChild(leftPane);
+
+  // ── SPLIT PANE: Gutter + Evidence (desktop) ──
+  if (!isNarrow) {
+    // Resizable gutter
+    const gutter = h('div', {
+      id: 'split-gutter',
+      className: 'gutter w-1 flex-none bg-slate-200',
+      title: 'Drag to resize'
+    });
+    container.appendChild(gutter);
+
+    // Right pane: Evidence & Metadata
+    const rightPane = h('div', {
+      id: 'evidence-pane',
+      className: 'overflow-y-auto space-y-3 p-1',
+      style: { flex: '5', minWidth: '300px' }
+    });
+
+    rightPane.appendChild(renderTracePanel(item));
+    rightPane.appendChild(renderMetadataPanel(item));
+    container.appendChild(rightPane);
+  }
+
+  return container;
+}
+
+// ── Explorer & Stats ───────────────────────────────────────────
+
+function renderExplorerView() {
+  const section = h('section', { className: 'flex flex-1 flex-col rounded-2xl border bg-white p-4 shadow-sm min-h-0 overflow-auto' });
+
+  section.appendChild(h('h2', { className: 'text-2xl font-bold text-slate-800 mb-2' }, 'Ground Truths Explorer'));
+  section.appendChild(h('p', { className: 'text-sm text-slate-600 mb-4' }, 'Explore agentic ground truths with filtering, sorting, and bulk actions.'));
+
+  // Filters
+  const filters = h('div', { className: 'flex items-center gap-2 flex-wrap mb-4' });
+  filters.appendChild(h('span', { className: 'text-sm font-medium text-slate-700' }, 'Status:'));
+  for (const s of ['all', 'draft', 'approved', 'skipped', 'deleted']) {
+    const colors = { all: 'bg-violet-600 text-white', draft: 'bg-amber-600 text-white', approved: 'bg-emerald-600 text-white', skipped: 'bg-slate-600 text-white', deleted: 'bg-rose-600 text-white' };
+    filters.appendChild(h('button', {
+      className: `rounded-lg px-3 py-1.5 text-sm font-medium ${colors[s]}`,
+      onclick: () => toast('info', `Filter: ${s}`)
+    }, s.charAt(0).toUpperCase() + s.slice(1)));
+  }
+  section.appendChild(filters);
+
+  // Table
+  const tableWrap = h('div', { className: 'overflow-x-auto' });
+  const table = h('table', { className: 'w-full table-auto' });
+  const thead = h('thead', { className: 'bg-slate-50 border-b border-slate-200' });
+  const tr = h('tr', { className: 'text-xs font-semibold text-slate-700' });
+  for (const col of ['ID', 'Status', 'User Message', 'Category', 'Required Tools', 'User Context', 'Actions']) {
+    tr.appendChild(h('th', { className: 'px-3 py-3 text-left' }, col));
+  }
+  thead.appendChild(tr);
+  table.appendChild(thead);
+
+  const tbody = h('tbody', { className: 'divide-y divide-slate-100' });
+  for (const item of state.items) {
+    const userMsg = (item.history || []).find(t => t.role === 'user');
+    const row = h('tr', { className: 'hover:bg-slate-50 transition-colors' });
+    row.appendChild(h('td', { className: 'px-3 py-3 text-xs font-mono text-slate-600' }, item.id));
+    const statusTd = h('td', { className: 'px-3 py-3' });
+    statusTd.appendChild(statusBadge(item.status, item.deleted));
+    row.appendChild(statusTd);
+    row.appendChild(h('td', { className: 'px-3 py-3 text-sm max-w-[300px] truncate' }, userMsg ? userMsg.msg : '(none)'));
+    const catTag2 = (item.computedTags || []).find(t => t.startsWith('category:'));
+    row.appendChild(h('td', { className: 'px-3 py-3 text-xs' }, catTag2 ? catTag2.replace('category:', '') : '—'));
+    const requiredTools = getOrderedToolCalls(item).filter(tc => getToolCallDecision(item, tc.id) === 'required');
+    row.appendChild(h('td', { className: 'px-3 py-3 text-xs text-center' }, requiredTools.length > 0 ? `${requiredTools.length} required` : '—'));
+    row.appendChild(h('td', { className: 'px-3 py-3 text-xs text-center' }, `${(item.userContextEntries || []).length}`));
+    const actionTd = h('td', { className: 'px-3 py-3' });
+    const actBtns = h('div', { className: 'flex gap-2' });
+    actBtns.appendChild(h('button', {
+      className: 'rounded-lg border border-violet-300 bg-violet-600 px-3 py-1.5 text-xs text-white hover:bg-violet-700',
+      onclick: () => { selectItem(item.id); state.viewMode = 'curate'; render(); }
+    }, 'Curate'));
+    actionTd.appendChild(actBtns);
+    row.appendChild(actionTd);
+    tbody.appendChild(row);
+  }
+  table.appendChild(tbody);
+  tableWrap.appendChild(table);
+  section.appendChild(tableWrap);
+
+  return section;
+}
+
+function renderStatsView() {
+  const section = h('section', { className: 'flex flex-1 flex-col rounded-2xl border bg-white p-4 shadow-sm overflow-auto' });
+
+  section.appendChild(h('div', { className: 'flex items-center justify-between mb-4' },
+    h('h2', { className: 'text-lg font-semibold' }, 'Agentic Ground Truth — Stats'),
+    h('button', { className: 'rounded-xl border px-3 py-1.5 text-sm hover:bg-violet-50', onclick: () => { state.viewMode = 'curate'; render(); } }, '← Back')
+  ));
+
+  const counts = state.items.reduce((acc, it) => {
+    acc[it.status] = (acc[it.status] || 0) + 1;
+    if (it.deleted) acc.deleted = (acc.deleted || 0) + 1;
+    return acc;
+  }, {});
+
+  const totalRequiredSelections = state.items.reduce((sum, it) => sum + (getOrderedToolCalls(it).some(tc => getToolCallDecision(it, tc.id) === 'required') ? 1 : 0), 0);
+  const totalToolCalls = state.items.reduce((sum, it) => sum + (it.trace && it.trace.chat_history && it.trace.chat_history[0] ? it.trace.chat_history[0].context.length : 0), 0);
+  const totalUserContext = state.items.reduce((sum, it) => sum + (it.userContextEntries || []).length, 0);
+
+  const grid = h('div', { className: 'grid grid-cols-1 gap-3 sm:grid-cols-4' });
+  const statCards = [
+    { label: 'Total Items', val: state.items.length, color: 'violet' },
+    { label: 'Approved', val: counts.approved || 0, color: 'emerald' },
+    { label: 'Draft', val: counts.draft || 0, color: 'amber' },
+    { label: 'Deleted', val: counts.deleted || 0, color: 'rose' },
+  ];
+  for (const s of statCards) {
+    grid.appendChild(h('div', { className: `rounded-xl border bg-${s.color}-50 p-4` },
+      h('div', { className: 'text-xs uppercase tracking-wide text-slate-600' }, s.label),
+      h('div', { className: `mt-1 text-2xl font-bold text-${s.color}-800` }, String(s.val))
+    ));
+  }
+  section.appendChild(grid);
+
+  // Additional stats
+  const grid2 = h('div', { className: 'grid grid-cols-1 gap-3 sm:grid-cols-3 mt-3' });
+  const extraCards = [
+    { label: 'Required Tools Set', val: totalRequiredSelections, color: 'violet' },
+    { label: 'User Context Entries', val: totalUserContext, color: 'amber' },
+    { label: 'Total Tool Calls', val: totalToolCalls, color: 'slate' },
+  ];
+  for (const s of extraCards) {
+    grid2.appendChild(h('div', { className: `rounded-xl border bg-${s.color}-50 p-4` },
+      h('div', { className: 'text-xs uppercase tracking-wide text-slate-600' }, s.label),
+      h('div', { className: `mt-1 text-2xl font-bold text-${s.color}-800` }, String(s.val))
+    ));
+  }
+  section.appendChild(grid2);
+
+  return section;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODALS
+// ═══════════════════════════════════════════════════════════════
+
+function renderTagsModal() {
+  if (!state.tagsModalOpen) return null;
+  const item = getCurrent();
+  if (!item) return null;
+
+  const overlay = h('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/50' });
+  overlay.onclick = (e) => { if (e.target === overlay) { state.tagsModalOpen = false; render(); } };
+
+  const modal = h('div', { className: 'relative z-10 max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl' });
+  modal.onclick = (e) => e.stopPropagation();
+
+  // Header
+  const hdr = h('div', { className: 'flex items-center justify-between border-b border-slate-200 bg-violet-50 p-4' });
+  hdr.appendChild(h('div', {},
+    h('h2', { className: 'text-lg font-semibold text-slate-900' }, '🏷 Manage Tags'),
+    h('p', { className: 'text-sm text-slate-600' }, 'Ground Truth Level Tags')
+  ));
+  hdr.appendChild(h('button', {
+    className: 'rounded-lg p-2 text-slate-500 hover:bg-slate-100',
+    onclick: () => { state.tagsModalOpen = false; render(); }
+  }, '✕'));
+  modal.appendChild(hdr);
+
+  // Content
+  const content = h('div', { className: 'max-h-[calc(90vh-10rem)] overflow-auto p-4' });
+
+  // Computed tags
+  if (item.computedTags && item.computedTags.length > 0) {
+    const compDiv = h('div', { className: 'mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4' });
+    compDiv.appendChild(h('div', { className: 'mb-2 text-sm font-medium text-slate-600' }, '🔒 Auto-generated Tags'));
+    const compWrap = h('div', { className: 'flex flex-wrap gap-2' });
+    for (const tag of item.computedTags) {
+      compWrap.appendChild(h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white border border-slate-200 px-3 py-1 text-sm text-slate-600' }, '🔒 ' + tag));
+    }
+    compDiv.appendChild(compWrap);
+    compDiv.appendChild(h('p', { className: 'mt-2 text-xs text-slate-500' }, 'These tags are automatically generated and cannot be edited.'));
+    content.appendChild(compDiv);
+  }
+
+  // Manual tags selection
+  const groups = {};
+  for (const tag of AVAILABLE_TAGS) {
+    const [prefix, name] = tag.includes(':') ? tag.split(':', 2) : ['misc', tag];
+    if (!groups[prefix]) groups[prefix] = [];
+    groups[prefix].push(name);
+  }
+
+  const tagsGrid = h('div', { className: 'grid gap-4 sm:grid-cols-2' });
+  for (const [group, names] of Object.entries(groups)) {
+    const groupDiv = h('div', { className: 'rounded-xl border border-slate-200 bg-white' });
+    groupDiv.appendChild(h('div', { className: 'px-3 py-2 text-sm font-medium border-b border-slate-200 flex items-center gap-2' },
+      '🏷 ' + group
+    ));
+    const tagsWrap = h('div', { className: 'p-3 flex flex-wrap gap-2' });
+    for (const name of names) {
+      const full = `${group}:${name}`;
+      const isSelected = (item.manualTags || []).includes(full);
+      tagsWrap.appendChild(h('button', {
+        className: `rounded-full px-3 py-1 text-xs font-medium transition-colors border ${isSelected ? 'bg-violet-600 text-white border-violet-600 hover:bg-violet-700' : 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200'}`,
+        onclick: () => toggleTag(full)
+      }, name));
+    }
+    groupDiv.appendChild(tagsWrap);
+    tagsGrid.appendChild(groupDiv);
+  }
+  content.appendChild(tagsGrid);
+  modal.appendChild(content);
+
+  // Footer
+  const footer = h('div', { className: 'border-t border-slate-200 bg-violet-50 p-4 flex items-center justify-between' });
+  footer.appendChild(h('p', { className: 'text-xs text-slate-700' }, 'Tags help organize and filter ground truths by domain, intent, or quality.'));
+  footer.appendChild(h('button', {
+    className: 'rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50',
+    onclick: () => { state.tagsModalOpen = false; render(); }
+  }, 'Done'));
+  modal.appendChild(footer);
+
+  overlay.appendChild(modal);
+  return overlay;
+}
+
+function renderEditorModal() {
+  if (!state.editorOpen) return null;
+  const item = getCurrent();
+  if (!item) return null;
+
+  const overlay = h('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4' });
+  overlay.onclick = (e) => { if (e.target === overlay) closeEditor(); };
+
+  const modal = h('div', { className: 'relative z-10 w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl' });
+  modal.onclick = (e) => e.stopPropagation();
+
+  const header = h('div', { className: 'border-b border-slate-200 bg-violet-50 px-6 py-4 flex items-center justify-between' });
+  header.appendChild(h('div', {},
+    h('h2', { className: 'text-lg font-semibold text-slate-900' }, 'Conversation Editor'),
+    h('p', { className: 'text-sm text-slate-600' }, 'Describe what to change, inspect the proposed edits, then apply, deny, or manually edit.')
+  ));
+  header.appendChild(h('button', {
+    className: 'rounded-lg px-3 py-2 text-sm font-medium text-slate-500 hover:bg-white',
+    onclick: closeEditor,
+  }, 'Close'));
+  modal.appendChild(header);
+
+  const body = h('div', { className: 'grid gap-0 lg:grid-cols-[1.1fr,0.9fr]' });
+
+  const chatPane = h('div', { className: 'border-r border-slate-200 p-6 space-y-4' });
+  const promptCard = h('div', { className: 'rounded-2xl bg-slate-900 p-4 text-sm text-white' });
+  promptCard.appendChild(h('div', { className: 'mb-2 text-xs font-semibold uppercase tracking-wide text-violet-200' }, 'Prompt'));
+  const promptArea = h('textarea', {
+    className: 'h-28 w-full rounded-xl border border-slate-700 bg-slate-950/60 p-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-400',
+    placeholder: 'Example: Make the orchestrator response shorter, add user context about roaming, and mark the billing tool as required.',
+    oninput: (e) => { state.editorPrompt = e.target.value; },
+  });
+  promptArea.value = state.editorPrompt;
+  promptCard.appendChild(promptArea);
+  chatPane.appendChild(promptCard);
+  chatPane.appendChild(h('button', {
+    className: 'rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700',
+    onclick: generateEditorSuggestions,
+  }, 'Generate Edits'));
+
+  const response = h('div', { className: 'rounded-2xl border border-slate-200 bg-slate-50 p-4' });
+  response.appendChild(h('div', { className: 'mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500' }, 'Proposed edits'));
+  if (!state.editorSuggestions.length) {
+    response.appendChild(h('p', { className: 'text-sm text-slate-500' }, 'No edits generated yet. The chatbot response will appear here.'));
+  } else {
+    const suggestionList = h('div', { className: 'space-y-3' });
+    for (let i = 0; i < state.editorSuggestions.length; i++) {
+      const suggestion = state.editorSuggestions[i];
+      const card = h('div', { className: 'rounded-2xl border border-slate-200 bg-white p-4' });
+      card.appendChild(h('div', { className: 'mb-2 text-sm font-medium text-slate-800' }, suggestion.label));
+
+      if (suggestion.type === 'turnEdit') {
+        const turnSelect = h('select', {
+          className: 'mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300',
+          onchange: (e) => updateEditorSuggestion(i, 'turnIndex', Number(e.target.value)),
+        });
+        for (let turnIndex = 0; turnIndex < item.history.length; turnIndex++) {
+          const option = h('option', { value: String(turnIndex) }, `${item.history[turnIndex].role}`);
+          if (turnIndex === suggestion.turnIndex) option.selected = true;
+          turnSelect.appendChild(option);
+        }
+        card.appendChild(turnSelect);
+
+        const textArea = h('textarea', {
+          className: 'h-32 w-full rounded-lg border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300',
+          oninput: (e) => updateEditorSuggestion(i, 'value', e.target.value),
+        });
+        textArea.value = suggestion.value;
+        card.appendChild(textArea);
+      }
+
+      if (suggestion.type === 'userContext') {
+        const grid = h('div', { className: 'grid gap-2 md:grid-cols-2' });
+        const keyInput = h('input', {
+          className: 'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300',
+          value: suggestion.key,
+          oninput: (e) => updateEditorSuggestion(i, 'key', e.target.value),
+        });
+        const valueInput = h('input', {
+          className: 'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300',
+          value: suggestion.value,
+          oninput: (e) => updateEditorSuggestion(i, 'value', e.target.value),
+        });
+        grid.appendChild(keyInput);
+        grid.appendChild(valueInput);
+        card.appendChild(grid);
+      }
+
+      if (suggestion.type === 'toolDecision') {
+        card.appendChild(h('p', { className: 'mb-2 text-sm text-slate-600' }, suggestion.functionName));
+        const select = h('select', {
+          className: 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300',
+          onchange: (e) => updateEditorSuggestion(i, 'value', e.target.value),
+        });
+        const requiredOption = h('option', { value: 'required' }, '★ Required');
+        const optionalOption = h('option', { value: 'optional' }, '○ Optional');
+        const notNeededOption = h('option', { value: 'not-needed' }, '✕ Not needed');
+        if (suggestion.value === 'required') requiredOption.selected = true;
+        if (suggestion.value === 'optional') optionalOption.selected = true;
+        if (suggestion.value === 'not-needed') notNeededOption.selected = true;
+        select.appendChild(requiredOption);
+        select.appendChild(optionalOption);
+        select.appendChild(notNeededOption);
+        card.appendChild(select);
+      }
+
+      suggestionList.appendChild(card);
+    }
+    response.appendChild(suggestionList);
+  }
+  chatPane.appendChild(response);
+  body.appendChild(chatPane);
+
+  const manualPane = h('div', { className: 'p-6 space-y-4 bg-white' });
+  manualPane.appendChild(h('div', {},
+    h('div', { className: 'text-sm font-medium text-slate-800' }, 'Manual Edit'),
+    h('p', { className: 'text-sm text-slate-500 mt-1' }, 'Use the assistant suggestions as a starting point or switch to direct manual editing.')
+  ));
+  manualPane.appendChild(h('button', {
+    className: 'rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50',
+    onclick: () => { state.editorManualMode = !state.editorManualMode; render(); },
+  }, state.editorManualMode ? 'Hide Manual Edit' : 'Show Manual Edit'));
+
+  if (state.editorManualMode) {
+    const targetSelect = h('select', {
+      className: 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300',
+      onchange: (e) => syncEditorManualTarget(e.target.value),
+    });
+    for (const role of ['user', 'orchestrator-agent', 'output-agent']) {
+      const option = h('option', { value: role }, role);
+      if (role === state.editorManualTarget) option.selected = true;
+      targetSelect.appendChild(option);
+    }
+    manualPane.appendChild(targetSelect);
+
+    const manualText = h('textarea', {
+      className: 'h-64 w-full rounded-2xl border border-slate-300 p-4 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300',
+      oninput: (e) => { state.editorManualText = e.target.value; },
+    });
+    manualText.value = state.editorManualText;
+    manualPane.appendChild(manualText);
+
+    manualPane.appendChild(h('button', {
+      className: 'rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100',
+      onclick: applyManualEditorChange,
+    }, 'Apply Manual Edit'));
+  }
+
+  const footer = h('div', { className: 'pt-4 flex flex-wrap items-center gap-2 border-t border-slate-200' });
+  footer.appendChild(h('button', {
+    className: 'rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50',
+    onclick: state.editorSuggestions.length ? applyEditorSuggestions : null,
+  }, 'Apply'));
+  footer.appendChild(h('button', {
+    className: 'rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50',
+    onclick: denyEditorSuggestions,
+  }, 'Deny'));
+  manualPane.appendChild(footer);
+  body.appendChild(manualPane);
+
+  modal.appendChild(body);
+  overlay.appendChild(modal);
+  return overlay;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOASTS
+// ═══════════════════════════════════════════════════════════════
+
+function renderToasts() {
+  if (state.toasts.length === 0) return null;
+  const container = h('div', { className: 'fixed bottom-4 right-4 z-50 space-y-2' });
+  for (const t of state.toasts) {
+    const colors = { success: 'border-emerald-300', error: 'border-rose-300', info: 'border-violet-300' };
+    container.appendChild(h('div', {
+      className: `flex min-w-[260px] items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2 shadow-lg ${colors[t.kind] || ''}`
+    }, h('div', { className: 'text-sm' }, t.msg)));
+  }
+  return container;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN RENDER
+// ═══════════════════════════════════════════════════════════════
+
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  const wrapper = h('div', { className: 'flex h-screen w-screen flex-col overflow-hidden' });
+
+  // Accent bar
+  wrapper.appendChild(h('div', { className: 'h-1 w-full flex-none bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500' }));
+
+  // Header
+  wrapper.appendChild(renderHeader());
+
+  // Main content
+  const main = h('main', { className: 'mx-auto flex w-full max-w-none flex-1 flex-col gap-4 p-4 min-h-0' });
+
+  if (state.viewMode === 'stats') {
+    main.appendChild(renderStatsView());
+  } else if (state.viewMode === 'explorer') {
+    main.appendChild(renderExplorerView());
+  } else {
+    // Curate view
+    const grid = h('div', { className: 'grid grid-cols-12 gap-4 flex-1 min-h-0' });
+
+    if (state.sidebarOpen) {
+      grid.appendChild(renderQueueSidebar());
+    }
+
+    const curateCol = h('div', {
+      className: state.sidebarOpen ? 'col-span-9' : 'col-span-12'
+    });
+    curateCol.appendChild(renderCuratePane(getCurrent()));
+    grid.appendChild(curateCol);
+
+    main.appendChild(grid);
+  }
+
+  wrapper.appendChild(main);
+  app.appendChild(wrapper);
+
+  // Evidence drawer (mobile)
+  if (state.viewMode === 'curate' && window.innerWidth < 1024) {
+    const currentItem = getCurrent();
+    if (currentItem) {
+      // Backdrop
+      if (state.evidenceDrawerOpen) {
+        const backdrop = h('div', {
+          className: 'fixed inset-0 bg-black/20 z-40',
+          onclick: toggleEvidenceDrawer
+        });
+        app.appendChild(backdrop);
+      }
+      // Drawer
+      const drawer = h('div', {
+        className: `evidence-drawer fixed right-0 top-0 bottom-0 bg-white shadow-2xl z-50 flex flex-col ${state.evidenceDrawerOpen ? '' : 'closed'}`,
+        style: { width: '90vw', maxWidth: '480px' }
+      });
+      const drawerHeader = h('div', { className: 'px-4 py-3 border-b flex items-center justify-between flex-none' });
+      drawerHeader.appendChild(h('span', { className: 'text-sm font-semibold text-slate-600 uppercase tracking-wider' }, 'Evidence Panel'));
+      drawerHeader.appendChild(h('button', {
+        className: 'text-slate-400 hover:text-slate-600 p-1',
+        onclick: toggleEvidenceDrawer
+      }, '✕'));
+      drawer.appendChild(drawerHeader);
+
+      const drawerContent = h('div', { className: 'flex-1 overflow-y-auto p-3 space-y-3' });
+      drawerContent.appendChild(renderTracePanel(currentItem));
+      drawerContent.appendChild(renderMetadataPanel(currentItem));
+      drawer.appendChild(drawerContent);
+      app.appendChild(drawer);
+    }
+  }
+
+  // Modals
+  const tagsModal = renderTagsModal();
+  if (tagsModal) app.appendChild(tagsModal);
+
+  const editorModal = renderEditorModal();
+  if (editorModal) app.appendChild(editorModal);
+
+  // Toasts
+  const toasts = renderToasts();
+  if (toasts) app.appendChild(toasts);
+
+  // Bind resizable gutter events
+  bindGutterEvents();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RESIZABLE GUTTER
+// ═══════════════════════════════════════════════════════════════
+
+function bindGutterEvents() {
+  const gutter = document.getElementById('split-gutter');
+  const convPane = document.getElementById('conversation-pane');
+  const evidPane = document.getElementById('evidence-pane');
+
+  if (!gutter || !convPane || !evidPane) return;
+
+  let isDragging = false;
+  let startX, startConvFlex, startEvidFlex;
+
+  gutter.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    startX = e.clientX;
+    const convRect = convPane.getBoundingClientRect();
+    const evidRect = evidPane.getBoundingClientRect();
+    const total = convRect.width + evidRect.width;
+    startConvFlex = convRect.width / total * 10;
+    startEvidFlex = evidRect.width / total * 10;
+    gutter.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const containerWidth = convPane.parentElement.getBoundingClientRect().width - 4;
+    const dFlex = (dx / containerWidth) * 10;
+    const newConv = Math.max(2, Math.min(8, startConvFlex + dFlex));
+    const newEvid = Math.max(2, Math.min(8, startEvidFlex - dFlex));
+    convPane.style.flex = newConv;
+    evidPane.style.flex = newEvid;
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      gutter.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  });
+}
+
+// Re-render on resize for responsive split pane ↔ drawer
+window.addEventListener('resize', () => render());
+
+// Initial render
+render();
+</script>
+</body>
+</html>

@@ -11,9 +11,10 @@ describe("useGroundTruthCache", () => {
 		datasetName: "test-dataset",
 		bucket: "bucket-uuid",
 		status: "draft",
-		question: "Test question?",
-		answer: "Test answer",
-		references: [],
+		history: [
+			{ role: "user", content: "Test question?", turnId: "turn_1" },
+			{ role: "agent", content: "Test answer", turnId: "turn_2" },
+		],
 		manualTags: [],
 		computedTags: [],
 		providerId: "api",

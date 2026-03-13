@@ -1,46 +1,62 @@
-import { useCallback, useEffect, useState } from "react";
-import { fetchAvailableTags } from "../services/tags";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
+import {
+	ensureTagCached,
+	fetchTagsWithComputed,
+	getTagMetadataSnapshot,
+	subscribeToTagMetadata,
+} from "../services/tags";
 
-function useTags() {
-	const [allTags, setAllTags] = useState<string[]>([]);
-	const [loading, setLoading] = useState<boolean>(false);
-	const [error, setError] = useState<string | null>(null);
+interface UseTagsOptions {
+	enabled?: boolean;
+}
 
-	const refresh = useCallback(async () => {
-		setLoading(true);
-		setError(null);
-		try {
-			const tags = await fetchAvailableTags();
-			if (Array.isArray(tags)) setAllTags(tags);
-		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e);
-			setError(msg);
-		} finally {
-			setLoading(false);
-		}
-	}, []);
+function useTags(options?: UseTagsOptions) {
+	const enabled = options?.enabled ?? true;
+	const state = useSyncExternalStore(
+		subscribeToTagMetadata,
+		getTagMetadataSnapshot,
+	);
 
 	useEffect(() => {
-		refresh();
-	}, [refresh]);
+		if (!enabled) {
+			return;
+		}
 
-	const ensureTag = useCallback(async (tag: string) => {
-		const t = (tag || "").trim();
-		if (!t) return;
-		// Optimistic add locally; do not POST yet — defer until item save
-		setAllTags((prev) => (prev.includes(t) ? prev : [...prev, t].sort()));
+		fetchTagsWithComputed().catch(() => {
+			// Service snapshot already captures the error state.
+		});
+	}, [enabled]);
+
+	const refresh = useCallback(async () => {
+		await fetchTagsWithComputed({ force: true });
+	}, []);
+
+	const ensureTag = useCallback((tag: string) => {
+		ensureTagCached(tag);
 	}, []);
 
 	const filter = useCallback(
 		(q: string) => {
-			const s = (q || "").toLowerCase();
-			if (!s) return allTags;
-			return allTags.filter((t) => t.toLowerCase().includes(s));
+			const search = (q || "").toLowerCase();
+			if (!search) {
+				return state.allTags;
+			}
+
+			return state.allTags.filter((tag) => tag.toLowerCase().includes(search));
 		},
-		[allTags],
+		[state.allTags],
 	);
 
-	return { allTags, loading, error, refresh, ensureTag, filter };
+	return {
+		allTags: state.allTags,
+		manualTags: state.manualTags,
+		computedTags: state.computedTags,
+		loading: state.loading,
+		error: state.error?.message ?? null,
+		refresh,
+		ensureTag,
+		filter,
+	};
 }
 
 export default useTags;

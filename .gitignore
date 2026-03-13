@@ -45,6 +45,9 @@ build/
 # Based on common Node.gitignore defaults
 # ------------------------------
 .vitest/
+.playwright/
+frontend/playwright-report/
+frontend/test-results/
 .eslintcache
 *.tsbuildinfo
 
@@ -53,15 +56,22 @@ build/
 # ------------------------------
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 
 **/.vscode/*
 !**/.vscode/tasks.json
 !**/.vscode/launch.json
 !**/.vscode/extensions.json
+!**/.vscode/settings.json
 
 .idea/
 *.iml
 site/
 
 .playwright-cli/
-.copilot-tracking/
+.copilot-tracking/.harness/
+.harness/
+.copilot-tracking/*
+
+# Redacted trace exports (may contain PII)
+wireframes/trace_export_redacted.json

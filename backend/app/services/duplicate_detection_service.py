@@ -12,12 +12,13 @@ Detection strategy:
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Sequence
 
 from pydantic import BaseModel, Field, ConfigDict
 
-from app.domain.models import GroundTruthItem
+from app.domain.models import AgenticGroundTruthEntry
 from app.domain.enums import GroundTruthStatus
 
 
@@ -51,12 +52,75 @@ def _normalize_text(text: str | None) -> str:
     return normalized
 
 
-def _get_question_text(item: GroundTruthItem) -> str:
+def _get_question_text(item: AgenticGroundTruthEntry) -> str:
     """Get the effective question text (edited or synth)."""
     return item.edited_question or item.synth_question or ""
 
 
-def _items_are_duplicates(draft: GroundTruthItem, approved: GroundTruthItem) -> tuple[bool, str]:
+def _serialize_generic_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, BaseModel):
+        value = value.model_dump(by_alias=True, exclude_none=True)
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+    except TypeError:
+        return str(value)
+
+
+def _prune_empty(value: object) -> object | None:
+    if value is None:
+        return None
+    if isinstance(value, BaseModel):
+        value = value.model_dump(by_alias=True, exclude_none=True)
+    if isinstance(value, str):
+        return value or None
+    if isinstance(value, dict):
+        pruned = {
+            key: pruned_value
+            for key, nested in value.items()
+            if (pruned_value := _prune_empty(nested)) is not None
+        }
+        return pruned or None
+    if isinstance(value, list):
+        pruned = [
+            pruned_value for nested in value if (pruned_value := _prune_empty(nested)) is not None
+        ]
+        return pruned or None
+    return value
+
+
+def _history_signature(item: AgenticGroundTruthEntry) -> str:
+    history = item.history or []
+    return _normalize_text(
+        "\n".join(f"{entry.role}:{entry.msg}" for entry in history if entry.role and entry.msg)
+    )
+
+
+def _generic_signature(item: AgenticGroundTruthEntry) -> str:
+    structured_payload = _prune_empty(
+        {
+            "scenarioId": item.scenario_id,
+            "contextEntries": item.context_entries,
+            "toolCalls": item.tool_calls,
+            "expectedTools": item.expected_tools,
+            "feedback": item.feedback,
+            "metadata": item.metadata,
+            "plugins": item.plugins,
+            "traceIds": item.trace_ids,
+            "tracePayload": item.trace_payload,
+        }
+    )
+    if structured_payload is None:
+        return ""
+    return _normalize_text(_serialize_generic_value(structured_payload))
+
+
+def _items_are_duplicates(
+    draft: AgenticGroundTruthEntry, approved: AgenticGroundTruthEntry
+) -> tuple[bool, str]:
     """Check if two items are likely duplicates.
 
     Returns:
@@ -65,12 +129,8 @@ def _items_are_duplicates(draft: GroundTruthItem, approved: GroundTruthItem) -> 
     draft_question = _normalize_text(_get_question_text(draft))
     approved_question = _normalize_text(_get_question_text(approved))
 
-    # Must have a question to compare
-    if not draft_question or not approved_question:
-        return (False, "")
-
-    # Check for exact question match
-    if draft_question == approved_question:
+    # Check for exact question match when both items expose question text
+    if draft_question and approved_question and draft_question == approved_question:
         # Also check answer for stronger signal
         draft_answer = _normalize_text(draft.answer)
         approved_answer = _normalize_text(approved.answer)
@@ -79,11 +139,27 @@ def _items_are_duplicates(draft: GroundTruthItem, approved: GroundTruthItem) -> 
             return (True, "exact question and answer match")
         return (True, "exact question match")
 
+    draft_history = _history_signature(draft)
+    approved_history = _history_signature(approved)
+    if draft_history and draft_history == approved_history:
+        draft_generic = _generic_signature(draft)
+        approved_generic = _generic_signature(approved)
+        if draft_generic and draft_generic == approved_generic:
+            return (True, "exact history and generic fields match")
+        return (True, "exact history match")
+
+    draft_generic = _generic_signature(draft)
+    approved_generic = _generic_signature(approved)
+    if draft_generic and draft_generic == approved_generic:
+        return (True, "exact generic fields match")
+
     return (False, "")
 
 
 def detect_duplicates_for_item(
-    draft_item: GroundTruthItem, approved_items: Sequence[GroundTruthItem], max_results: int = 3
+    draft_item: AgenticGroundTruthEntry,
+    approved_items: Sequence[AgenticGroundTruthEntry],
+    max_results: int = 3,
 ) -> list[DuplicateWarning]:
     """Detect duplicate approved items for a single draft item.
 
@@ -126,8 +202,8 @@ def detect_duplicates_for_item(
 
 
 def detect_duplicates_for_bulk_items(
-    draft_items: Sequence[GroundTruthItem],
-    approved_items: Sequence[GroundTruthItem],
+    draft_items: Sequence[AgenticGroundTruthEntry],
+    approved_items: Sequence[AgenticGroundTruthEntry],
     max_results_per_item: int = 3,
 ) -> list[DuplicateWarning]:
     """Detect duplicates for multiple draft items against approved items.

@@ -261,22 +261,9 @@ def configure_ezauth_for_tests():
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Apply default skips for integration tests that require external services."""
-    chat_configured = bool(
-        settings.AZURE_AI_PROJECT_ENDPOINT and settings.AZURE_AI_AGENT_ID and settings.CHAT_ENABLED
-    )
     search_configured = bool(settings.AZ_SEARCH_ENDPOINT and settings.AZ_SEARCH_INDEX)
 
     for item in items:
-        if item.get_closest_marker("requires_chat") and not chat_configured:
-            item.add_marker(
-                pytest.mark.skip(
-                    reason=(
-                        "Azure AI Foundry agent not configured; set "
-                        "GTC_AZURE_AI_PROJECT_ENDPOINT, GTC_AZURE_AI_AGENT_ID, "
-                        "and GTC_CHAT_ENABLED=true"
-                    )
-                )
-            )
         if item.get_closest_marker("requires_search") and not search_configured:
             item.add_marker(
                 pytest.mark.skip(

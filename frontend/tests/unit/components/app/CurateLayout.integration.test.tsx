@@ -2,7 +2,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import CuratePane from "../../../../src/components/app/pages/CuratePane";
 import QueueSidebar from "../../../../src/components/app/QueueSidebar";
-import type { AgentGenerationResult } from "../../../../src/hooks/useGroundTruth";
 import type { GroundTruthItem } from "../../../../src/models/groundTruth";
 
 // Minimal harness to exercise interactions between the sidebar and the editor
@@ -15,7 +14,6 @@ function MiniCurateApp() {
 			question: "Q-1",
 			answer: "",
 			history: [{ role: "user", content: "Q-1" }],
-			references: [],
 			status: "draft",
 			providerId: "json",
 			tags: [],
@@ -25,7 +23,6 @@ function MiniCurateApp() {
 			question: "Q-2",
 			answer: "",
 			history: [{ role: "user", content: "Q-2" }],
-			references: [],
 			status: "draft",
 			providerId: "json",
 			tags: [],
@@ -72,16 +69,7 @@ function MiniCurateApp() {
 						canApprove={true}
 						saving={false}
 						onDuplicate={() => void 0}
-						onUpdateQuestion={(q) => {
-							setItems((arr) =>
-								arr.map((i) =>
-									i.id === selectedId ? { ...i, question: q } : i,
-								),
-							);
-							setUnsaved(true);
-						}}
 						onUpdateComment={() => void 0}
-						onUpdateAnswer={() => void 0}
 						onUpdateTags={() => void 0}
 						onUpdateHistory={(history) => {
 							setItems((arr) =>
@@ -94,19 +82,11 @@ function MiniCurateApp() {
 							setUnsaved(true);
 						}}
 						onDeleteTurn={() => void 0}
-						onGenerateAgentTurn={async (): Promise<AgentGenerationResult> => ({
-							ok: true as const,
-							messageIndex: 0,
-						})}
 						onSaveDraft={() => void 0}
 						onApprove={() => void 0}
 						onSkip={() => void 0}
 						onDelete={() => void 0}
 						onRestore={() => void 0}
-						onUpdateReference={() => void 0}
-						onRemoveReference={() => void 0}
-						onOpenReference={() => void 0}
-						onAddReferences={() => void 0}
 					/>
 				</div>
 			) : (
