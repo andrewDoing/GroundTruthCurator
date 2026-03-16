@@ -64,14 +64,17 @@ export default function ReferencesSection({
 	const [searchSelected, setSearchSelected] = useState<Set<string>>(new Set());
 	const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-	// RAG compat surface: only show ReferencesTabs in single-turn mode.
-	// Multi-turn items manage references per-turn via the conversation editor.
-	const showRagCompat = !isMultiTurn;
+	// RAG compat surface: show ReferencesTabs when the item prop was omitted
+	// entirely (legacy RAG-only callers) OR when a real single-turn item is
+	// selected.  Hide it when the selection is explicitly null (no item chosen)
+	// or the item is multi-turn (references are managed per-turn).
+	const showRagCompat = item === undefined || (!!item && !isMultiTurn);
 
-	// Render the evidence surface only for real selected items.
-	// `null` represents no current selection / loading; `undefined` still means
-	// the caller omitted the item prop entirely for backward compatibility.
-	const showEvidence = item !== undefined && item !== null;
+	// The evidence surface is the default right-pane experience whenever the
+	// caller passes the item prop (even as null for no-selection).  It renders
+	// the full trace/tool-call view for items with data and an empty-state
+	// placeholder otherwise.
+	const showEvidence = item !== undefined;
 
 	async function runSearch() {
 		try {
