@@ -4,9 +4,9 @@
  * Phase 4 redesign: this component is now a generic right-pane host rather
  * than a purely retrieval-specific panel.  It renders:
  *
- *  1. Evidence & Trace panel (TracePanel) — always shown when the current item
- *     has generic agentic data (toolCalls, traceIds, metadata, feedback,
- *     expectedTools).  This is the primary Phase 4 evidence surface.
+ *  1. Evidence & Trace panel (TracePanel) — shown whenever the current item
+ *     slot contains a real selected item. This keeps the newer agentic review
+ *     surface as the default experience once selection/loading is resolved.
  *
  *  2. RAG compatibility panel (ReferencesTabs) — shown as an opt-in section
  *     when the item has references OR when in single-turn mode.  This surface
@@ -23,7 +23,6 @@ import type {
 	GroundTruthItem,
 	Reference,
 } from "../../../models/groundTruth";
-import { hasEvidenceData } from "../../../models/groundTruth";
 import { cn, urlToTitle } from "../../../models/utils";
 import ReferencesTabs from "../../app/ReferencesPanel/ReferencesTabs";
 import TracePanel from "../../app/TracePanel";
@@ -65,12 +64,17 @@ export default function ReferencesSection({
 	const [searchSelected, setSearchSelected] = useState<Set<string>>(new Set());
 	const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-	// RAG compat surface: only show ReferencesTabs in single-turn mode.
-	// Multi-turn items manage references per-turn via the conversation editor.
-	const showRagCompat = !isMultiTurn;
+	// RAG compat surface: show ReferencesTabs when the item prop was omitted
+	// entirely (legacy RAG-only callers) OR when a real single-turn item is
+	// selected.  Hide it when the selection is explicitly null (no item chosen)
+	// or the item is multi-turn (references are managed per-turn).
+	const showRagCompat = item === undefined || (!!item && !isMultiTurn);
 
-	// Evidence panel: show TracePanel when item has generic agentic data.
-	const showEvidence = !!item && hasEvidenceData(item);
+	// The evidence surface is the default right-pane experience whenever the
+	// caller passes the item prop (even as null for no-selection).  It renders
+	// the full trace/tool-call view for items with data and an empty-state
+	// placeholder otherwise.
+	const showEvidence = item !== undefined;
 
 	async function runSearch() {
 		try {
@@ -132,8 +136,8 @@ export default function ReferencesSection({
 					: "rounded-2xl border bg-white shadow-sm h-[calc(100vh-5.5rem)]",
 			)}
 		>
-			{/* Evidence & Trace panel (generic agentic data) */}
-			{showEvidence && item && (
+			{/* Evidence & Trace panel (default agentic surface) */}
+			{showEvidence && (
 				<div
 					className={cn(
 						"overflow-y-auto",

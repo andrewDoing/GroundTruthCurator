@@ -113,33 +113,45 @@ describe("ReferencesSection – generic right pane (Phase 4)", () => {
 		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 	});
 
-	it("shows RAG compat panel when in single-turn mode", () => {
+	it("shows evidence empty state when item is null in single-turn mode", () => {
 		render(
 			<ReferencesSection {...noopProps} item={null} isMultiTurn={false} />,
 		);
-		// Search tab should be visible (RAG compat surface)
-		const searchBtns = screen.getAllByRole("button", { name: /Search/i });
-		expect(searchBtns.length).toBeGreaterThan(0);
+		// Evidence panel should render with its empty state
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
+		expect(
+			screen.getByText(/No trace or evidence data available yet/i),
+		).toBeInTheDocument();
+		// Search tabs should NOT show when selection is explicitly null
+		const searchBtns = screen.queryAllByRole("button", { name: /^Search$/i });
+		expect(searchBtns).toHaveLength(0);
 	});
 
-	it("shows empty state when multi-turn mode and no evidence or references", () => {
+	it("shows the trace empty state when multi-turn mode has no evidence yet", () => {
 		const item = makeItem(); // no toolCalls, no traceIds, etc.
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
-		// No references, no evidence data → empty state
+		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
 		expect(
-			screen.getByText(/No evidence or references available/i),
+			screen.getByText(/No trace or evidence data available yet/i),
 		).toBeInTheDocument();
 	});
 
-	it("shows TracePanel header when item has expectedTools", () => {
+	it("shows expected-tool details when item has expectedTools without toolCalls", () => {
 		const item = makeItem({
 			expectedTools: {
-				required: [{ name: "search" }],
+				required: [{ name: "search", arguments: { query: "refund policy" } }],
+				optional: [{ name: "fetch" }],
 			},
 			toolCalls: [],
 		});
 		render(<ReferencesSection {...noopProps} item={item} isMultiTurn />);
 		expect(screen.getByText(/Evidence & Review/i)).toBeInTheDocument();
+		expect(screen.getByText(/Expected Tools/i)).toBeInTheDocument();
+		expect(screen.getByText(/^Required$/i)).toBeInTheDocument();
+		expect(screen.getByText(/^Optional$/i)).toBeInTheDocument();
+		expect(screen.getByText(/^search$/i)).toBeInTheDocument();
+		expect(screen.getByText(/refund policy/i)).toBeInTheDocument();
+		expect(screen.getByText(/^fetch$/i)).toBeInTheDocument();
 	});
 
 	it("shows generic evidence for context-only items", () => {
