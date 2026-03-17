@@ -22,7 +22,6 @@ from app.domain.models import (
     ExpectedTools,
     FeedbackEntry,
     GroundTruthListResponse,
-    HistoryItem,
     PluginPayload,
     ToolCallRecord,
     BulkImportError,
@@ -137,17 +136,6 @@ class GroundTruthUpdateRequest(BaseModel):
     trace_payload: dict[str, Any] | None = Field(default=None, alias="tracePayload")
     scenario_id: str | None = Field(default=None, alias="scenarioId")
     etag: str | None = Field(default=None, alias="etag")
-
-
-def _coerce_history_for_internal_use(item: AgenticGroundTruthEntry) -> None:
-    if not item.history:
-        return
-    item.history = [
-        entry
-        if isinstance(entry, HistoryItem)
-        else HistoryItem.model_validate(entry.model_dump(by_alias=True))
-        for entry in item.history
-    ]
 
 
 @router.post("", response_model=ImportBulkResponse)
@@ -273,7 +261,6 @@ async def import_bulk(
         # Fetch registry once for performance (avoids O(n) singleton lookups)
         registry = get_default_registry()
         for it in gt_items:
-            _coerce_history_for_internal_use(it)
             apply_computed_tags(it, registry)
 
         result = await container.repo.import_bulk_gt(gt_items, buckets=buckets)

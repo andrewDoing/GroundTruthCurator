@@ -49,7 +49,9 @@ class TestReferenceTypePlugins:
 
     def test_no_refs_gets_no_tags(self):
         """Item with no refs should get neither tag."""
-        item = make_test_entry(id="test-no-refs", dataset_name="test-dataset", synth_question="Question")
+        item = make_test_entry(
+            id="test-no-refs", dataset_name="test-dataset", synth_question="Question"
+        )
         assert ReferenceTypeArticlePlugin().compute(item) is None
         assert ReferenceTypeHelpcenterPlugin().compute(item) is None
 

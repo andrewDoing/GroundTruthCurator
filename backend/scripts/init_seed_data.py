@@ -24,7 +24,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 def _build_item(dataset: str, idx: int) -> Any:
-    from app.domain.models import GroundTruthItem, Reference
+    from app.domain.models import AgenticGroundTruthEntry, Reference
     from app.domain.enums import GroundTruthStatus
 
     # Vary some fields for realism while keeping validation simple
@@ -45,15 +45,13 @@ def _build_item(dataset: str, idx: int) -> Any:
         "id": f"{dataset}-q{idx:04d}",
         "datasetName": dataset,
         "status": GroundTruthStatus.draft.value,
-        "history": [
-            {"role": "user", "msg": f"What is item {idx} about in dataset '{dataset}'?"}
-        ],
+        "history": [{"role": "user", "msg": f"What is item {idx} about in dataset '{dataset}'?"}],
         "plugins": {
             "rag-compat": {
                 "kind": "rag-compat",
                 "version": "1.0",
                 "data": {
-                    "refs": [
+                    "references": [
                         Reference(url=f"https://example.com/{dataset}/{idx}").model_dump(
                             mode="json", by_alias=True
                         )
@@ -61,9 +59,9 @@ def _build_item(dataset: str, idx: int) -> Any:
                 },
             }
         },
-        "tags": tags,
+        "manualTags": tags,
     }
-    return GroundTruthItem.model_validate(data)
+    return AgenticGroundTruthEntry.model_validate(data)
 
 
 def _default_registry_tags() -> list[str]:

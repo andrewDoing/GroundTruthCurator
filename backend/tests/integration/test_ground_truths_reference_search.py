@@ -4,10 +4,11 @@ import pytest
 from httpx import AsyncClient
 from uuid import uuid4
 
+
 def canonicalize_history_refs(item: dict) -> dict:
-    """Move history-entry refs into rag-compat plugin payload for API compatibility."""
+    """Move history-entry refs into canonical rag-compat plugin references payload."""
     transformed = dict(item)
-    compat_refs: list[dict] = []
+    compat_references: list[dict] = []
 
     history = transformed.get("history")
     if isinstance(history, list):
@@ -18,20 +19,58 @@ def canonicalize_history_refs(item: dict) -> dict:
             entry_dict = dict(entry)
             raw_refs = entry_dict.pop("refs", None)
             if isinstance(raw_refs, list):
-                compat_refs.extend([ref for ref in raw_refs if isinstance(ref, dict)])
+                for ref in raw_refs:
+                    if not isinstance(ref, dict):
+                        continue
+                    normalized_ref = dict(ref)
+                    normalized_ref.setdefault("messageIndex", len(normalized_history))
+                    normalized_ref.setdefault("turnId", f"turn-{len(normalized_history)}")
+                    compat_references.append(normalized_ref)
             normalized_history.append(entry_dict)
         transformed["history"] = normalized_history
 
-    if compat_refs:
+    if compat_references:
         transformed["plugins"] = {
             "rag-compat": {
                 "kind": "rag-compat",
                 "version": "1.0",
-                "data": {"refs": compat_refs, "totalReferences": len(compat_refs)},
+                "data": {"references": compat_references},
             }
         }
 
     return transformed
+
+
+def get_plugin_refs(item: dict[str, object]) -> list[dict[str, object]]:
+    plugins = item.get("plugins")
+    if not isinstance(plugins, dict):
+        return []
+    rag_plugin = plugins.get("rag-compat")
+    if not isinstance(rag_plugin, dict):
+        return []
+    data = rag_plugin.get("data")
+    if not isinstance(data, dict):
+        return []
+    refs = data.get("references")
+    if not isinstance(refs, list):
+        return []
+    return [ref for ref in refs if isinstance(ref, dict)]
+
+
+def assert_canonical_ref_ownership(
+    item: dict[str, object], *, expected_message_indexes: set[int]
+) -> None:
+    refs = get_plugin_refs(item)
+    assert refs
+    found_indexes = set()
+    for ref in refs:
+        message_index = ref.get("messageIndex")
+        assert isinstance(message_index, int)
+        turn_id = ref.get("turnId")
+        if turn_id is not None:
+            assert isinstance(turn_id, str) and turn_id
+        found_indexes.add(message_index)
+    assert found_indexes == expected_message_indexes
 
 
 @pytest.mark.anyio
@@ -65,13 +104,16 @@ async def test_ref_url_search_matches_item_level_refs(
 
     # Search for "page1" should find the item
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=page1"}, headers=user_headers
+        "/v1/ground-truths",
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=page1"},
+        headers=user_headers,
     )
     assert res.status_code == 200
 
     response_data = res.json()
     assert len(response_data["items"]) == 1
     assert response_data["items"][0]["id"] == item["id"]
+    assert_canonical_ref_ownership(response_data["items"][0], expected_message_indexes={1})
 
 
 @pytest.mark.anyio
@@ -108,13 +150,16 @@ async def test_ref_url_search_matches_history_level_refs(
 
     # Search for "article" should find the item
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=article"}, headers=user_headers
+        "/v1/ground-truths",
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=article"},
+        headers=user_headers,
     )
     assert res.status_code == 200
 
     response_data = res.json()
     assert len(response_data["items"]) == 1
     assert response_data["items"][0]["id"] == item["id"]
+    assert_canonical_ref_ownership(response_data["items"][0], expected_message_indexes={1})
 
 
 @pytest.mark.anyio
@@ -148,13 +193,16 @@ async def test_ref_url_search_matches_both_levels(
 
     # Search for "bar" should find the item (matches both levels)
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=bar"}, headers=user_headers
+        "/v1/ground-truths",
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=bar"},
+        headers=user_headers,
     )
     assert res.status_code == 200
 
     response_data = res.json()
     assert len(response_data["items"]) == 1
     assert response_data["items"][0]["id"] == item["id"]
+    assert_canonical_ref_ownership(response_data["items"][0], expected_message_indexes={1})
 
 
 @pytest.mark.anyio
@@ -247,7 +295,9 @@ async def test_ref_url_search_partial_match(
 
     # Search for path portion
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=/guide"}, headers=user_headers
+        "/v1/ground-truths",
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=/guide"},
+        headers=user_headers,
     )
     assert res.status_code == 200
     assert len(res.json()["items"]) == 1
@@ -425,7 +475,11 @@ async def test_ref_url_search_combined_with_other_filters(
     # Filter by dataset + status + refUrl → should get 1 item (approved in dataset1)
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset1, "status": "approved", "pluginFilter": "rag-compat:refUrl=example.com"},
+        params={
+            "dataset": dataset1,
+            "status": "approved",
+            "pluginFilter": "rag-compat:refUrl=example.com",
+        },
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -469,7 +523,12 @@ async def test_ref_url_search_with_pagination(
     # Get first page with limit=10
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=example.com", "page": 1, "limit": 10},
+        params={
+            "dataset": dataset,
+            "pluginFilter": "rag-compat:refUrl=example.com",
+            "page": 1,
+            "limit": 10,
+        },
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -485,7 +544,12 @@ async def test_ref_url_search_with_pagination(
     # Get second page
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=example.com", "page": 2, "limit": 10},
+        params={
+            "dataset": dataset,
+            "pluginFilter": "rag-compat:refUrl=example.com",
+            "page": 2,
+            "limit": 10,
+        },
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -536,7 +600,9 @@ async def test_ref_url_search_empty_string_ignored(
 
     # Empty string
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl="}, headers=user_headers
+        "/v1/ground-truths",
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl="},
+        headers=user_headers,
     )
     assert res.status_code == 200
     response_data = res.json()
@@ -544,7 +610,9 @@ async def test_ref_url_search_empty_string_ignored(
 
     # Whitespace only
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=   "}, headers=user_headers
+        "/v1/ground-truths",
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=   "},
+        headers=user_headers,
     )
     assert res.status_code == 200
     response_data = res.json()

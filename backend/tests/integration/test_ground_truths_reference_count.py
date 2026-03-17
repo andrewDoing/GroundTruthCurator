@@ -1,4 +1,4 @@
-"""Integration tests for totalReferences computed field on GroundTruthItem."""
+"""Integration tests for canonical rag-compat reference count behavior."""
 
 import pytest
 from httpx import AsyncClient
@@ -6,19 +6,38 @@ from uuid import uuid4
 
 
 def total_refs(item: dict[str, object]) -> int:
-    value = item.get("totalReferences", item.get("total_references", 0))
-    if isinstance(value, int):
-        return value
+    assert "refs" not in item
+    assert "totalReferences" not in item
+    assert "total_references" not in item
     plugins = item.get("plugins")
-    if isinstance(plugins, dict):
-        rag_plugin = plugins.get("rag-compat")
-        if isinstance(rag_plugin, dict):
-            data = rag_plugin.get("data")
-            if isinstance(data, dict):
-                refs = data.get("refs")
-                if isinstance(refs, list):
-                    return len(refs)
-    return 0
+    if not isinstance(plugins, dict):
+        return 0
+    rag_plugin = plugins.get("rag-compat")
+    if not isinstance(rag_plugin, dict):
+        return 0
+    data = rag_plugin.get("data")
+    if not isinstance(data, dict):
+        return 0
+    refs = data.get("references")
+    if not isinstance(refs, list):
+        return 0
+    return len(refs)
+
+
+def plugin_refs(item: dict[str, object]) -> list[dict[str, object]]:
+    plugins = item.get("plugins")
+    if not isinstance(plugins, dict):
+        return []
+    rag_plugin = plugins.get("rag-compat")
+    if not isinstance(rag_plugin, dict):
+        return []
+    data = rag_plugin.get("data")
+    if not isinstance(data, dict):
+        return []
+    refs = data.get("references")
+    if not isinstance(refs, list):
+        return []
+    return [ref for ref in refs if isinstance(ref, dict)]
 
 
 def make_history_item(
@@ -41,12 +60,13 @@ def make_history_item(
             },
         ],
     }
-    if assistant_refs:
+    if assistant_refs is not None:
+        normalized_refs = [dict(ref, messageIndex=1) for ref in assistant_refs]
         item["plugins"] = {
             "rag-compat": {
                 "kind": "rag-compat",
                 "version": "1.0",
-                "data": {"refs": assistant_refs, "totalReferences": len(assistant_refs)},
+                "data": {"references": normalized_refs},
             }
         }
     return item
@@ -56,7 +76,7 @@ def make_history_item(
 async def test_ground_truth_item_includes_total_references_field(
     async_client: AsyncClient, user_headers: dict[str, str]
 ):
-    """Verify totalReferences field exists in response."""
+    """Verify canonical plugin references are present in response."""
     dataset = f"ref-count-exists-{uuid4().hex[:6]}"
 
     item = make_history_item(
@@ -109,6 +129,8 @@ async def test_total_references_counts_item_level_refs_only(
     response_data = res.json()
     assert len(response_data["items"]) == 1
     assert response_data["items"][0]["id"].startswith("test-")
+    assert total_refs(response_data["items"][0]) == 3
+    assert {ref.get("messageIndex") for ref in plugin_refs(response_data["items"][0])} == {1}
 
 
 @pytest.mark.anyio
@@ -145,12 +167,11 @@ async def test_total_references_counts_history_level_refs_only(
                 "kind": "rag-compat",
                 "version": "1.0",
                 "data": {
-                    "totalReferences": 3,
-                    "refs": [
-                        {"url": "https://example.com/turn1-ref1"},
-                        {"url": "https://example.com/turn1-ref2"},
-                        {"url": "https://example.com/turn2-ref1"},
-                    ]
+                    "references": [
+                        {"url": "https://example.com/turn1-ref1", "messageIndex": 1},
+                        {"url": "https://example.com/turn1-ref2", "messageIndex": 1},
+                        {"url": "https://example.com/turn2-ref1", "messageIndex": 3},
+                    ],
                 },
             }
         },
@@ -167,6 +188,8 @@ async def test_total_references_counts_history_level_refs_only(
     response_data = res.json()
     assert len(response_data["items"]) == 1
     assert response_data["items"][0]["id"].startswith("test-")
+    assert total_refs(response_data["items"][0]) == 3
+    assert {ref.get("messageIndex") for ref in plugin_refs(response_data["items"][0])} == {1, 3}
 
 
 @pytest.mark.anyio
@@ -199,12 +222,11 @@ async def test_total_references_counts_both_levels(
                 "kind": "rag-compat",
                 "version": "1.0",
                 "data": {
-                    "totalReferences": 3,
-                    "refs": [
+                    "references": [
                         {"url": "https://example.com/history-ref1"},
                         {"url": "https://example.com/history-ref2"},
                         {"url": "https://example.com/history-ref3"},
-                    ]
+                    ],
                 },
             }
         },
@@ -221,6 +243,7 @@ async def test_total_references_counts_both_levels(
     response_data = res.json()
     assert len(response_data["items"]) == 1
     assert response_data["items"][0]["id"].startswith("test-")
+    assert total_refs(response_data["items"][0]) == 3
 
 
 @pytest.mark.anyio
@@ -248,6 +271,7 @@ async def test_total_references_zero_when_no_refs(
     response_data = res.json()
     assert len(response_data["items"]) == 1
     assert response_data["items"][0]["id"].startswith("test-")
+    assert total_refs(response_data["items"][0]) == 0
 
 
 @pytest.mark.anyio
@@ -273,7 +297,7 @@ async def test_total_references_multiple_items_independent(
                 "rag-compat": {
                     "kind": "rag-compat",
                     "version": "1.0",
-                    "data": {"refs": [{"url": "https://example.com/1"}], "totalReferences": 1},
+                    "data": {"references": [{"url": "https://example.com/1"}]},
                 }
             },
         },
@@ -297,11 +321,10 @@ async def test_total_references_multiple_items_independent(
                     "kind": "rag-compat",
                     "version": "1.0",
                     "data": {
-                        "totalReferences": 2,
-                        "refs": [
+                        "references": [
                             {"url": "https://example.com/2a"},
                             {"url": "https://example.com/2c"},
-                        ]
+                        ],
                     },
                 }
             },
@@ -335,3 +358,6 @@ async def test_total_references_multiple_items_independent(
     }
 
     assert set(items_by_question.keys()) == {"Question 1?", "Question 2?", "Question 3?"}
+    assert total_refs(items_by_question["Question 1?"]) == 1
+    assert total_refs(items_by_question["Question 2?"]) == 2
+    assert total_refs(items_by_question["Question 3?"]) == 0

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from app.adapters.repos.base import GroundTruthRepo
-from app.domain.models import AgenticGroundTruthEntry, AssignmentDocument, HistoryItem
+from app.domain.models import AgenticGroundTruthEntry, AssignmentDocument
 from app.plugins import get_default_registry
 from app.core.errors import AssignmentConflictError
 from app.core.config import get_sampling_allocation
@@ -620,12 +620,6 @@ class AssignmentService:
 
         now = datetime.now(timezone.utc)
         new_item = AgenticGroundTruthEntry.model_validate(original.model_dump(by_alias=True))
-        new_item.history = [
-            entry
-            if isinstance(entry, HistoryItem)
-            else HistoryItem.model_validate(entry.model_dump(by_alias=True))
-            for entry in (new_item.history or [])
-        ]
         new_item.id = randomname.get_name()
         new_item.status = GroundTruthStatus.draft
         new_item.manual_tags = new_tags

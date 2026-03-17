@@ -1,35 +1,29 @@
-"""
-Unit tests for HistoryItem with refs field.
-Validates that history items can store references alongside agent messages.
-"""
+"""Unit tests for canonical HistoryItem validation semantics."""
+
+import pytest
+from pydantic import ValidationError
 
 from app.domain.models import HistoryItem, Reference
 from app.domain.enums import HistoryItemRole, ExpectedBehavior
 
 
-def test_history_item_with_refs():
-    """Test that HistoryItem can include refs."""
+def test_history_item_rejects_refs():
+    """HistoryItem rejects legacy refs; refs are plugin-owned canonical data."""
     refs = [
         Reference(url="https://example.com/doc1", content="Content 1"),
         Reference(url="https://example.com/doc2", content="Content 2", bonus=True),
     ]
 
-    history_item = HistoryItem(
-        role=HistoryItemRole.assistant,
-        msg="Here is the answer based on the documentation.",
-        refs=refs,
-    )
-
-    assert history_item.role == HistoryItemRole.assistant
-    assert history_item.msg == "Here is the answer based on the documentation."
-    assert history_item.refs is not None
-    assert len(history_item.refs) == 2
-    assert history_item.refs[0].url == "https://example.com/doc1"
-    assert history_item.refs[1].bonus is True
+    with pytest.raises(ValidationError):
+        HistoryItem(
+            role=HistoryItemRole.assistant,
+            msg="Here is the answer based on the documentation.",
+            refs=refs,
+        )
 
 
 def test_history_item_without_refs():
-    """Test that refs is optional in HistoryItem."""
+    """HistoryItem remains valid with canonical role/msg content only."""
     history_item = HistoryItem(
         role=HistoryItemRole.user,
         msg="What is the answer?",
@@ -37,33 +31,23 @@ def test_history_item_without_refs():
 
     assert history_item.role == HistoryItemRole.user
     assert history_item.msg == "What is the answer?"
-    assert history_item.refs is None
+    assert "refs" not in history_item.model_dump()
 
 
 def test_history_item_serialization():
-    """Test that HistoryItem serializes correctly with refs."""
-    refs = [
-        Reference(url="https://example.com/doc1", content="Content 1"),
-    ]
-
-    history_item = HistoryItem(
-        role=HistoryItemRole.assistant,
-        msg="Answer text",
-        refs=refs,
-    )
+    """HistoryItem serialization excludes legacy refs field."""
+    history_item = HistoryItem(role=HistoryItemRole.assistant, msg="Answer text")
 
     # Serialize to dict
     data = history_item.model_dump()
 
     assert data["role"] == "assistant"
     assert data["msg"] == "Answer text"
-    assert data["refs"] is not None
-    assert len(data["refs"]) == 1
-    assert data["refs"][0]["url"] == "https://example.com/doc1"
+    assert "refs" not in data
 
 
-def test_history_item_deserialization():
-    """Test that HistoryItem can be created from dict with refs."""
+def test_history_item_deserialization_rejects_refs():
+    """HistoryItem rejects dict payloads containing legacy refs."""
     data = {
         "role": "assistant",
         "msg": "Answer text",
@@ -73,33 +57,24 @@ def test_history_item_deserialization():
         ],
     }
 
-    history_item = HistoryItem(**data)
-
-    assert history_item.role == HistoryItemRole.assistant
-    assert history_item.msg == "Answer text"
-    assert history_item.refs is not None
-    assert len(history_item.refs) == 2
-    assert history_item.refs[0].url == "https://example.com/doc1"
-    assert history_item.refs[1].bonus is True
+    with pytest.raises(ValidationError):
+        HistoryItem(**data)
 
 
-def test_user_history_item_typically_no_refs():
-    """Test that user messages typically don't have refs (but could)."""
-    # User message without refs (typical)
+def test_user_history_item_rejects_refs():
+    """User history items also reject legacy refs."""
     user_item = HistoryItem(
         role=HistoryItemRole.user,
         msg="What is this product?",
     )
-    assert user_item.refs is None
+    assert "refs" not in user_item.model_dump()
 
-    # User message with refs (uncommon but allowed)
-    user_item_with_refs = HistoryItem(
-        role=HistoryItemRole.user,
-        msg="Based on this document, what is this product?",
-        refs=[Reference(url="https://example.com/doc1")],
-    )
-    assert user_item_with_refs.refs is not None
-    assert len(user_item_with_refs.refs) == 1
+    with pytest.raises(ValidationError):
+        HistoryItem(
+            role=HistoryItemRole.user,
+            msg="Based on this document, what is this product?",
+            refs=[Reference(url="https://example.com/doc1")],
+        )
 
 
 def test_history_item_with_expected_behavior():

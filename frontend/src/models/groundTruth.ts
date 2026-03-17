@@ -67,11 +67,11 @@ export type RetrievalCandidate = {
 };
 
 // ---------------------------------------------------------------------------
-// Per-call retrieval helpers (Phase 6 — retrieval normalization)
+// Reference helpers.
 //
-// References are stored in plugins["rag-compat"].data.retrievals per tool
-// call.  The helpers below provide flat Reference[] access for UI
-// components that still consume the legacy Reference shape.
+// Canonical path: plugins["rag-compat"].data.references
+// Legacy fallback path: plugins["rag-compat"].data.retrievals
+// The helpers below provide flat Reference[] access for UI components.
 // ---------------------------------------------------------------------------
 
 const _RAG_COMPAT_KEY = "rag-compat";
@@ -97,6 +97,28 @@ type RetrievalBucket = {
 /** Typed shorthand for the retrievals dict inside rag-compat plugin data. */
 type RetrievalsMap = Record<string, RetrievalBucket>;
 
+type CompatReferencePayload = {
+	url: string;
+	title?: string;
+	content?: string;
+	keyExcerpt?: string;
+	bonus?: boolean;
+	messageIndex?: number;
+	turnId?: string;
+	toolCallId?: string;
+	visitedAt?: string | null;
+};
+
+function getCanonicalCompatReferences(
+	item: Pick<GroundTruthItem, "plugins">,
+): CompatReferencePayload[] | undefined {
+	const data = item.plugins?.[_RAG_COMPAT_KEY]?.data;
+	if (!data) return undefined;
+	const references = data.references;
+	if (!Array.isArray(references)) return undefined;
+	return references as CompatReferencePayload[];
+}
+
 /**
  * Read the per-call retrievals map from plugin data.
  * Returns `undefined` when no per-call state exists.
@@ -121,11 +143,39 @@ export function getRetrievalsMap(
  * exists (caller should provide legacy references separately if needed).
  */
 export function getItemReferences(item: GroundTruthItem): Reference[] {
-	const retrievals = getRetrievalsMap(item);
-	if (!retrievals) return [];
 	const history = ensureConversationTurnIdentity(item.history);
 	const indexByTurnId = getTurnIndexById(history);
+	const canonicalRefs = getCanonicalCompatReferences(item);
+	if (canonicalRefs) {
+		return canonicalRefs
+			.filter((ref): ref is CompatReferencePayload => !!ref?.url)
+			.map((ref, index) => {
+				const resolvedMessageIndex =
+					ref.turnId && indexByTurnId.has(ref.turnId)
+						? indexByTurnId.get(ref.turnId)
+						: ref.messageIndex;
+				const resolvedTurnId =
+					ref.turnId ||
+					(typeof resolvedMessageIndex === "number"
+						? history[resolvedMessageIndex]?.turnId
+						: undefined);
+				return {
+					id: `ref_${index}`,
+					title: ref.title,
+					url: ref.url,
+					snippet: ref.content,
+					visitedAt: ref.visitedAt ?? null,
+					keyParagraph: ref.keyExcerpt,
+					bonus: ref.bonus ?? false,
+					messageIndex: resolvedMessageIndex,
+					turnId: resolvedTurnId,
+					toolCallId: ref.toolCallId,
+				};
+			});
+	}
 
+	const retrievals = getRetrievalsMap(item);
+	if (!retrievals) return [];
 	const refs: Reference[] = [];
 	let refIndex = 0;
 	for (const [toolCallId, bucket] of Object.entries(retrievals)) {
@@ -167,6 +217,17 @@ export function withUpdatedReferences(
 	item: GroundTruthItem,
 	refs: Reference[],
 ): GroundTruthItem {
+	const references: CompatReferencePayload[] = refs.map((ref) => ({
+		url: ref.url,
+		title: ref.title,
+		content: ref.snippet,
+		keyExcerpt: ref.keyParagraph,
+		bonus: ref.bonus ?? false,
+		messageIndex: ref.turnId ? undefined : ref.messageIndex,
+		turnId: ref.turnId,
+		toolCallId: ref.toolCallId,
+		visitedAt: ref.visitedAt ?? null,
+	}));
 	const retrievals: RetrievalsMap = {};
 	for (const ref of refs) {
 		const key = ref.toolCallId || _UNASSOCIATED_KEY;
@@ -192,7 +253,7 @@ export function withUpdatedReferences(
 	plugins[_RAG_COMPAT_KEY] = {
 		kind: _RAG_COMPAT_KEY,
 		version: existing?.version || "1.0",
-		data: { ...(existing?.data || {}), retrievals },
+		data: { ...(existing?.data || {}), references, retrievals },
 	};
 
 	return { ...item, plugins };

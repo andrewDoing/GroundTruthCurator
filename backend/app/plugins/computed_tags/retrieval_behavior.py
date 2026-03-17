@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.plugins.base import ComputedTagPlugin
-from app.plugins.pack_registry import get_rag_compat_pack
+from app.plugins.pack_registry import get_default_pack_registry
 
 if TYPE_CHECKING:
     from app.domain.models import AgenticGroundTruthEntry
@@ -30,7 +30,8 @@ def _get_total_reference_count(doc: AgenticGroundTruthEntry) -> int:
     Returns:
         The total number of references.
     """
-    return get_rag_compat_pack().reference_count(doc)
+    count = get_default_pack_registry().plugin_sort_value(doc, "rag-compat:totalReferences")
+    return int(count) if isinstance(count, int) else 0
 
 
 class RetrievalBehaviorNoRefsPlugin(ComputedTagPlugin):

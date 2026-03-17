@@ -12,22 +12,21 @@ import {
 import { urlToTitle } from "../models/utils";
 
 const _RAG_COMPAT_KEY = "rag-compat";
-const _UNASSOCIATED_KEY = "_unassociated";
-
-type RetrievalBucket = {
-	candidates: Array<{
-		url: string;
-		title?: string;
-		chunk?: string;
-		relevance?: string;
-		toolCallId?: string;
-		messageIndex?: number;
-		turnId?: string;
-		keyParagraph?: string;
-		bonus?: boolean;
-	}>;
-};
-type RetrievalsMap = Record<string, RetrievalBucket>;
+const _REMOVED_COMPAT_PATCH_KEYS = [
+	"synthQuestion",
+	"editedQuestion",
+	"answer",
+	"refs",
+	"totalReferences",
+	"historyAnnotations",
+	"contextUsedForGeneration",
+	"contextSource",
+	"modelUsedForGeneration",
+	"semanticClusterNumber",
+	"weight",
+	"samplingBucket",
+	"questionLength",
+];
 
 type ConversationTurn = NonNullable<GroundTruthItem["history"]>[number];
 export type ApiReference = {
@@ -61,6 +60,18 @@ type StoredTurnIdentity = {
 
 function hasOwnField(value: object, field: PropertyKey): boolean {
 	return Object.hasOwn(value, field);
+}
+
+function sanitizeCompatDataForPatch(data: unknown): Record<string, unknown> {
+	if (!data || typeof data !== "object" || Array.isArray(data)) {
+		return {};
+	}
+
+	const sanitized = { ...(data as Record<string, unknown>) };
+	for (const key of _REMOVED_COMPAT_PATCH_KEYS) {
+		delete sanitized[key];
+	}
+	return sanitized;
 }
 
 function normalizeToolCalls(
@@ -98,12 +109,19 @@ export function groundTruthFromApi(
 	const compatData =
 		(plugins[_RAG_COMPAT_KEY]?.data as Record<string, unknown> | undefined) ||
 		{};
+	const editedQuestion = compatData.editedQuestion;
+	const synthQuestion = compatData.synthQuestion;
+	const initialQuestion =
+		(typeof editedQuestion === "string" && editedQuestion) ||
+		(typeof synthQuestion === "string" && synthQuestion) ||
+		"";
 	const storedTurnIdentity = getStoredTurnIdentities(plugins);
 	let history: GroundTruthItem["history"];
+	let usedLegacyCompatHistory = false;
 	const legacyRefs: Reference[] = [];
 	let refIndex = 0;
 
-	if (api.history && api.history.length > 0) {
+	if (Array.isArray(api.history)) {
 		history = new Array(api.history.length);
 
 		for (let idx = 0; idx < api.history.length; idx++) {
@@ -138,38 +156,34 @@ export function groundTruthFromApi(
 				}
 			}
 		}
-	} else {
+	} else if (initialQuestion) {
 		// Legacy single-turn compat payload: create initial history from plugin-owned fields
-		const editedQuestion = compatData.editedQuestion;
-		const synthQuestion = compatData.synthQuestion;
-		const initialQuestion =
-			(typeof editedQuestion === "string" && editedQuestion) ||
-			(typeof synthQuestion === "string" && synthQuestion) ||
-			"";
-		if (initialQuestion) {
-			const answer = compatData.answer;
-			history = [
-				createConversationTurn({
-					role: "user",
-					content: initialQuestion,
-					turnId: storedTurnIdentity[0]?.turnId,
-					stepId: storedTurnIdentity[0]?.stepId,
-				}),
-				createConversationTurn({
-					role: "agent",
-					content: typeof answer === "string" ? answer : "",
-					turnId: storedTurnIdentity[1]?.turnId,
-					stepId: storedTurnIdentity[1]?.stepId,
-				}),
-			];
-		}
+		const answer = compatData.answer;
+		history = [
+			createConversationTurn({
+				role: "user",
+				content: initialQuestion,
+				turnId: storedTurnIdentity[0]?.turnId,
+				stepId: storedTurnIdentity[0]?.stepId,
+			}),
+			createConversationTurn({
+				role: "agent",
+				content: typeof answer === "string" ? answer : "",
+				turnId: storedTurnIdentity[1]?.turnId,
+				stepId: storedTurnIdentity[1]?.stepId,
+			}),
+		];
+		usedLegacyCompatHistory = true;
 	}
 
 	// Process plugin-owned compat refs for legacy payload migration
-	const compatRefs = Array.isArray(compatData.refs) ? compatData.refs : [];
+	const compatRefs = Array.isArray(compatData.references)
+		? compatData.references
+		: Array.isArray(compatData.refs)
+			? compatData.refs
+			: [];
 	if (compatRefs.length > 0) {
-		const wasLegacyConversion = !api.history || api.history.length === 0;
-		const messageIndex = wasLegacyConversion ? 1 : undefined;
+		const messageIndex = usedLegacyCompatHistory ? 1 : undefined;
 		const turnId =
 			typeof messageIndex === "number"
 				? history?.[messageIndex]?.turnId
@@ -194,42 +208,31 @@ export function groundTruthFromApi(
 		}
 	}
 
-	// Read per-call retrieval state from plugin data if it already exists
-	const existingRetrievals = (
+	const existingReferences = (
 		plugins[_RAG_COMPAT_KEY]?.data as Record<string, unknown> | undefined
-	)?.retrievals;
-	const hasPerCallState =
-		existingRetrievals &&
-		typeof existingRetrievals === "object" &&
-		!Array.isArray(existingRetrievals) &&
-		Object.keys(existingRetrievals as Record<string, unknown>).length > 0;
+	)?.references;
+	const hasCanonicalReferences = Array.isArray(existingReferences);
 
-	// When no per-call state exists but legacy refs were extracted, migrate them
-	if (!hasPerCallState && legacyRefs.length > 0) {
-		const retrievals: RetrievalsMap = {};
-		for (const ref of legacyRefs) {
-			const key = ref.toolCallId || _UNASSOCIATED_KEY;
-			if (!retrievals[key]) {
-				retrievals[key] = { candidates: [] };
-			}
-			retrievals[key].candidates.push({
-				url: ref.url,
-				title: ref.title,
-				chunk: ref.snippet,
-				relevance: undefined,
-				toolCallId: ref.toolCallId,
-				messageIndex: ref.turnId ? undefined : ref.messageIndex,
-				turnId: ref.turnId,
-				keyParagraph: ref.keyParagraph,
-				bonus: ref.bonus,
-			});
-		}
-
+	// When canonical references are absent but legacy refs were extracted, migrate them.
+	if (!hasCanonicalReferences && legacyRefs.length > 0) {
 		const existingPlugin = plugins[_RAG_COMPAT_KEY];
 		plugins[_RAG_COMPAT_KEY] = {
 			kind: _RAG_COMPAT_KEY,
 			version: existingPlugin?.version || "1.0",
-			data: { ...(existingPlugin?.data || {}), retrievals },
+			data: {
+				...(existingPlugin?.data || {}),
+				references: legacyRefs.map((ref) => ({
+					url: ref.url,
+					title: ref.title,
+					content: ref.snippet,
+					keyExcerpt: ref.keyParagraph,
+					bonus: ref.bonus ?? false,
+					messageIndex: ref.turnId ? undefined : ref.messageIndex,
+					turnId: ref.turnId,
+					toolCallId: ref.toolCallId,
+					visitedAt: ref.visitedAt ?? null,
+				})),
+			},
 		};
 	}
 
@@ -277,7 +280,6 @@ export function groundTruthFromApi(
 
 export function groundTruthToPatch(args: {
 	item: GroundTruthItem;
-	originalApi?: ApiGroundTruth;
 }): Partial<ApiGroundTruth> {
 	const item = withDerivedLegacyFields(args.item);
 	const history = ensureConversationTurnIdentity(item.history);
@@ -349,16 +351,21 @@ export function groundTruthToPatch(args: {
 	}
 	const plugins = { ...(item.plugins || {}) };
 	const existingCompat = plugins[_RAG_COMPAT_KEY];
-	if (history.length > 0) {
+	const compatData = sanitizeCompatDataForPatch(existingCompat?.data);
+	if (history.length > 0 || existingCompat) {
 		plugins[_RAG_COMPAT_KEY] = {
 			kind: _RAG_COMPAT_KEY,
 			version: existingCompat?.version || "1.0",
 			data: {
-				...(existingCompat?.data || {}),
-				turnIdentity: history.map((turn) => ({
-					turnId: turn.turnId,
-					stepId: turn.stepId,
-				})),
+				...compatData,
+				...(history.length > 0
+					? {
+							turnIdentity: history.map((turn) => ({
+								turnId: turn.turnId,
+								stepId: turn.stepId,
+							})),
+						}
+					: {}),
 			},
 		};
 	}

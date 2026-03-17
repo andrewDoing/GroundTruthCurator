@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from app.domain.models import AgenticGroundTruthEntry, BulkImportResult
+from app.domain.models import BulkImportResult
 from app.core.auth import UserContext
 from tests.test_helpers import make_test_entry
 
@@ -67,7 +67,10 @@ async def test_bulk_import_rejects_invalid_tags(mock_container, mock_user):
 
     items = [
         make_test_entry(
-            id="test-1", dataset_name="test", synth_question="What is Q?", manual_tags=["invalid:tag"]
+            id="test-1",
+            dataset_name="test",
+            synth_question="What is Q?",
+            manual_tags=["invalid:tag"],
         )
     ]
 

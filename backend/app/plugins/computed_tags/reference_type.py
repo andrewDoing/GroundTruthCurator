@@ -16,7 +16,7 @@ import re
 from typing import TYPE_CHECKING
 
 from app.plugins.base import ComputedTagPlugin
-from app.plugins.pack_registry import get_rag_compat_pack
+from app.plugins.pack_registry import get_default_pack_registry
 
 if TYPE_CHECKING:
     from app.domain.models import AgenticGroundTruthEntry, Reference
@@ -62,7 +62,16 @@ def _get_all_references(doc: AgenticGroundTruthEntry) -> list[Reference]:
     Returns:
         A list of all Reference objects from the document.
     """
-    return list(get_rag_compat_pack().refs_from_item(doc))
+    from app.domain.models import Reference
+
+    docs = get_default_pack_registry().collect_search_documents(doc)
+    refs: list[Reference] = []
+    for candidate in docs:
+        url = candidate.get("url")
+        if not isinstance(url, str) or not url:
+            continue
+        refs.append(Reference(url=url))
+    return refs
 
 
 def _has_article_reference(doc: AgenticGroundTruthEntry) -> bool:

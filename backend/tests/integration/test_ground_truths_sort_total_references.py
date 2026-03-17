@@ -40,32 +40,44 @@ def make_item_with_refs(
         ],
     }
 
-    # Keep history as plain role/msg entries and store retrieval refs in rag-compat plugin payload.
-    total_refs = assistant_refs_count
+    # Keep history as plain role/msg entries and store retrieval refs in canonical rag-compat payload.
+    plugin_refs: list[dict[str, object]] = [
+        {
+            "url": f"https://example.com/{item_id}/ref-base-{i}",
+            "messageIndex": 1,
+            "turnId": f"{item_id}-turn-1",
+        }
+        for i in range(assistant_refs_count)
+    ]
 
     # Add history turns if specified
     if history_refs_counts:
         history = [{"role": "user", "msg": f"Question for {item_id}?"}]
         for turn_idx, ref_count in enumerate(history_refs_counts):
             # Assistant turn with refs
+            message_index = len(history)
             turn: dict = {
                 "role": "assistant",
                 "msg": f"Turn {turn_idx} answer",
             }
             history.append(turn)
+            plugin_refs.extend(
+                {
+                    "url": f"https://example.com/{item_id}/ref-turn-{turn_idx}-{ref_idx}",
+                    "messageIndex": message_index,
+                    "turnId": f"{item_id}-turn-{message_index}",
+                }
+                for ref_idx in range(ref_count)
+            )
         item["history"] = history
-        total_refs = sum(history_refs_counts)
 
-    if total_refs > 0:
+    if plugin_refs:
         item["plugins"] = {
             "rag-compat": {
                 "kind": "rag-compat",
                 "version": "1.0",
                 "data": {
-                    "totalReferences": total_refs,
-                    "refs": [
-                        {"url": f"https://example.com/{item_id}/ref-{i}"} for i in range(total_refs)
-                    ]
+                    "references": plugin_refs,
                 },
             }
         }
@@ -92,7 +104,11 @@ async def test_sort_by_total_references_descending(
 
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "desc"},
+        params={
+            "dataset": dataset,
+            "pluginSort": "rag-compat:totalReferences",
+            "sortOrder": "desc",
+        },
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -168,7 +184,11 @@ async def test_sort_by_total_references_with_history_refs(
 
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "desc"},
+        params={
+            "dataset": dataset,
+            "pluginSort": "rag-compat:totalReferences",
+            "sortOrder": "desc",
+        },
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -183,6 +203,12 @@ async def test_sort_by_total_references_with_history_refs(
     assert item_ids[1] == "history-3"
     assert item_ids[2] == "item-level-2"
     assert item_ids[3] == "no-refs"
+
+    items_by_id = {item["id"]: item for item in response_data["items"]}
+    history_three_refs = (
+        items_by_id["history-3"]["plugins"]["rag-compat"]["data"].get("references", [])
+    )
+    assert {ref.get("messageIndex") for ref in history_three_refs} == {1, 2}
 
 
 @pytest.mark.anyio
@@ -357,7 +383,11 @@ async def test_sort_by_total_references_large_counts(
 
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "desc"},
+        params={
+            "dataset": dataset,
+            "pluginSort": "rag-compat:totalReferences",
+            "sortOrder": "desc",
+        },
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -387,7 +417,11 @@ async def test_sort_by_total_references_after_update(
     # Initial sort - item-static should be first (3 refs vs 1 ref)
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "desc"},
+        params={
+            "dataset": dataset,
+            "pluginSort": "rag-compat:totalReferences",
+            "sortOrder": "desc",
+        },
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -410,14 +444,13 @@ async def test_sort_by_total_references_after_update(
                     "kind": "rag-compat",
                     "version": "1.0",
                     "data": {
-                        "totalReferences": 5,
-                        "refs": [
+                        "references": [
                             {"url": "https://example.com/new-ref-1"},
                             {"url": "https://example.com/new-ref-2"},
                             {"url": "https://example.com/new-ref-3"},
                             {"url": "https://example.com/new-ref-4"},
                             {"url": "https://example.com/new-ref-5"},
-                        ]
+                        ],
                     },
                 }
             }
@@ -428,7 +461,11 @@ async def test_sort_by_total_references_after_update(
     # After update - item-to-update should now be first (5 refs vs 3 refs)
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "desc"},
+        params={
+            "dataset": dataset,
+            "pluginSort": "rag-compat:totalReferences",
+            "sortOrder": "desc",
+        },
         headers=user_headers,
     )
     assert res.status_code == 200

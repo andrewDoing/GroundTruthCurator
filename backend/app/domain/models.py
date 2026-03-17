@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validat
 from app.domain.enums import GroundTruthStatus
 from app.domain.validators import GroundTruthItemTagValidators
 
+
 class Reference(BaseModel):
     """Legacy RAG reference object retained for compatibility helpers and tests."""
 
@@ -44,9 +45,8 @@ class HistoryEntry(BaseModel):
 
 
 class HistoryItem(HistoryEntry):
-    """Legacy RAG-compatible history item retained for internal compatibility."""
+    """Canonical history item used by generic core flows."""
 
-    refs: Optional[list[Reference]] = None
     expected_behavior: Optional[list[str]] = Field(default=None, alias="expectedBehavior")
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")

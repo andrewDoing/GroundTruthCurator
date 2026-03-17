@@ -13,7 +13,6 @@ from app.domain.models import (
     HistoryEntry,
     HistoryItem,
     PluginPayload,
-    Reference,
     ToolCallRecord,
 )
 from app.services.tagging_service import apply_computed_tags
@@ -60,16 +59,6 @@ def parse_history_entries(entries: Sequence[Any]) -> list[HistoryItem]:
         if not message:
             raise ValidationError("", "history", "history entries must include a non-empty msg")
 
-        refs_data = extras.get("refs")
-        refs_list = None
-        if refs_data is not None:
-            if not isinstance(refs_data, list):
-                raise ValidationError("", "history", "history refs must be a list")
-            refs_list = [
-                ref if isinstance(ref, Reference) else Reference.model_validate(ref)
-                for ref in refs_data
-            ]
-
         expected_behavior = extras.get("expectedBehavior", extras.get("expected_behavior"))
         if expected_behavior is not None and not isinstance(expected_behavior, list):
             raise ValidationError(
@@ -82,7 +71,6 @@ def parse_history_entries(entries: Sequence[Any]) -> list[HistoryItem]:
             HistoryItem(
                 role=getattr(entry, "role"),
                 msg=message,
-                refs=refs_list,
                 expected_behavior=expected_behavior,
             )
         )

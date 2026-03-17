@@ -17,6 +17,7 @@ env/
 
 # Test / coverage
 .pytest_cache/
+backend/pytest-unit-results.xml
 coverage.xml
 htmlcov/
 

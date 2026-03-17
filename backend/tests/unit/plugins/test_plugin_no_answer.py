@@ -12,7 +12,9 @@ class TestNoAnswerPlugin:
     def test_no_answer_exact_match(self):
         """Should return tag when answer is exactly NO_ANSWER."""
         plugin = NoAnswerPlugin()
-        item = make_test_entry(id="test", dataset_name="test", synth_question="Q", answer="NO_ANSWER")
+        item = make_test_entry(
+            id="test", dataset_name="test", synth_question="Q", answer="NO_ANSWER"
+        )
         assert plugin.compute(item) == "answer:no_answer"
 
     def test_no_answer_with_whitespace(self):
@@ -26,7 +28,9 @@ class TestNoAnswerPlugin:
     def test_no_answer_with_newlines(self):
         """Should return tag when answer is NO_ANSWER with newlines."""
         plugin = NoAnswerPlugin()
-        item = make_test_entry(id="test", dataset_name="test", synth_question="Q", answer="\nNO_ANSWER\n")
+        item = make_test_entry(
+            id="test", dataset_name="test", synth_question="Q", answer="\nNO_ANSWER\n"
+        )
         assert plugin.compute(item) == "answer:no_answer"
 
     def test_regular_answer_returns_none(self):
