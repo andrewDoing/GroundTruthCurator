@@ -37,9 +37,10 @@ interface ListAllGroundTruthsParams {
 	tags?: string[];
 	excludeTags?: string[];
 	itemId?: string | null;
-	refUrl?: string | null;
+	pluginFilter?: string[];
 	keyword?: string | null;
 	sortBy?: string | null;
+	pluginSort?: string | null;
 	sortOrder?: "asc" | "desc" | null;
 	page?: number;
 	limit?: number;
@@ -62,10 +63,11 @@ export async function listAllGroundTruths(
 	if (params.excludeTags?.length)
 		query.excludeTags = params.excludeTags.join(",");
 	if (params.itemId) query.itemId = params.itemId;
-	if (params.refUrl) query.refUrl = params.refUrl;
+	if (params.pluginFilter?.length) query.pluginFilter = params.pluginFilter;
 	if (params.keyword) query.keyword = params.keyword;
 	if (params.sortBy)
 		query.sortBy = params.sortBy as components["schemas"]["SortField"];
+	if (params.pluginSort) query.pluginSort = params.pluginSort;
 	if (params.sortOrder) query.sortOrder = params.sortOrder;
 	if (typeof params.page === "number") query.page = params.page;
 	if (typeof params.limit === "number") query.limit = params.limit;

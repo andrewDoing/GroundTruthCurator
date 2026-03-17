@@ -116,14 +116,14 @@ describe("QuestionsExplorer", () => {
 			async (
 				params: {
 					itemId?: string;
-					refUrl?: string;
+					pluginFilter?: string[];
 					keyword?: string;
 					page?: number;
 				} = {},
 			) => {
 				const hasTextFilter =
 					Boolean(params.itemId) ||
-					Boolean(params.refUrl) ||
+					Boolean(params.pluginFilter?.length) ||
 					Boolean(params.keyword);
 				const page = typeof params.page === "number" ? params.page : 1;
 				const totalPages = hasTextFilter ? 1 : 3;
@@ -412,7 +412,9 @@ describe("QuestionsExplorer", () => {
 				name: "reference URL",
 				label: "Reference URL:",
 				value: "https://example.com/ref",
-				expectedFilter: { refUrl: "https://example.com/ref" },
+				expectedFilter: {
+					pluginFilter: ["rag-compat:refUrl=https://example.com/ref"],
+				},
 			},
 			{
 				name: "keyword",

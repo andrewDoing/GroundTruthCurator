@@ -100,8 +100,13 @@ async def test_sort_by_total_references_descending(
     response_data = res.json()
     assert len(response_data["items"]) == 4
 
-    # Sort parameter accepted and returns deterministic result set.
-    assert len({item["id"] for item in response_data["items"]}) == 4
+    item_ids = [item["id"] for item in response_data["items"]]
+    assert item_ids == [
+        "item-5-refs",
+        "item-3-refs",
+        "item-1-ref",
+        "item-0-refs",
+    ]
 
 
 @pytest.mark.anyio
@@ -131,7 +136,13 @@ async def test_sort_by_total_references_ascending(
     response_data = res.json()
     assert len(response_data["items"]) == 4
 
-    assert len({item["id"] for item in response_data["items"]}) == 4
+    item_ids = [item["id"] for item in response_data["items"]]
+    assert item_ids == [
+        "item-0-refs",
+        "item-1-ref",
+        "item-3-refs",
+        "item-5-refs",
+    ]
 
 
 @pytest.mark.anyio
@@ -231,8 +242,20 @@ async def test_sort_by_total_references_stable_pagination(
     all_ids = [item["id"] for item in page1["items"]] + [item["id"] for item in page2["items"]]
     assert len(set(all_ids)) == 6, "All 6 items should appear exactly once across pages"
 
-    # Pagination should be stable and non-overlapping.
-    assert set(all_ids) == set(all_ids)
+    # Pagination should be non-overlapping and preserve primary sort direction.
+    assert set(page1_item_ids := [item["id"] for item in page1["items"]]).isdisjoint(
+        set(page2_item_ids := [item["id"] for item in page2["items"]])
+    )
+    expected_counts = {
+        "item-3a": 3,
+        "item-3b": 3,
+        "item-1a": 1,
+        "item-1b": 1,
+        "item-0a": 0,
+        "item-0b": 0,
+    }
+    combined_counts = [expected_counts[item_id] for item_id in [*page1_item_ids, *page2_item_ids]]
+    assert combined_counts == sorted(combined_counts, reverse=True)
 
 
 @pytest.mark.anyio
@@ -342,7 +365,8 @@ async def test_sort_by_total_references_large_counts(
     response_data = res.json()
     assert len(response_data["items"]) == 3
 
-    assert {item["id"] for item in response_data["items"]} == {"item-10", "item-25", "item-50"}
+    item_ids = [item["id"] for item in response_data["items"]]
+    assert item_ids == ["item-50", "item-25", "item-10"]
 
 
 @pytest.mark.anyio
@@ -409,7 +433,6 @@ async def test_sort_by_total_references_after_update(
     )
     assert res.status_code == 200
     response_data = res.json()
-    assert response_data["items"][0]["id"] == "item-to-update"
     assert response_data["items"][0]["id"] == "item-to-update"
 
 

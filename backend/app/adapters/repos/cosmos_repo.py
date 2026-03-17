@@ -405,8 +405,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
         return d
 
-    @staticmethod
-    def _from_doc(doc: dict[str, Any]) -> AgenticGroundTruthEntry:
+    def _from_doc(self, doc: dict[str, Any]) -> AgenticGroundTruthEntry:
         # Normalize doc before validation
         normalized_doc = (
             _restore_unicode_from_cosmos(doc) if settings.COSMOS_DISABLE_UNICODE_ESCAPE else doc
@@ -417,7 +416,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             if field.alias is not None
         }
         transformed_doc: dict[str, Any] = dict(normalized_doc)
-        for transform in get_default_pack_registry().collect_import_transforms():
+        for transform in self._plugin_pack_registry.collect_import_transforms():
             transformed_doc = transform.transform(transformed_doc)
 
         normalized_doc = {

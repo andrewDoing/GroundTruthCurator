@@ -247,13 +247,16 @@ export default function QuestionsExplorer({
 		// Build API parameters from applied filters
 		// Note: toolCallCount is a client-side sort only (not passed to API)
 		const sortByParam =
+			appliedFilter.sortColumn === "tagCount"
+				? "tagCount"
+				: appliedFilter.sortColumn === "refs" ||
+						appliedFilter.sortColumn === "toolCallCount"
+					? null // plugin/client-side sort; do not pass as core sortBy
+					: appliedFilter.sortColumn;
+		const pluginSortParam =
 			appliedFilter.sortColumn === "refs"
-				? "totalReferences"
-				: appliedFilter.sortColumn === "tagCount"
-					? "tagCount"
-					: appliedFilter.sortColumn === "toolCallCount"
-						? null // client-side sort; do not pass to backend
-						: appliedFilter.sortColumn;
+				? "rag-compat:totalReferences"
+				: undefined;
 
 		// Ensure page is at least 1
 		const safePage = Math.max(1, currentPage);
@@ -271,10 +274,16 @@ export default function QuestionsExplorer({
 					? appliedFilter.tags.exclude
 					: undefined,
 			itemId: appliedFilter.itemId || undefined,
-			refUrl: appliedFilter.refUrl || undefined,
+			pluginFilter: appliedFilter.refUrl
+				? [`rag-compat:refUrl=${appliedFilter.refUrl}`]
+				: undefined,
 			keyword: appliedFilter.keyword || undefined,
-			sortBy: sortByParam,
-			sortOrder: sortByParam ? appliedFilter.sortDirection : undefined,
+			sortBy: sortByParam ?? undefined,
+			pluginSort: pluginSortParam,
+			sortOrder:
+				sortByParam || pluginSortParam
+					? appliedFilter.sortDirection
+					: undefined,
 			page: safePage,
 			limit: itemsPerPage,
 		};

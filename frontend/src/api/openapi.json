@@ -230,22 +230,25 @@
 						"description": "Search for items by ID (case-sensitive partial match)"
 					},
 					{
-						"name": "refUrl",
+						"name": "pluginFilter",
 						"in": "query",
 						"required": false,
 						"schema": {
 							"anyOf": [
 								{
-									"type": "string"
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
 								},
 								{
 									"type": "null"
 								}
 							],
-							"description": "Search for items by reference URL (case-sensitive partial match)",
-							"title": "Refurl"
+							"description": "Plugin-namespaced filters in key=value form (repeat query param). Example: pluginFilter=rag-compat:refUrl=https://example.com",
+							"title": "Pluginfilter"
 						},
-						"description": "Search for items by reference URL (case-sensitive partial match)"
+						"description": "Plugin-namespaced filters in key=value form (repeat query param). Example: pluginFilter=rag-compat:refUrl=https://example.com"
 					},
 					{
 						"name": "keyword",
@@ -273,6 +276,24 @@
 							"$ref": "#/components/schemas/SortField",
 							"default": "reviewedAt"
 						}
+					},
+					{
+						"name": "pluginSort",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Plugin-namespaced sort key, e.g. rag-compat:totalReferences",
+							"title": "Pluginsort"
+						},
+						"description": "Plugin-namespaced sort key, e.g. rag-compat:totalReferences"
 					},
 					{
 						"name": "sortOrder",
@@ -2841,7 +2862,7 @@
 					"field": {
 						"type": "string",
 						"title": "Field",
-						"description": "Field name where PII was detected (e.g., 'synthQuestion', 'history[2].msg')"
+						"description": "Field name where the PII was detected (e.g., 'history.question', 'history[2].msg')"
 					},
 					"pattern_type": {
 						"type": "string",
@@ -3074,14 +3095,7 @@
 			},
 			"SortField": {
 				"type": "string",
-				"enum": [
-					"reviewedAt",
-					"updatedAt",
-					"id",
-					"hasAnswer",
-					"totalReferences",
-					"tagCount"
-				],
+				"enum": ["reviewedAt", "updatedAt", "id", "hasAnswer", "tagCount"],
 				"title": "SortField"
 			},
 			"SortOrder": {
