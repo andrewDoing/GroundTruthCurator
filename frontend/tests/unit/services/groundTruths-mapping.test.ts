@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { ApiGroundTruth } from "../../../src/adapters/apiMapper";
+import type {
+	ApiGroundTruth,
+	ApiReference,
+} from "../../../src/adapters/apiMapper";
 import { groundTruthFromApi } from "../../../src/adapters/apiMapper";
 import type { components } from "../../../src/api/generated";
 import { getItemReferences } from "../../../src/models/groundTruth";
@@ -12,12 +15,12 @@ type ApiItem = Omit<
 	synthQuestion?: string | null;
 	editedQuestion?: string | null;
 	answer?: string | null;
-	refs?: components["schemas"]["Reference"][];
+	refs?: ApiReference[];
 	totalReferences?: number;
 	tags?: string[];
 	comment?: string | null;
 	history?: (components["schemas"]["HistoryEntry"] & {
-		refs?: components["schemas"]["Reference"][];
+		refs?: ApiReference[];
 		expectedBehavior?: string[];
 	})[];
 };
@@ -38,6 +41,20 @@ function makeApiItem(overrides: Partial<ApiItem> = {}): ApiItem {
 		_etag: "etag-1",
 		...overrides,
 	} as ApiItem;
+}
+
+function withCompatData(
+	data: Record<string, unknown>,
+): Pick<ApiItem, "plugins"> {
+	return {
+		plugins: {
+			"rag-compat": {
+				kind: "rag-compat",
+				version: "1.0",
+				data,
+			},
+		},
+	};
 }
 
 describe("mapGroundTruthFromApi", () => {
@@ -92,10 +109,12 @@ describe("mapGroundTruthFromApi", () => {
 	describe("compat-migration read mapping", () => {
 		it("creates synthesized user and agent turns from legacy single-turn fields", () => {
 			const apiItem = makeApiItem({
-				synthQuestion: "Synth",
-				editedQuestion: "Edited",
-				answer: "A",
 				history: undefined,
+				...withCompatData({
+					synthQuestion: "Synth",
+					editedQuestion: "Edited",
+					answer: "A",
+				}),
 			});
 			const result = mapGroundTruthFromApi(apiItem);
 			expect(result.history).toHaveLength(2);
@@ -111,17 +130,19 @@ describe("mapGroundTruthFromApi", () => {
 
 		it("anchors legacy top-level refs to the synthesized agent turn when answer is empty", () => {
 			const apiItem = makeApiItem({
-				editedQuestion: "How do I configure authentication for my app?",
-				answer: "",
-				refs: [
-					{
-						url: "https://docs.example.com/auth",
-						content: "Authentication documentation content",
-						keyExcerpt: "Use OAuth 2.0 for authentication",
-						bonus: false,
-					},
-				],
 				history: undefined,
+				...withCompatData({
+					editedQuestion: "How do I configure authentication for my app?",
+					answer: "",
+					refs: [
+						{
+							url: "https://docs.example.com/auth",
+							content: "Authentication documentation content",
+							keyExcerpt: "Use OAuth 2.0 for authentication",
+							bonus: false,
+						},
+					],
+				}),
 			});
 			const result = mapGroundTruthFromApi(apiItem);
 			const [ref] = getItemReferences(result);
@@ -137,13 +158,15 @@ describe("mapGroundTruthFromApi", () => {
 
 	describe("providerId", () => {
 		it("defaults to 'api' when not provided", () => {
-			const result = mapGroundTruthFromApi(makeApiItem({ synthQuestion: "Q" }));
+			const result = mapGroundTruthFromApi(
+				makeApiItem({ ...withCompatData({ synthQuestion: "Q" }) }),
+			);
 			expect(result.providerId).toBe("api");
 		});
 
 		it("uses provided providerId", () => {
 			const result = mapGroundTruthFromApi(
-				makeApiItem({ synthQuestion: "Q" }),
+				makeApiItem({ ...withCompatData({ synthQuestion: "Q" }) }),
 				"custom-provider",
 			);
 			expect(result.providerId).toBe("custom-provider");
@@ -206,11 +229,7 @@ describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
 		return {
 			id: "parity-1",
 			status: "draft",
-			answer: "Parity answer",
-			synthQuestion: "Synth parity Q",
-			editedQuestion: "Edited parity Q",
 			history: undefined,
-			refs: [],
 			tags: ["t1"],
 			manualTags: ["m1"],
 			computedTags: ["c1"],
@@ -219,6 +238,18 @@ describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
 			bucket: "bkt" as ApiGroundTruth["bucket"],
 			_etag: "etag-parity",
 			reviewedAt: "2024-01-01T00:00:00Z",
+			plugins: {
+				"rag-compat": {
+					kind: "rag-compat",
+					version: "1.0",
+					data: {
+						answer: "Parity answer",
+						synthQuestion: "Synth parity Q",
+						editedQuestion: "Edited parity Q",
+						refs: [],
+					},
+				},
+			},
 			...overrides,
 		} as ApiGroundTruth;
 	}
@@ -234,9 +265,6 @@ describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
 
 	it("produces identical output for a multi-turn payload with per-turn refs", () => {
 		const payload = makeSharedPayload({
-			editedQuestion: "",
-			synthQuestion: "",
-			answer: "",
 			history: [
 				{ role: "user", msg: "First question" },
 				{

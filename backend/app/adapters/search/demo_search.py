@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.domain.models import AgenticGroundTruthEntry
+from app.plugins.pack_registry import get_rag_compat_pack
 
 
 class DemoSearchAdapter:
@@ -14,11 +15,9 @@ class DemoSearchAdapter:
 
         matches: list[dict[str, object]] = []
         seen_urls: set[str] = set()
+        rag_pack = get_rag_compat_pack()
         for item in self._items:
-            refs = list(item.refs)
-            for turn in item.history or []:
-                refs.extend(getattr(turn, "refs", None) or [])
-            for ref in refs:
+            for ref in rag_pack.refs_from_item(item):
                 haystack = " ".join(
                     [
                         ref.url,

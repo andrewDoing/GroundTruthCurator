@@ -1983,69 +1983,11 @@
 						"type": "array",
 						"title": "Tags",
 						"readOnly": true
-					},
-					"synthQuestion": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Synthquestion",
-						"readOnly": true
-					},
-					"editedQuestion": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Editedquestion",
-						"readOnly": true
-					},
-					"answer": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Answer",
-						"readOnly": true
-					},
-					"refs": {
-						"items": {
-							"$ref": "#/components/schemas/Reference"
-						},
-						"type": "array",
-						"title": "Refs",
-						"readOnly": true
-					},
-					"totalReferences": {
-						"type": "integer",
-						"title": "Totalreferences",
-						"readOnly": true
 					}
 				},
 				"additionalProperties": false,
 				"type": "object",
-				"required": [
-					"id",
-					"datasetName",
-					"tags",
-					"synthQuestion",
-					"editedQuestion",
-					"answer",
-					"refs",
-					"totalReferences"
-				],
+				"required": ["id", "datasetName", "tags"],
 				"title": "AgenticGroundTruthEntry",
 				"description": "Generic agentic-first host model.\n\nThe core contract intentionally exposes only the generic schema in OpenAPI. Legacy\nRAG-shaped payloads are translated into this shape when validating this base class so\nexisting data can be carried forward without remaining top-level contract fields."
 			},
@@ -3040,80 +2982,6 @@
 				],
 				"title": "RecomputeTagsResponse",
 				"description": "Response for bulk computed tag recomputation."
-			},
-			"Reference": {
-				"properties": {
-					"url": {
-						"type": "string",
-						"title": "Url",
-						"description": "Reference URL (required, non-empty)"
-					},
-					"title": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Title",
-						"description": "Human-readable title for the reference"
-					},
-					"content": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Content"
-					},
-					"keyExcerpt": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Keyexcerpt"
-					},
-					"type": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Type"
-					},
-					"bonus": {
-						"type": "boolean",
-						"title": "Bonus",
-						"default": false
-					},
-					"messageIndex": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Messageindex"
-					}
-				},
-				"type": "object",
-				"required": ["url"],
-				"title": "Reference",
-				"description": "Legacy RAG reference object retained for compatibility helpers and tests."
 			},
 			"RemoveTagsRequest": {
 				"properties": {

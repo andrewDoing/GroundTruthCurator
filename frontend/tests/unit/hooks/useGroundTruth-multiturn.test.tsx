@@ -1,6 +1,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ConversationTurn } from "../../../src/models/groundTruth";
-import { getItemReferences } from "../../../src/models/groundTruth";
+import {
+	getItemReferences,
+	getLastAgentTurn,
+	getLastUserTurn,
+} from "../../../src/models/groundTruth";
 
 vi.mock("../../../src/config/demo", () => ({
 	default: true,
@@ -54,8 +58,8 @@ describe("useGroundTruth multi-turn flows", () => {
 		expect(
 			result.current.current?.history?.every((turn) => !!turn.turnId),
 		).toBe(true);
-		expect(result.current.current?.question).toBe("New question");
-		expect(result.current.current?.answer).toBe("Fresh answer");
+		expect(getLastUserTurn(result.current.current!)).toBe("New question");
+		expect(getLastAgentTurn(result.current.current!)).toBe("Fresh answer");
 	});
 
 	it("addTurn appends to history and keeps question/answer in sync", async () => {
@@ -67,7 +71,7 @@ describe("useGroundTruth multi-turn flows", () => {
 		expect(result.current.current?.history?.length).toBe(
 			initialHistoryLength + 1,
 		);
-		expect(result.current.current?.question).toBe("Follow-up question");
+		expect(getLastUserTurn(result.current.current!)).toBe("Follow-up question");
 		await act(async () => {
 			result.current.addTurn("agent", "Agent reply");
 		});
@@ -75,7 +79,7 @@ describe("useGroundTruth multi-turn flows", () => {
 			role: "agent",
 			content: "Agent reply",
 		});
-		expect(result.current.current?.answer).toBe("Agent reply");
+		expect(getLastAgentTurn(result.current.current!)).toBe("Agent reply");
 	});
 
 	it("stateSignature ignores visitedAt mutations for hasUnsaved", async () => {

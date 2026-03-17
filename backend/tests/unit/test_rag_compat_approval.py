@@ -24,7 +24,7 @@ def _make_item(**overrides) -> AgenticGroundTruthEntry:
     defaults = {
         "id": "rag-test-1",
         "datasetName": "demo",
-        "synthQuestion": "What is X?",
+        "history": [{"role": "user", "msg": "What is X?"}],
     }
     defaults.update(overrides)
     return AgenticGroundTruthEntry.model_validate(defaults)
@@ -39,7 +39,13 @@ def test_core_requires_assistant_message_even_with_refs():
     """After waiver removal, core always generates the assistant error."""
     item = _make_item(
         history=[{"role": "user", "msg": "hello"}],
-        totalReferences=5,
+        plugins={
+            "rag-compat": {
+                "kind": "rag-compat",
+                "version": "1.0",
+                "data": {"references": [{"url": "https://example.com/ref"}]},
+            }
+        },
     )
     errors = collect_approval_validation_errors(item)
     assert "history must include at least one assistant message" in errors
@@ -65,7 +71,13 @@ def test_rag_pack_waives_assistant_error_when_refs_present():
     pack = RagCompatPack()
     item = _make_item(
         history=[{"role": "user", "msg": "hello"}],
-        totalReferences=3,
+        plugins={
+            "rag-compat": {
+                "kind": "rag-compat",
+                "version": "1.0",
+                "data": {"references": [{"url": "https://example.com/ref"}]},
+            }
+        },
     )
     core_errors = collect_approval_validation_errors(item)
     waivers = pack.collect_approval_waivers(item, core_errors)
@@ -76,7 +88,9 @@ def test_rag_pack_no_waiver_when_refs_zero():
     pack = RagCompatPack()
     item = _make_item(
         history=[{"role": "user", "msg": "hello"}],
-        totalReferences=0,
+        plugins={
+            "rag-compat": {"kind": "rag-compat", "version": "1.0", "data": {"references": []}}
+        },
     )
     core_errors = collect_approval_validation_errors(item)
     waivers = pack.collect_approval_waivers(item, core_errors)
@@ -88,7 +102,13 @@ def test_rag_pack_does_not_waive_user_message_error():
     pack = RagCompatPack()
     item = _make_item(
         history=[{"role": "assistant", "msg": "answer"}],
-        totalReferences=5,
+        plugins={
+            "rag-compat": {
+                "kind": "rag-compat",
+                "version": "1.0",
+                "data": {"references": [{"url": "https://example.com/ref"}]},
+            }
+        },
     )
     core_errors = collect_approval_validation_errors(item)
     waivers = pack.collect_approval_waivers(item, core_errors)
@@ -109,7 +129,13 @@ def test_rag_pack_waives_required_tools_error_when_refs_present():
             {"role": "assistant", "msg": "world"},
         ],
         toolCalls=[{"name": "search"}],
-        totalReferences=3,
+        plugins={
+            "rag-compat": {
+                "kind": "rag-compat",
+                "version": "1.0",
+                "data": {"references": [{"url": "https://example.com/ref"}]},
+            }
+        },
     )
     core_errors = collect_approval_validation_errors(item)
     waivers = pack.collect_approval_waivers(item, core_errors)
@@ -124,7 +150,9 @@ def test_rag_pack_no_required_tools_waiver_when_refs_zero():
             {"role": "assistant", "msg": "world"},
         ],
         toolCalls=[{"name": "search"}],
-        totalReferences=0,
+        plugins={
+            "rag-compat": {"kind": "rag-compat", "version": "1.0", "data": {"references": []}}
+        },
     )
     core_errors = collect_approval_validation_errors(item)
     waivers = pack.collect_approval_waivers(item, core_errors)
@@ -145,7 +173,13 @@ def test_registry_filters_waived_errors():
 
     item = _make_item(
         history=[{"role": "user", "msg": "hello"}],
-        totalReferences=3,
+        plugins={
+            "rag-compat": {
+                "kind": "rag-compat",
+                "version": "1.0",
+                "data": {"references": [{"url": "https://example.com/ref"}]},
+            }
+        },
     )
     core_errors = collect_approval_validation_errors(item)
     assert "history must include at least one assistant message" in core_errors
@@ -161,7 +195,16 @@ def test_registry_preserves_non_waived_errors():
     registry.register(RagCompatPack())
 
     # Item with no history, no question, no answer → "no conversation message" error
-    item = _make_item(synthQuestion="", totalReferences=5)
+    item = _make_item(
+        history=[],
+        plugins={
+            "rag-compat": {
+                "kind": "rag-compat",
+                "version": "1.0",
+                "data": {"references": [{"url": "https://example.com/ref"}]},
+            }
+        },
+    )
     core_errors = collect_approval_validation_errors(item)
     filtered = registry.filter_core_errors(item, core_errors)
     # "history must contain at least one conversation message" is NOT waived

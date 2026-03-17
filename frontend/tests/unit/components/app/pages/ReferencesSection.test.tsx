@@ -85,7 +85,7 @@ const makeItem = (
 ): GroundTruthItem => ({
 	id: "i1",
 	question: "Q",
-	answer: "A",
+	history: [{ role: "agent", content: "A" }],
 	status: "draft",
 	providerId: "test",
 	...overrides,

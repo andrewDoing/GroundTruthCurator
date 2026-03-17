@@ -37,6 +37,11 @@ async def test_demo_mode_seeds_memory_backend_for_api_usage() -> None:
     settings.DEMO_USER_ID = "anonymous"
 
     container.repo = None
+    container.assignment_service = None
+    container.search_service = None
+    container.snapshot_service = None
+    container.curation_service = None
+    container.init_memory_repo(enable_demo_data=True)
 
     app = create_app()
 

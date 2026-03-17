@@ -15,6 +15,7 @@ from typing import Any, Sequence
 
 from pydantic import BaseModel, Field
 
+from app.domain.conversation_fields import answer_text_from_item, question_text_from_item
 from app.domain.models import AgenticGroundTruthEntry
 
 
@@ -23,7 +24,7 @@ class PIIWarning(BaseModel):
 
     item_id: str = Field(description="Item identifier")
     field: str = Field(
-        description="Field name where PII was detected (e.g., 'synthQuestion', 'history[2].msg')"
+        description="Field name where the PII was detected (e.g., 'history.question', 'history[2].msg')"
     )
     pattern_type: str = Field(description="Type of PII detected ('email' or 'phone')")
     snippet: str = Field(description="Masked context snippet showing the detected PII")
@@ -163,9 +164,8 @@ def scan_item_for_pii(item: AgenticGroundTruthEntry) -> list[PIIWarning]:
     """Scan a ground truth item for PII in all relevant fields.
 
     Phase 1 scans:
-    - synth_question
-    - edited_question
-    - answer
+    - canonical question text derived from history
+    - canonical answer text derived from history
     - comment
     - history[].msg
 
@@ -195,15 +195,14 @@ def scan_item_for_pii(item: AgenticGroundTruthEntry) -> list[PIIWarning]:
             for idx, nested in enumerate(value):
                 scan_nested_value(nested, f"{field_name}[{idx}]")
 
-    # Scan primary text fields
-    if item.synth_question:
-        warnings.extend(scan_text_for_pii(item.synth_question, "synthQuestion", item_id))
+    # Scan canonical conversation-derived text fields
+    question_text = question_text_from_item(item)
+    if question_text:
+        warnings.extend(scan_text_for_pii(question_text, "history.question", item_id))
 
-    if item.edited_question:
-        warnings.extend(scan_text_for_pii(item.edited_question, "editedQuestion", item_id))
-
-    if item.answer:
-        warnings.extend(scan_text_for_pii(item.answer, "answer", item_id))
+    answer_text = answer_text_from_item(item)
+    if answer_text:
+        warnings.extend(scan_text_for_pii(answer_text, "history.answer", item_id))
 
     if item.comment:
         warnings.extend(scan_text_for_pii(item.comment, "comment", item_id))

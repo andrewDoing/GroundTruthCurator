@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.plugins.base import ComputedTagPlugin
+from app.plugins.pack_registry import get_rag_compat_pack
 
 if TYPE_CHECKING:
     from app.domain.models import AgenticGroundTruthEntry
@@ -21,8 +22,7 @@ if TYPE_CHECKING:
 def _get_total_reference_count(doc: AgenticGroundTruthEntry) -> int:
     """Get the total count of references from a document.
 
-    Uses the totalReferences computed field which counts refs at item level
-    and across all history turns.
+    Uses canonical reference derivation from history/plugin payloads.
 
     Args:
         doc: The AgenticGroundTruthEntry to evaluate.
@@ -30,7 +30,7 @@ def _get_total_reference_count(doc: AgenticGroundTruthEntry) -> int:
     Returns:
         The total number of references.
     """
-    return doc.totalReferences
+    return get_rag_compat_pack().reference_count(doc)
 
 
 class RetrievalBehaviorNoRefsPlugin(ComputedTagPlugin):

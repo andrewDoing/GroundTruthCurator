@@ -5,6 +5,7 @@ from math import ceil
 from typing import Iterable
 from uuid import UUID
 
+from app.domain.conversation_fields import answer_text_from_item, question_text_from_item
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.domain.models import (
     AgenticGroundTruthEntry,
@@ -15,6 +16,7 @@ from app.domain.models import (
     PaginationMetadata,
     Stats,
 )
+from app.plugins.pack_registry import get_rag_compat_pack
 
 ZERO_UUID = UUID("00000000-0000-0000-0000-000000000000")
 
@@ -45,7 +47,9 @@ class InMemoryGroundTruthRepo:
         return f"memory-etag-{self._etag_version}"
 
     def _clone_item(self, item: AgenticGroundTruthEntry) -> AgenticGroundTruthEntry:
-        return AgenticGroundTruthEntry.model_validate(item.model_dump(by_alias=True))
+        return AgenticGroundTruthEntry.model_validate(
+            item.model_dump(by_alias=True, exclude={"tags"})
+        )
 
     def _clone_instruction(self, doc: DatasetCurationInstructions) -> DatasetCurationInstructions:
         return DatasetCurationInstructions.model_validate(doc.model_dump(by_alias=True))
@@ -104,28 +108,21 @@ class InMemoryGroundTruthRepo:
         )
 
     def _collect_urls(self, item: AgenticGroundTruthEntry) -> Iterable[str]:
-        for ref in item.refs:
+        for ref in get_rag_compat_pack().refs_from_item(item):
             yield ref.url
-        for turn in item.history or []:
-            for ref in getattr(turn, "refs", None) or []:
-                yield ref.url
 
     def _collect_text(self, item: AgenticGroundTruthEntry) -> str:
         parts = [
             item.id,
             item.datasetName,
-            item.synth_question or "",
-            item.edited_question or "",
-            item.answer or "",
+            question_text_from_item(item),
+            answer_text_from_item(item),
             item.comment or "",
         ]
         for turn in item.history or []:
             parts.append(turn.msg)
-        for ref in item.refs:
+        for ref in get_rag_compat_pack().refs_from_item(item):
             parts.extend([ref.title or "", ref.url, ref.content or "", ref.keyExcerpt or ""])
-        for turn in item.history or []:
-            for ref in getattr(turn, "refs", None) or []:
-                parts.extend([ref.title or "", ref.url, ref.content or "", ref.keyExcerpt or ""])
         return " ".join(parts).lower()
 
     def _is_unassigned_candidate(self, item: AgenticGroundTruthEntry) -> bool:
@@ -150,12 +147,12 @@ class InMemoryGroundTruthRepo:
                 return item.id
             if field == SortField.has_answer:
                 return (
-                    1 if (item.answer or "").strip() else 0,
+                    1 if answer_text_from_item(item) else 0,
                     item.updated_at or datetime.min.replace(tzinfo=timezone.utc),
                 )
             if field == SortField.totalReferences:
                 return (
-                    item.totalReferences,
+                    get_rag_compat_pack().reference_count(item),
                     item.updated_at or datetime.min.replace(tzinfo=timezone.utc),
                 )
             if field == SortField.tag_count:

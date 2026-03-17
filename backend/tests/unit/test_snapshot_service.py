@@ -100,9 +100,10 @@ def _make_item(id: str, dataset: str, status: GroundTruthStatus) -> AgenticGroun
         datasetName=dataset,
         bucket=None,
         status=status,
-        synthQuestion="Q?",
-        answer="A",
-        refs=[],
+        history=[
+            {"role": "user", "msg": "Q?"},
+            {"role": "assistant", "msg": "A"},
+        ],
         manualTags=[],
         computedTags=[],
     )

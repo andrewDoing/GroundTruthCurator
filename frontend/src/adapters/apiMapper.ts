@@ -4,8 +4,6 @@ import {
 	ensureConversationTurnIdentity,
 	type GroundTruthItem,
 	getItemReferences,
-	getLastAgentTurn,
-	getLastUserTurn,
 	type PluginPayload,
 	type Reference,
 	type ToolCallRecord,
@@ -32,28 +30,29 @@ type RetrievalBucket = {
 type RetrievalsMap = Record<string, RetrievalBucket>;
 
 type ConversationTurn = NonNullable<GroundTruthItem["history"]>[number];
+export type ApiReference = {
+	url: string;
+	title?: string | null;
+	content?: string | null;
+	keyExcerpt?: string | null;
+	type?: string | null;
+	bonus?: boolean;
+	messageIndex?: number | null;
+};
 export type ApiHistoryEntry = components["schemas"]["HistoryEntry"] & {
-	refs?: components["schemas"]["Reference"][];
+	refs?: ApiReference[];
 	expectedBehavior?: string[];
 	turnId?: string;
 	stepId?: string;
 };
-export type ApiGroundTruth =
-	components["schemas"]["AgenticGroundTruthEntry-Output"] & {
-		synthQuestion?: string | null;
-		editedQuestion?: string | null;
-		answer?: string | null;
-		refs?: components["schemas"]["Reference"][];
-		totalReferences?: number;
-		tags?: string[];
-		comment?: string | null;
-	} & Omit<
-			components["schemas"]["AgenticGroundTruthEntry-Output"],
-			"history"
-		> & {
-			history?: ApiHistoryEntry[];
-		};
-export type ApiReference = components["schemas"]["Reference"];
+export type ApiGroundTruth = Omit<
+	components["schemas"]["AgenticGroundTruthEntry-Output"],
+	"history"
+> & {
+	tags?: string[];
+	comment?: string | null;
+	history?: ApiHistoryEntry[];
+};
 
 type StoredTurnIdentity = {
 	turnId?: string;
@@ -96,6 +95,9 @@ export function groundTruthFromApi(
 		api.plugins && Object.keys(api.plugins).length
 			? (api.plugins as Record<string, PluginPayload>)
 			: {};
+	const compatData =
+		(plugins[_RAG_COMPAT_KEY]?.data as Record<string, unknown> | undefined) ||
+		{};
 	const storedTurnIdentity = getStoredTurnIdentities(plugins);
 	let history: GroundTruthItem["history"];
 	const legacyRefs: Reference[] = [];
@@ -137,9 +139,15 @@ export function groundTruthFromApi(
 			}
 		}
 	} else {
-		// Legacy single-turn item: create initial history from synthQuestion/editedQuestion
-		const initialQuestion = api.editedQuestion || api.synthQuestion || "";
+		// Legacy single-turn compat payload: create initial history from plugin-owned fields
+		const editedQuestion = compatData.editedQuestion;
+		const synthQuestion = compatData.synthQuestion;
+		const initialQuestion =
+			(typeof editedQuestion === "string" && editedQuestion) ||
+			(typeof synthQuestion === "string" && synthQuestion) ||
+			"";
 		if (initialQuestion) {
+			const answer = compatData.answer;
 			history = [
 				createConversationTurn({
 					role: "user",
@@ -149,7 +157,7 @@ export function groundTruthFromApi(
 				}),
 				createConversationTurn({
 					role: "agent",
-					content: api.answer || "",
+					content: typeof answer === "string" ? answer : "",
 					turnId: storedTurnIdentity[1]?.turnId,
 					stepId: storedTurnIdentity[1]?.stepId,
 				}),
@@ -157,8 +165,9 @@ export function groundTruthFromApi(
 		}
 	}
 
-	// Process top-level refs (backward compatibility)
-	if (api.refs && api.refs.length > 0) {
+	// Process plugin-owned compat refs for legacy payload migration
+	const compatRefs = Array.isArray(compatData.refs) ? compatData.refs : [];
+	if (compatRefs.length > 0) {
 		const wasLegacyConversion = !api.history || api.history.length === 0;
 		const messageIndex = wasLegacyConversion ? 1 : undefined;
 		const turnId =
@@ -166,15 +175,19 @@ export function groundTruthFromApi(
 				? history?.[messageIndex]?.turnId
 				: undefined;
 
-		for (const r of api.refs) {
+		for (const r of compatRefs) {
+			if (!r || typeof r !== "object" || !("url" in r)) {
+				continue;
+			}
+			const ref = r as ApiReference;
 			legacyRefs.push({
 				id: `ref_${refIndex++}`,
-				title: r.title || (r.url ? urlToTitle(r.url) : undefined),
-				url: r.url,
-				snippet: r.content ?? undefined,
-				keyParagraph: r.keyExcerpt ?? undefined,
+				title: ref.title || (ref.url ? urlToTitle(ref.url) : undefined),
+				url: ref.url,
+				snippet: ref.content ?? undefined,
+				keyParagraph: ref.keyExcerpt ?? undefined,
 				visitedAt: null,
-				bonus: r.bonus === true,
+				bonus: ref.bonus === true,
 				messageIndex,
 				turnId,
 			});
@@ -235,7 +248,6 @@ export function groundTruthFromApi(
 		manualTags: api.manualTags || [],
 		computedTags: api.computedTags || [],
 		reviewedAt: api.reviewedAt ?? null,
-		totalReferences: api.totalReferences,
 		// Generic schema fields — passed through from the API
 		scenarioId: api.scenarioId || undefined,
 		contextEntries:
@@ -267,54 +279,16 @@ export function groundTruthToPatch(args: {
 	item: GroundTruthItem;
 	originalApi?: ApiGroundTruth;
 }): Partial<ApiGroundTruth> {
-	const { originalApi } = args;
 	const item = withDerivedLegacyFields(args.item);
 	const history = ensureConversationTurnIdentity(item.history);
 
 	// Extract references from per-call plugin state
 	const references = getItemReferences(item);
 
-	const hadLegacyTopLevelRefs =
-		!!originalApi &&
-		(!originalApi.history || originalApi.history.length === 0) &&
-		(originalApi.refs?.length || 0) > 0;
-
-	let topLevelRefs: ApiReference[] = [];
-	if (hadLegacyTopLevelRefs) {
-		const legacyAgentTurnId = history[1]?.turnId;
-		topLevelRefs = references
-			.filter(
-				(r) =>
-					r.turnId === legacyAgentTurnId ||
-					r.messageIndex === 1 ||
-					r.messageIndex === undefined,
-			)
-			.map((r) => ({
-				url: r.url,
-				title: r.title || undefined,
-				keyExcerpt: r.keyParagraph || undefined,
-				content: r.snippet || undefined,
-				bonus: !!r.bonus,
-			}));
-	} else {
-		topLevelRefs = references
-			.filter((r) => r.messageIndex === undefined)
-			.map((r) => ({
-				url: r.url,
-				title: r.title || undefined,
-				keyExcerpt: r.keyParagraph || undefined,
-				content: r.snippet || undefined,
-				bonus: !!r.bonus,
-			}));
-	}
-
 	const body: Partial<ApiGroundTruth> = {
 		status: (item.deleted
 			? "deleted"
 			: item.status) as components["schemas"]["GroundTruthStatus"],
-		answer: getLastAgentTurn(item),
-		editedQuestion: getLastUserTurn(item),
-		refs: topLevelRefs,
 		manualTags: item.manualTags || [],
 	};
 

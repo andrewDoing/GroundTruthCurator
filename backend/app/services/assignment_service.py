@@ -606,7 +606,7 @@ class AssignmentService:
         Rules:
         - Keep datasetName and bucket identical to the original
         - Generate a new id (uuid4 string)
-        - Copy synthQuestion, editedQuestion, answer, refs, tags, comment, history and provenance fields
+        - Copy tags, comment, history, plugin references, and provenance fields
         - Ensure the `rephrase:{original.id}` tag is present exactly once
         - Set status=draft; clear reviewed_at and updatedBy
         - Assign to requesting user (assignedTo, assignedAt)

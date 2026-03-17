@@ -27,6 +27,20 @@ function makeApiItem(overrides: Partial<ApiGroundTruth> = {}): ApiGroundTruth {
 	} as ApiGroundTruth;
 }
 
+function withCompatData(
+	data: Record<string, unknown>,
+): Pick<ApiGroundTruth, "plugins"> {
+	return {
+		plugins: {
+			"rag-compat": {
+				kind: "rag-compat",
+				version: "1.0",
+				data,
+			},
+		},
+	};
+}
+
 describe("groundTruthFromApi", () => {
 	describe("role mapping", () => {
 		it("maps history role 'assistant' to 'agent'", () => {
@@ -158,9 +172,11 @@ describe("groundTruthFromApi", () => {
 	describe("legacy single-turn conversion", () => {
 		it("creates 2-turn history from editedQuestion and answer", () => {
 			const api = makeApiItem({
-				editedQuestion: "What is X?",
-				answer: "X is Y",
 				history: undefined,
+				...withCompatData({
+					editedQuestion: "What is X?",
+					answer: "X is Y",
+				}),
 			});
 			const result = groundTruthFromApi(api);
 
@@ -177,10 +193,12 @@ describe("groundTruthFromApi", () => {
 
 		it("falls back to synthQuestion when editedQuestion is empty", () => {
 			const api = makeApiItem({
-				synthQuestion: "Synth question?",
-				editedQuestion: "",
-				answer: "Answer",
 				history: undefined,
+				...withCompatData({
+					synthQuestion: "Synth question?",
+					editedQuestion: "",
+					answer: "Answer",
+				}),
 			});
 			const result = groundTruthFromApi(api);
 
@@ -189,16 +207,18 @@ describe("groundTruthFromApi", () => {
 
 		it("assigns legacy top-level refs to messageIndex 1", () => {
 			const api = makeApiItem({
-				editedQuestion: "Question",
-				answer: "Answer",
-				refs: [
-					{
-						url: "https://legacy.ref",
-						content: "Legacy content",
-						bonus: false,
-					},
-				],
 				history: undefined,
+				...withCompatData({
+					editedQuestion: "Question",
+					answer: "Answer",
+					refs: [
+						{
+							url: "https://legacy.ref",
+							content: "Legacy content",
+							bonus: false,
+						},
+					],
+				}),
 			});
 			const result = groundTruthFromApi(api);
 
@@ -208,9 +228,11 @@ describe("groundTruthFromApi", () => {
 
 		it("creates empty agent turn when answer is empty", () => {
 			const api = makeApiItem({
-				editedQuestion: "Question without answer",
-				answer: "",
 				history: undefined,
+				...withCompatData({
+					editedQuestion: "Question without answer",
+					answer: "",
+				}),
 			});
 			const result = groundTruthFromApi(api);
 
@@ -220,15 +242,21 @@ describe("groundTruthFromApi", () => {
 	});
 
 	describe("multi-turn item top-level refs", () => {
-		it("assigns top-level refs to undefined messageIndex for true multi-turn", () => {
+		it("assigns compat refs to undefined messageIndex for true multi-turn", () => {
 			const api = makeApiItem({
 				history: [
 					{ role: "user", msg: "Q" },
 					{ role: "assistant", msg: "A" },
 				],
-				refs: [
-					{ url: "https://global.ref", content: "Global ref", bonus: false },
-				],
+				...withCompatData({
+					refs: [
+						{
+							url: "https://global.ref",
+							content: "Global ref",
+							bonus: false,
+						},
+					],
+				}),
 			});
 			const result = groundTruthFromApi(api);
 
@@ -348,7 +376,7 @@ describe("groundTruthToPatch", () => {
 			id: "gt-1",
 			providerId: "api",
 			question: "Test question",
-			answer: "Test answer",
+			history: [{ role: "agent", content: "Test answer" }],
 			status: "draft",
 			deleted: false,
 			tags: [],
@@ -409,7 +437,6 @@ describe("groundTruthToPatch", () => {
 		it("preserves top-level refs for legacy items", () => {
 			const originalApi = makeApiItem({
 				history: undefined,
-				refs: [{ url: "https://legacy.ref", bonus: false }],
 			});
 			const item = makeDomainItem({
 				history: [
@@ -435,16 +462,12 @@ describe("groundTruthToPatch", () => {
 			});
 			const patch = groundTruthToPatch({ item, originalApi });
 
-			// Top-level refs should include refs with messageIndex 1
-			expect(patch.refs).toHaveLength(2);
-			expect(patch.refs?.map((r) => r.url)).toContain("https://legacy.ref");
-			expect(patch.refs?.map((r) => r.url)).toContain("https://new.ref");
+			expect(patch.history?.[1]?.refs).toHaveLength(2);
 		});
 
 		it("preserves top-level refs when legacy items use empty history arrays", () => {
 			const originalApi = makeApiItem({
 				history: [],
-				refs: [{ url: "https://legacy-empty.ref", bonus: false }],
 			});
 			const item = makeDomainItem({
 				history: [
@@ -470,11 +493,7 @@ describe("groundTruthToPatch", () => {
 			});
 			const patch = groundTruthToPatch({ item, originalApi });
 
-			expect(patch.refs).toHaveLength(2);
-			expect(patch.refs?.map((r) => r.url)).toContain(
-				"https://legacy-empty.ref",
-			);
-			expect(patch.refs?.map((r) => r.url)).toContain("https://new-empty.ref");
+			expect(patch.history?.[1]?.refs).toHaveLength(2);
 		});
 
 		it("omits top-level refs for true multi-turn items", () => {
@@ -487,7 +506,6 @@ describe("groundTruthToPatch", () => {
 						refs: [{ url: "https://turn.ref", bonus: false }],
 					},
 				],
-				refs: [],
 			});
 			const item = makeDomainItem({
 				history: [
@@ -509,9 +527,6 @@ describe("groundTruthToPatch", () => {
 				},
 			});
 			const patch = groundTruthToPatch({ item, originalApi });
-
-			// Top-level refs should be empty for true multi-turn
-			expect(patch.refs).toHaveLength(0);
 
 			// Refs should be in history
 			expect(patch.history?.[1].refs).toHaveLength(1);
@@ -630,14 +645,22 @@ describe("groundTruthToPatch", () => {
 	});
 
 	describe("basic field mapping", () => {
-		it("includes answer and editedQuestion", () => {
+		it("serializes history content for question/answer turns", () => {
 			const item = makeDomainItem({
-				question: "My question",
-				answer: "My answer",
+				history: [
+					{ role: "user", content: "My question" },
+					{ role: "agent", content: "My answer" },
+				],
 			});
 			const patch = groundTruthToPatch({ item });
-			expect(patch.answer).toBe("My answer");
-			expect(patch.editedQuestion).toBe("My question");
+			expect(patch.history?.[0]).toMatchObject({
+				role: "user",
+				msg: "My question",
+			});
+			expect(patch.history?.[1]).toMatchObject({
+				role: "assistant",
+				msg: "My answer",
+			});
 		});
 
 		it("includes manualTags", () => {

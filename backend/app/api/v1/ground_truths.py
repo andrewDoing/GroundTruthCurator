@@ -39,7 +39,6 @@ from app.services.ground_truth_update_service import (
     ETagRequiredError,
     apply_shared_update,
     persist_shared_update,
-    read_legacy_compat_update,
 )
 from app.services.validation_service import (
     ApprovalValidationError,
@@ -639,7 +638,6 @@ async def update_ground_truth(
             manual_tags=payload.manual_tags,
             status=payload.status,
             actor_user_id=user.user_id,
-            legacy_update=read_legacy_compat_update(payload_extras),
         )
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=e.message)

@@ -16,7 +16,7 @@ describe("groundTruth multi-turn helpers", () => {
 		id: "item-1",
 		providerId: "demo",
 		question: "fallback question",
-		answer: "fallback answer",
+		history: [{ role: "agent", content: "fallback answer" }],
 		status: "draft",
 		...overrides,
 	});

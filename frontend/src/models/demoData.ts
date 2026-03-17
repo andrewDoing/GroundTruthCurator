@@ -7,8 +7,6 @@ export const DEMO_JSON: GroundTruthItem[] = [
 		id: "demo-data-overage",
 		providerId: "json",
 		question: "CX IS USING TOO MUCH DATA AND WANTS TO KNOW WHY",
-		answer:
-			"The RCA shows the line exceeded the 50 GB plan cap after extended streaming and hotspot activity stayed on cellular data instead of Wi-Fi.",
 		history: [
 			{
 				role: "user",
@@ -151,8 +149,6 @@ export const DEMO_JSON: GroundTruthItem[] = [
 		providerId: "json",
 		question:
 			"CUSTOMER WAS CHARGED ROAMING FEES EVEN THOUGH THEY BOUGHT A PASS",
-		answer:
-			"The travel pass activated after the first charged roaming session, so the early usage billed at standard rates and later usage correctly switched to the pass.",
 		history: [
 			{
 				role: "user",
@@ -266,8 +262,6 @@ export const DEMO_JSON: GroundTruthItem[] = [
 		providerId: "json",
 		question:
 			"CUSTOMER THINKS THERE WAS AN OUTAGE WHEN DATA SLOWED DOWN AT A STADIUM",
-		answer:
-			"The slowdown was caused by short-lived cell congestion during a high-density event, not by a persistent account or device problem.",
 		history: [
 			{
 				role: "user",
@@ -350,8 +344,6 @@ export const DEMO_JSON: GroundTruthItem[] = [
 		providerId: "json",
 		question:
 			"What is our refund policy for services interrupted during a network outage?",
-		answer:
-			"Customers affected by confirmed outages lasting more than 4 hours are eligible for a pro-rated service credit. Credits are applied automatically within 2 billing cycles for outages flagged in the NOC system.",
 		history: [
 			{
 				role: "user",

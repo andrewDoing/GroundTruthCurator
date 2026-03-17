@@ -530,6 +530,12 @@ def _hydrate_history_with_refs(item: AgenticGroundTruthEntry, refs: list[Referen
     item.history = enriched_history
 
 
+def _set_rag_compat_refs(item: AgenticGroundTruthEntry, refs: list[Reference]) -> None:
+    from app.plugins.pack_registry import get_rag_compat_pack
+
+    get_rag_compat_pack().replace_references(item, refs)
+
+
 def _expected_tools(tool_names: list[str]) -> ExpectedTools:
     return ExpectedTools(required=[ToolExpectation(name=name) for name in tool_names])
 
@@ -558,7 +564,9 @@ def _build_demo_item(
         created_by="demo-seed",
     )
     adapted = adapter.adapt_payload({"trace_count": 1, "traces": [trace]})[0]
-    item = AgenticGroundTruthEntry.model_validate(adapted.model_dump(by_alias=True))
+    item = AgenticGroundTruthEntry.model_validate(
+        adapted.model_dump(by_alias=True, exclude={"tags"})
+    )
 
     item.id = item_id
     item.scenario_id = scenario_id
@@ -566,7 +574,7 @@ def _build_demo_item(
     item.manual_tags = sorted(set(item.manual_tags + manual_tags))
     item.metadata = {**item.metadata, "source": "demo-seed"}
     item.trace_ids = {**(item.trace_ids or {}), "demoItemId": item_id}
-    item.refs = refs
+    _set_rag_compat_refs(item, refs)
     _hydrate_history_with_refs(item, refs)
     item.expected_tools = _expected_tools(required_tools)
 

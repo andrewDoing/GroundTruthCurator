@@ -101,7 +101,7 @@ class ComputedTagPlugin(ABC):
                 return "length:long"
 
             def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
-                content = doc.answer or ""
+                content = "\n".join(turn.msg for turn in (doc.history or []))
                 return self.tag_key if len(content) > 10000 else None
 
     Example (dynamic tag):
@@ -130,8 +130,7 @@ class ComputedTagPlugin(ABC):
 
         Args:
             doc: The AgenticGroundTruthEntry to evaluate.
-                 Contains fields like 'answer', 'history', 'refs', etc.
-                 Legacy fields like synthQuestion, editedQuestion are accessed via computed properties.
+                 Contains canonical fields like 'history', 'plugins', 'tool_calls', etc.
 
         Returns:
             The tag string if applicable, None otherwise.
@@ -326,7 +325,7 @@ class PluginPack(ABC):
                 self, item: AgenticGroundTruthEntry
             ) -> list[str]:
                 errors: list[str] = []
-                if not item.refs:
+                if not item.history:
                     errors.append("strict-ref: at least one reference is required")
                 return errors
     """

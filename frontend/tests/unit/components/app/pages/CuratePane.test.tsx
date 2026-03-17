@@ -5,7 +5,7 @@ import type { GroundTruthItem } from "../../../../../src/models/groundTruth";
 const item: GroundTruthItem = {
 	id: "1",
 	question: "What is this software?",
-	answer: "",
+	history: [{ role: "agent", content: "" }],
 	status: "draft",
 	providerId: "json",
 	tags: [],

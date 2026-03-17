@@ -1,8 +1,4 @@
-import type {
-	ApiGroundTruth,
-	ApiHistoryEntry,
-	ApiReference,
-} from "../adapters/apiMapper";
+import type { ApiGroundTruth, ApiHistoryEntry } from "../adapters/apiMapper";
 import { groundTruthFromApi } from "../adapters/apiMapper";
 import { client } from "../api/client";
 import type { components, operations } from "../api/generated";
@@ -14,11 +10,6 @@ type GroundTruthItemOut = Omit<
 	components["schemas"]["AgenticGroundTruthEntry-Output"],
 	"history"
 > & {
-	synthQuestion?: string | null;
-	editedQuestion?: string | null;
-	answer?: string | null;
-	refs?: ApiReference[];
-	totalReferences?: number;
 	tags?: string[];
 	comment?: string | null;
 	history?: ApiHistoryEntry[];

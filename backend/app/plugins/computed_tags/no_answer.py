@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from app.domain.conversation_fields import answer_text_from_item
 from app.plugins.base import ComputedTagPlugin
 
 if TYPE_CHECKING:
@@ -30,6 +31,7 @@ class NoAnswerPlugin(ComputedTagPlugin):
         return "answer:no_answer"
 
     def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
-        if doc.answer and doc.answer.strip().casefold() == "no_answer":
+        answer_text = answer_text_from_item(doc)
+        if answer_text and answer_text.casefold() == "no_answer":
             return self.tag_key
         return None

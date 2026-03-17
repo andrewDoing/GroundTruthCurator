@@ -45,12 +45,22 @@ def _build_item(dataset: str, idx: int) -> Any:
         "id": f"{dataset}-q{idx:04d}",
         "datasetName": dataset,
         "status": GroundTruthStatus.draft.value,
-        "synthQuestion": f"What is item {idx} about in dataset '{dataset}'?",
-        "refs": [
-            Reference(url=f"https://example.com/{dataset}/{idx}").model_dump(
-                mode="json", by_alias=True
-            )
+        "history": [
+            {"role": "user", "msg": f"What is item {idx} about in dataset '{dataset}'?"}
         ],
+        "plugins": {
+            "rag-compat": {
+                "kind": "rag-compat",
+                "version": "1.0",
+                "data": {
+                    "refs": [
+                        Reference(url=f"https://example.com/{dataset}/{idx}").model_dump(
+                            mode="json", by_alias=True
+                        )
+                    ]
+                },
+            }
+        },
         "tags": tags,
     }
     return GroundTruthItem.model_validate(data)

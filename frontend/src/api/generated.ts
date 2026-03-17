@@ -689,16 +689,6 @@ export interface components {
             };
             /** Tags */
             readonly tags: string[];
-            /** Synthquestion */
-            readonly synthQuestion: string | null;
-            /** Editedquestion */
-            readonly editedQuestion: string | null;
-            /** Answer */
-            readonly answer: string | null;
-            /** Refs */
-            readonly refs: components["schemas"]["Reference"][];
-            /** Totalreferences */
-            readonly totalReferences: number;
         };
         /**
          * AssignItemRequest
@@ -1162,35 +1152,6 @@ export interface components {
              * @description Operation duration in milliseconds.
              */
             duration_ms: number;
-        };
-        /**
-         * Reference
-         * @description Legacy RAG reference object retained for compatibility helpers and tests.
-         */
-        Reference: {
-            /**
-             * Url
-             * @description Reference URL (required, non-empty)
-             */
-            url: string;
-            /**
-             * Title
-             * @description Human-readable title for the reference
-             */
-            title?: string | null;
-            /** Content */
-            content?: string | null;
-            /** Keyexcerpt */
-            keyExcerpt?: string | null;
-            /** Type */
-            type?: string | null;
-            /**
-             * Bonus
-             * @default false
-             */
-            bonus: boolean;
-            /** Messageindex */
-            messageIndex?: number | null;
         };
         /** RemoveTagsRequest */
         RemoveTagsRequest: {

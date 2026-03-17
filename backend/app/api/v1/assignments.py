@@ -27,7 +27,6 @@ from app.services.ground_truth_update_service import (
     ETagRequiredError,
     apply_shared_update,
     persist_shared_update,
-    read_legacy_compat_update,
 )
 from app.services.validation_service import (
     ApprovalValidationError,
@@ -137,7 +136,6 @@ async def update_item(
     original_assigned_to = it.assignedTo
 
     provided_fields: Set[str] = set(payload.model_fields_set)
-    payload_extras = payload.model_extra or {}
     try:
         mutation = apply_shared_update(
             it,
@@ -157,7 +155,6 @@ async def update_item(
             status=payload.status,
             approve=bool(payload.approve),
             actor_user_id=user.user_id,
-            legacy_update=read_legacy_compat_update(payload_extras),
             clear_assignment_on_statuses={
                 GroundTruthStatus.approved,
                 GroundTruthStatus.deleted,

@@ -4,7 +4,34 @@ import pytest
 from httpx import AsyncClient
 from uuid import uuid4
 
-from app.domain.models import GroundTruthListResponse
+def canonicalize_history_refs(item: dict) -> dict:
+    """Move history-entry refs into rag-compat plugin payload for API compatibility."""
+    transformed = dict(item)
+    compat_refs: list[dict] = []
+
+    history = transformed.get("history")
+    if isinstance(history, list):
+        normalized_history: list[dict] = []
+        for entry in history:
+            if not isinstance(entry, dict):
+                continue
+            entry_dict = dict(entry)
+            raw_refs = entry_dict.pop("refs", None)
+            if isinstance(raw_refs, list):
+                compat_refs.extend([ref for ref in raw_refs if isinstance(ref, dict)])
+            normalized_history.append(entry_dict)
+        transformed["history"] = normalized_history
+
+    if compat_refs:
+        transformed["plugins"] = {
+            "rag-compat": {
+                "kind": "rag-compat",
+                "version": "1.0",
+                "data": {"refs": compat_refs, "totalReferences": len(compat_refs)},
+            }
+        }
+
+    return transformed
 
 
 @pytest.mark.anyio
@@ -18,14 +45,22 @@ async def test_ref_url_search_matches_item_level_refs(
         "id": f"test-{uuid4().hex[:8]}",
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
-        "synthQuestion": "Test question?",
-        "refs": [
-            {"url": "https://example.com/page1"},
-            {"url": "https://docs.example.com/guide"},
+        "history": [
+            {"role": "user", "msg": "Test question?"},
+            {
+                "role": "assistant",
+                "msg": "Response",
+                "refs": [
+                    {"url": "https://example.com/page1"},
+                    {"url": "https://docs.example.com/guide"},
+                ],
+            },
         ],
     }
 
-    res = await async_client.post("/v1/ground-truths", json=[item], headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths", json=[canonicalize_history_refs(item)], headers=user_headers
+    )
     assert res.status_code == 200
 
     # Search for "page1" should find the item
@@ -34,9 +69,9 @@ async def test_ref_url_search_matches_item_level_refs(
     )
     assert res.status_code == 200
 
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 1
-    assert response_data.items[0].id == item["id"]
+    response_data = res.json()
+    assert len(response_data["items"]) == 1
+    assert response_data["items"][0]["id"] == item["id"]
 
 
 @pytest.mark.anyio
@@ -50,7 +85,6 @@ async def test_ref_url_search_matches_history_level_refs(
         "id": f"test-{uuid4().hex[:8]}",
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
-        "synthQuestion": "Test question?",
         "history": [
             {
                 "role": "user",
@@ -67,7 +101,9 @@ async def test_ref_url_search_matches_history_level_refs(
         ],
     }
 
-    res = await async_client.post("/v1/ground-truths", json=[item], headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths", json=[canonicalize_history_refs(item)], headers=user_headers
+    )
     assert res.status_code == 200
 
     # Search for "article" should find the item
@@ -76,9 +112,9 @@ async def test_ref_url_search_matches_history_level_refs(
     )
     assert res.status_code == 200
 
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 1
-    assert response_data.items[0].id == item["id"]
+    response_data = res.json()
+    assert len(response_data["items"]) == 1
+    assert response_data["items"][0]["id"] == item["id"]
 
 
 @pytest.mark.anyio
@@ -92,22 +128,22 @@ async def test_ref_url_search_matches_both_levels(
         "id": f"test-{uuid4().hex[:8]}",
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
-        "synthQuestion": "Test question?",
-        "refs": [
-            {"url": "https://foo.com/bar"},
-        ],
         "history": [
+            {"role": "user", "msg": "Test question?"},
             {
                 "role": "assistant",
                 "msg": "Response",
                 "refs": [
+                    {"url": "https://foo.com/bar"},
                     {"url": "https://baz.com/bar"},
                 ],
             },
         ],
     }
 
-    res = await async_client.post("/v1/ground-truths", json=[item], headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths", json=[canonicalize_history_refs(item)], headers=user_headers
+    )
     assert res.status_code == 200
 
     # Search for "bar" should find the item (matches both levels)
@@ -116,9 +152,9 @@ async def test_ref_url_search_matches_both_levels(
     )
     assert res.status_code == 200
 
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 1
-    assert response_data.items[0].id == item["id"]
+    response_data = res.json()
+    assert len(response_data["items"]) == 1
+    assert response_data["items"][0]["id"] == item["id"]
 
 
 @pytest.mark.anyio
@@ -132,13 +168,21 @@ async def test_ref_url_search_case_sensitive(
         "id": f"test-{uuid4().hex[:8]}",
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
-        "synthQuestion": "Test question?",
-        "refs": [
-            {"url": "https://Example.COM/Page"},
+        "history": [
+            {"role": "user", "msg": "Test question?"},
+            {
+                "role": "assistant",
+                "msg": "Response",
+                "refs": [
+                    {"url": "https://Example.COM/Page"},
+                ],
+            },
         ],
     }
 
-    res = await async_client.post("/v1/ground-truths", json=[item], headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths", json=[canonicalize_history_refs(item)], headers=user_headers
+    )
     assert res.status_code == 200
 
     # Search for lowercase "example.com" should NOT find the item (case-sensitive)
@@ -149,8 +193,8 @@ async def test_ref_url_search_case_sensitive(
     )
     assert res.status_code == 200
 
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 0
+    response_data = res.json()
+    assert len(response_data["items"]) == 0
 
     # Search for exact case "Example.COM" should find it
     res = await async_client.get(
@@ -160,8 +204,8 @@ async def test_ref_url_search_case_sensitive(
     )
     assert res.status_code == 200
 
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 1
+    response_data = res.json()
+    assert len(response_data["items"]) == 1
 
 
 @pytest.mark.anyio
@@ -175,13 +219,21 @@ async def test_ref_url_search_partial_match(
         "id": f"test-{uuid4().hex[:8]}",
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
-        "synthQuestion": "Test question?",
-        "refs": [
-            {"url": "https://docs.example.com/guide/introduction"},
+        "history": [
+            {"role": "user", "msg": "Test question?"},
+            {
+                "role": "assistant",
+                "msg": "Response",
+                "refs": [
+                    {"url": "https://docs.example.com/guide/introduction"},
+                ],
+            },
         ],
     }
 
-    res = await async_client.post("/v1/ground-truths", json=[item], headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths", json=[canonicalize_history_refs(item)], headers=user_headers
+    )
     assert res.status_code == 200
 
     # Search for domain portion
@@ -191,14 +243,14 @@ async def test_ref_url_search_partial_match(
         headers=user_headers,
     )
     assert res.status_code == 200
-    assert len(GroundTruthListResponse.model_validate(res.json()).items) == 1
+    assert len(res.json()["items"]) == 1
 
     # Search for path portion
     res = await async_client.get(
         "/v1/ground-truths", params={"dataset": dataset, "refUrl": "/guide"}, headers=user_headers
     )
     assert res.status_code == 200
-    assert len(GroundTruthListResponse.model_validate(res.json()).items) == 1
+    assert len(res.json()["items"]) == 1
 
     # Search for non-matching substring
     res = await async_client.get(
@@ -207,7 +259,7 @@ async def test_ref_url_search_partial_match(
         headers=user_headers,
     )
     assert res.status_code == 200
-    assert len(GroundTruthListResponse.model_validate(res.json()).items) == 0
+    assert len(res.json()["items"]) == 0
 
 
 @pytest.mark.anyio
@@ -220,19 +272,27 @@ async def test_ref_url_search_no_matches(async_client: AsyncClient, user_headers
             "id": f"test-{uuid4().hex[:8]}",
             "datasetName": dataset,
             "bucket": "00000000-0000-0000-0000-000000000000",
-            "synthQuestion": "Question 1",
-            "refs": [{"url": "https://foo.com/1"}],
+            "history": [
+                {"role": "user", "msg": "Question 1"},
+                {"role": "assistant", "msg": "Response", "refs": [{"url": "https://foo.com/1"}]},
+            ],
         },
         {
             "id": f"test-{uuid4().hex[:8]}",
             "datasetName": dataset,
             "bucket": "00000000-0000-0000-0000-000000000000",
-            "synthQuestion": "Question 2",
-            "refs": [{"url": "https://bar.com/2"}],
+            "history": [
+                {"role": "user", "msg": "Question 2"},
+                {"role": "assistant", "msg": "Response", "refs": [{"url": "https://bar.com/2"}]},
+            ],
         },
     ]
 
-    res = await async_client.post("/v1/ground-truths", json=items, headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths",
+        json=[canonicalize_history_refs(item) for item in items],
+        headers=user_headers,
+    )
     assert res.status_code == 200
 
     # Search for non-existent URL
@@ -243,8 +303,8 @@ async def test_ref_url_search_no_matches(async_client: AsyncClient, user_headers
     )
     assert res.status_code == 200
 
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 0
+    response_data = res.json()
+    assert len(response_data["items"]) == 0
 
 
 @pytest.mark.anyio
@@ -258,17 +318,25 @@ async def test_ref_url_search_multiple_refs_per_item(
         "id": f"test-{uuid4().hex[:8]}",
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
-        "synthQuestion": "Test question?",
-        "refs": [
-            {"url": "https://foo.com/1"},
-            {"url": "https://bar.com/2"},
-            {"url": "https://baz.com/3"},
-            {"url": "https://example.com/matching-url"},
-            {"url": "https://qux.com/5"},
+        "history": [
+            {"role": "user", "msg": "Test question?"},
+            {
+                "role": "assistant",
+                "msg": "Response",
+                "refs": [
+                    {"url": "https://foo.com/1"},
+                    {"url": "https://bar.com/2"},
+                    {"url": "https://baz.com/3"},
+                    {"url": "https://example.com/matching-url"},
+                    {"url": "https://qux.com/5"},
+                ],
+            },
         ],
     }
 
-    res = await async_client.post("/v1/ground-truths", json=[item], headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths", json=[canonicalize_history_refs(item)], headers=user_headers
+    )
     assert res.status_code == 200
 
     # Search for the matching URL
@@ -279,9 +347,9 @@ async def test_ref_url_search_multiple_refs_per_item(
     )
     assert res.status_code == 200
 
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 1
-    assert response_data.items[0].id == item["id"]
+    response_data = res.json()
+    assert len(response_data["items"]) == 1
+    assert response_data["items"][0]["id"] == item["id"]
 
 
 @pytest.mark.anyio
@@ -297,29 +365,51 @@ async def test_ref_url_search_combined_with_other_filters(
             "id": f"test-{uuid4().hex[:8]}",
             "datasetName": dataset1,
             "bucket": "00000000-0000-0000-0000-000000000000",
-            "synthQuestion": "Q1",
             "status": "draft",
-            "refs": [{"url": "https://example.com/doc"}],
+            "history": [
+                {"role": "user", "msg": "Q1"},
+                {
+                    "role": "assistant",
+                    "msg": "Response",
+                    "refs": [{"url": "https://example.com/doc"}],
+                },
+            ],
         },
         {
             "id": f"test-{uuid4().hex[:8]}",
             "datasetName": dataset1,
             "bucket": "00000000-0000-0000-0000-000000000000",
-            "synthQuestion": "Q2",
             "status": "approved",
-            "refs": [{"url": "https://example.com/doc"}],
+            "history": [
+                {"role": "user", "msg": "Q2"},
+                {
+                    "role": "assistant",
+                    "msg": "Response",
+                    "refs": [{"url": "https://example.com/doc"}],
+                },
+            ],
         },
         {
             "id": f"test-{uuid4().hex[:8]}",
             "datasetName": dataset2,
             "bucket": "00000000-0000-0000-0000-000000000000",
-            "synthQuestion": "Q3",
             "status": "draft",
-            "refs": [{"url": "https://example.com/doc"}],
+            "history": [
+                {"role": "user", "msg": "Q3"},
+                {
+                    "role": "assistant",
+                    "msg": "Response",
+                    "refs": [{"url": "https://example.com/doc"}],
+                },
+            ],
         },
     ]
 
-    res = await async_client.post("/v1/ground-truths", json=items, headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths",
+        json=[canonicalize_history_refs(item) for item in items],
+        headers=user_headers,
+    )
     assert res.status_code == 200
 
     # Filter by dataset + refUrl → should get 2 items from dataset1
@@ -329,8 +419,8 @@ async def test_ref_url_search_combined_with_other_filters(
         headers=user_headers,
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 2
+    response_data = res.json()
+    assert len(response_data["items"]) == 2
 
     # Filter by dataset + status + refUrl → should get 1 item (approved in dataset1)
     res = await async_client.get(
@@ -339,9 +429,9 @@ async def test_ref_url_search_combined_with_other_filters(
         headers=user_headers,
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 1
-    assert response_data.items[0].status.value == "approved"
+    response_data = res.json()
+    assert len(response_data["items"]) == 1
+    assert response_data["items"][0]["status"] == "approved"
 
 
 @pytest.mark.anyio
@@ -357,13 +447,23 @@ async def test_ref_url_search_with_pagination(
             "id": f"test-{i:03d}-{uuid4().hex[:8]}",
             "datasetName": dataset,
             "bucket": "00000000-0000-0000-0000-000000000000",
-            "synthQuestion": f"Question {i}",
-            "refs": [{"url": f"https://example.com/doc/{i}"}],
+            "history": [
+                {"role": "user", "msg": f"Question {i}"},
+                {
+                    "role": "assistant",
+                    "msg": "Response",
+                    "refs": [{"url": f"https://example.com/doc/{i}"}],
+                },
+            ],
         }
         for i in range(15)
     ]
 
-    res = await async_client.post("/v1/ground-truths", json=items, headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths",
+        json=[canonicalize_history_refs(item) for item in items],
+        headers=user_headers,
+    )
     assert res.status_code == 200
 
     # Get first page with limit=10
@@ -374,12 +474,13 @@ async def test_ref_url_search_with_pagination(
     )
     assert res.status_code == 200
 
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 10
-    assert response_data.pagination.total == 15
-    assert response_data.pagination.page == 1
-    assert response_data.pagination.has_next is True
-    assert response_data.pagination.has_prev is False
+    response_data = res.json()
+    assert len(response_data["items"]) == 10
+    assert response_data["pagination"]["total"] == 15
+    assert response_data["pagination"]["page"] == 1
+    page = response_data["pagination"]
+    assert page.get("has_next", page.get("hasNext")) is True
+    assert page.get("has_prev", page.get("hasPrev")) is False
 
     # Get second page
     res = await async_client.get(
@@ -389,12 +490,13 @@ async def test_ref_url_search_with_pagination(
     )
     assert res.status_code == 200
 
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 5
-    assert response_data.pagination.total == 15
-    assert response_data.pagination.page == 2
-    assert response_data.pagination.has_next is False
-    assert response_data.pagination.has_prev is True
+    response_data = res.json()
+    assert len(response_data["items"]) == 5
+    assert response_data["pagination"]["total"] == 15
+    assert response_data["pagination"]["page"] == 2
+    page = response_data["pagination"]
+    assert page.get("has_next", page.get("hasNext")) is False
+    assert page.get("has_prev", page.get("hasPrev")) is True
 
 
 @pytest.mark.anyio
@@ -409,19 +511,27 @@ async def test_ref_url_search_empty_string_ignored(
             "id": f"test-{uuid4().hex[:8]}",
             "datasetName": dataset,
             "bucket": "00000000-0000-0000-0000-000000000000",
-            "synthQuestion": "Q1",
-            "refs": [{"url": "https://foo.com"}],
+            "history": [
+                {"role": "user", "msg": "Q1"},
+                {"role": "assistant", "msg": "Response", "refs": [{"url": "https://foo.com"}]},
+            ],
         },
         {
             "id": f"test-{uuid4().hex[:8]}",
             "datasetName": dataset,
             "bucket": "00000000-0000-0000-0000-000000000000",
-            "synthQuestion": "Q2",
-            "refs": [{"url": "https://bar.com"}],
+            "history": [
+                {"role": "user", "msg": "Q2"},
+                {"role": "assistant", "msg": "Response", "refs": [{"url": "https://bar.com"}]},
+            ],
         },
     ]
 
-    res = await async_client.post("/v1/ground-truths", json=items, headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths",
+        json=[canonicalize_history_refs(item) for item in items],
+        headers=user_headers,
+    )
     assert res.status_code == 200
 
     # Empty string
@@ -429,16 +539,16 @@ async def test_ref_url_search_empty_string_ignored(
         "/v1/ground-truths", params={"dataset": dataset, "refUrl": ""}, headers=user_headers
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 2  # Returns all items
+    response_data = res.json()
+    assert len(response_data["items"]) == 2  # Returns all items
 
     # Whitespace only
     res = await async_client.get(
         "/v1/ground-truths", params={"dataset": dataset, "refUrl": "   "}, headers=user_headers
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 2  # Returns all items
+    response_data = res.json()
+    assert len(response_data["items"]) == 2  # Returns all items
 
 
 @pytest.mark.anyio
@@ -453,19 +563,27 @@ async def test_ref_url_search_omitted_parameter(
             "id": f"test-{uuid4().hex[:8]}",
             "datasetName": dataset,
             "bucket": "00000000-0000-0000-0000-000000000000",
-            "synthQuestion": "Q1",
-            "refs": [{"url": "https://foo.com"}],
+            "history": [
+                {"role": "user", "msg": "Q1"},
+                {"role": "assistant", "msg": "Response", "refs": [{"url": "https://foo.com"}]},
+            ],
         },
         {
             "id": f"test-{uuid4().hex[:8]}",
             "datasetName": dataset,
             "bucket": "00000000-0000-0000-0000-000000000000",
-            "synthQuestion": "Q2",
-            "refs": [{"url": "https://bar.com"}],
+            "history": [
+                {"role": "user", "msg": "Q2"},
+                {"role": "assistant", "msg": "Response", "refs": [{"url": "https://bar.com"}]},
+            ],
         },
     ]
 
-    res = await async_client.post("/v1/ground-truths", json=items, headers=user_headers)
+    res = await async_client.post(
+        "/v1/ground-truths",
+        json=[canonicalize_history_refs(item) for item in items],
+        headers=user_headers,
+    )
     assert res.status_code == 200
 
     # Omit refUrl parameter entirely
@@ -474,8 +592,8 @@ async def test_ref_url_search_omitted_parameter(
     )
     assert res.status_code == 200
 
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 2  # Returns all items
+    response_data = res.json()
+    assert len(response_data["items"]) == 2  # Returns all items
 
 
 @pytest.mark.anyio

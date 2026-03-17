@@ -21,6 +21,7 @@ from azure.core import MatchConditions
 from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFoundError
 
 from app.adapters.repos.base import GroundTruthRepo
+from app.domain.conversation_fields import answer_text_from_item, question_text_from_item
 from app.domain.models import (
     AgenticGroundTruthEntry,
     Stats,
@@ -32,6 +33,7 @@ from app.domain.models import (
 )
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.core.config import get_sampling_allocation
+from app.plugins.pack_registry import get_default_pack_registry, get_rag_compat_pack
 
 
 _SMART_PUNCT_REPLACEMENTS: dict[str, str] = {
@@ -54,16 +56,14 @@ _CONTROL_CHAR_TRANSLATION = {
 
 # Cosmos DB SELECT clause for AgenticGroundTruthEntry fields used in several functions
 # list_gt_paginated, _list_gt_paginated_with_emulator, list_gt_by_dataset
-# Note: legacy fields like synthQuestion, editedQuestion are still selected for compatibility
-# during migration, but the model will access them via computed properties
 SELECT_CLAUSE_C = (
     "SELECT c.id, c.datasetName, c.bucket, c.status, c.docType, c.schemaVersion, "
-    "c.synthQuestion, c.editedQuestion, c.answer, c.refs, c.tags, c.manualTags, c.computedTags, c.comment, c.plugins, "
+    "c.tags, c.manualTags, c.computedTags, c.comment, c.plugins, "
     "c.scenarioId, c.history, c.contextEntries, c.traceIds, c.toolCalls, c.expectedTools, "
     "c.feedback, c.metadata, c.createdBy, c.createdAt, c.tracePayload, "
     "c.contextUsedForGeneration, c.contextSource, c.modelUsedForGeneration, "
     "c.semanticClusterNumber, c.weight, c.samplingBucket, c.questionLength, "
-    "c.assignedTo, c.assignedAt, c.totalReferences, c.updatedAt, c.updatedBy, c.reviewedAt, c._etag "
+    "c.assignedTo, c.assignedAt, c.updatedAt, c.updatedBy, c.reviewedAt, c._etag "
 )
 
 
@@ -394,10 +394,6 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         # Dump in JSON mode so datetimes/enums are serialized to strings
         d = item.model_dump(mode="json", by_alias=True)
 
-        # Ensure totalReferences is computed and persisted for sorting/querying
-        # Use the property getter which handles both explicit values and plugin storage
-        d["totalReferences"] = item.totalReferences
-
         if d.get("bucket") is not None:
             d["bucket"] = str(d["bucket"])  # store UUID as string
         # Ensure updatedAt present as ISO string
@@ -412,52 +408,18 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         normalized_doc = (
             _restore_unicode_from_cosmos(doc) if settings.COSMOS_DISABLE_UNICODE_ESCAPE else doc
         )
-        from app.plugins.packs.rag_compat import _LEGACY_PLUGIN_FIELDS
-
-        allowed_keys = (
-            {field_name for field_name in AgenticGroundTruthEntry.model_fields}
-            | {
-                field.alias
-                for field in AgenticGroundTruthEntry.model_fields.values()
-                if field.alias is not None
-            }
-            | {
-                # Include computed_fields that need to be preserved from Cosmos documents
-                "totalReferences"  # Computed and persisted for sorting/querying
-            }
-            | set(_LEGACY_PLUGIN_FIELDS)
-        )
-        normalized_doc = {
-            key: value for key, value in normalized_doc.items() if key in allowed_keys
+        allowed_keys = {field_name for field_name in AgenticGroundTruthEntry.model_fields} | {
+            field.alias
+            for field in AgenticGroundTruthEntry.model_fields.values()
+            if field.alias is not None
         }
+        transformed_doc: dict[str, Any] = dict(normalized_doc)
+        for transform in get_default_pack_registry().collect_import_transforms():
+            transformed_doc = transform.transform(transformed_doc)
 
-        plugins = normalized_doc.get("plugins")
-        rag_plugin = plugins.get("rag-compat") if isinstance(plugins, dict) else None
-        rag_data = rag_plugin.get("data") if isinstance(rag_plugin, dict) else None
-        history_annotations = (
-            rag_data.get("historyAnnotations") if isinstance(rag_data, dict) else None
-        )
-        history = normalized_doc.get("history")
-        if isinstance(history, list) and isinstance(history_annotations, list):
-            merged_history: list[Any] = []
-            for index, entry in enumerate(history):
-                if isinstance(entry, dict):
-                    entry_dict = dict(entry)
-                    annotation = (
-                        history_annotations[index] if index < len(history_annotations) else None
-                    )
-                    if isinstance(annotation, dict):
-                        if "refs" in annotation and "refs" not in entry_dict:
-                            entry_dict["refs"] = annotation["refs"]
-                        if (
-                            "expectedBehavior" in annotation
-                            and "expectedBehavior" not in entry_dict
-                        ):
-                            entry_dict["expectedBehavior"] = annotation["expectedBehavior"]
-                    merged_history.append(entry_dict)
-                else:
-                    merged_history.append(entry)
-            normalized_doc["history"] = merged_history
+        normalized_doc = {
+            key: value for key, value in transformed_doc.items() if key in allowed_keys
+        }
 
         # Convert None to [] for history field (legacy data compatibility)
         if normalized_doc.get("history") is None:
@@ -465,12 +427,6 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
         # Pydantic will parse aliases automatically
         item = AgenticGroundTruthEntry.model_validate(normalized_doc)
-
-        # IMPORTANT: totalReferences is a @computed_field, so Pydantic won't deserialize it
-        # from the document. We need to manually set it in __dict__ so the property getter
-        # can find it. This preserves the value we computed and persisted in _to_doc.
-        if "totalReferences" in normalized_doc:
-            item.__dict__["totalReferences"] = normalized_doc["totalReferences"]
 
         return item
 
@@ -596,8 +552,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 if status == 409:
                     # Duplicate; report but continue others
                     article_num = (
-                        doc.get("refs", [{}])[0].get("url", "unknown")
-                        if doc.get("refs")
+                        get_rag_compat_pack().refs_from_item(it)[0].url
+                        if get_rag_compat_pack().refs_from_item(it)
                         else "unknown"
                     )
                     message = f"exists (article: {article_num}, id: {doc.get('id', 'unknown')})"
@@ -611,8 +567,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                     )
                 else:
                     article_num = (
-                        doc.get("refs", [{}])[0].get("url", "unknown")
-                        if doc.get("refs")
+                        get_rag_compat_pack().refs_from_item(it)[0].url
+                        if get_rag_compat_pack().refs_from_item(it)
                         else "unknown"
                     )
                     message = (
@@ -712,8 +668,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         # include_ref_url set to True when Comsomus Emulator is not used
         if include_ref_url and ref_url:
             clauses.append(
-                "(EXISTS(SELECT VALUE r FROM r IN c.refs WHERE CONTAINS(r.url, @refUrl)) "
-                "OR EXISTS(SELECT VALUE h FROM h IN c.history "
+                "(EXISTS(SELECT VALUE h FROM h IN c.history "
                 "WHERE EXISTS(SELECT VALUE r FROM r IN h.refs WHERE CONTAINS(r.url, @refUrl))))"
             )
             params.append({"name": "@refUrl", "value": ref_url})
@@ -762,14 +717,14 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         if field == SortField.has_answer:
             # In-memory sort: Primary by presence of non-empty answer, secondary by reviewed_at
             # (Cosmos ORDER BY uses c.reviewedAt placeholder - see _build_secure_sort_clause)
-            has_answer = 1 if item.answer and item.answer.strip() else 0
+            has_answer = 1 if answer_text_from_item(item) else 0
             reference_time = (
                 item.reviewed_at or item.updated_at or datetime(1970, 1, 1, tzinfo=timezone.utc)
             )
             return (has_answer, reference_time, item.id)
 
         if field == SortField.totalReferences:
-            return (item.totalReferences, item.id)
+            return (get_rag_compat_pack().reference_count(item), item.id)
 
         if field == SortField.tag_count:
             tag_count = len(item.tags)
@@ -789,8 +744,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         """Check if item matches keyword search (case-insensitive substring match).
 
         Searches across:
-        - synth_question and edited_question fields
-        - answer field
+        - canonical question text (derived from history/plugin data)
+        - canonical answer text (derived from history/plugin data)
         - history[*].msg content (all turns)
         """
         if not keyword:
@@ -799,13 +754,13 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         search_term = keyword.lower()
 
         # Search question fields
-        if item.synth_question and search_term in item.synth_question.lower():
-            return True
-        if item.edited_question and search_term in item.edited_question.lower():
+        question_text = question_text_from_item(item)
+        if question_text and search_term in question_text.lower():
             return True
 
         # Search answer field
-        if item.answer and search_term in item.answer.lower():
+        answer_text = answer_text_from_item(item)
+        if answer_text and search_term in answer_text.lower():
             return True
 
         # Search history messages
@@ -830,7 +785,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             SortField.updated_at: "c.updatedAt",
             SortField.reviewed_at: "c.reviewedAt",
             SortField.has_answer: "c.reviewedAt",  # Placeholder - actual sort is in-memory
-            SortField.totalReferences: "c.totalReferences",
+            SortField.totalReferences: "c.reviewedAt",  # Placeholder - actual sort is in-memory
         }
 
         # Security: Safe direction mapping (no user input)
@@ -892,6 +847,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             or ref_url
             or keyword
             or sort_field == SortField.tag_count
+            or sort_field == SortField.has_answer
+            or sort_field == SortField.totalReferences
         ):
             # Always use in-memory filtering path for these filters
             # (Cosmos emulator has limitations, and keyword search needs in-memory filtering regardless)
@@ -1079,18 +1036,9 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
             for item in raw_items:
                 # Check item-level refs
-                has_match = any(ref_url in ref.url for ref in item.refs)
-                total_refs_checked += len(item.refs)
-
-                # Check history-level refs if no match yet
-                if not has_match and item.history:
-                    for turn in item.history:
-                        turn_refs = getattr(turn, "refs", None)
-                        if turn_refs:
-                            total_refs_checked += len(turn_refs)
-                            if any(ref_url in ref.url for ref in turn_refs):
-                                has_match = True
-                                break
+                refs = get_rag_compat_pack().refs_from_item(item)
+                has_match = any(ref_url in ref.url for ref in refs)
+                total_refs_checked += len(refs)
                 if has_match:
                     filtered_items_ref.append(item)
 

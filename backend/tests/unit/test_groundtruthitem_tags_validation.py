@@ -3,7 +3,11 @@ import pytest
 from app.domain.models import AgenticGroundTruthEntry
 
 
-BASE = dict(id="id1", datasetName="ds", synthQuestion="What is this product?")
+BASE = dict(
+    id="id1",
+    datasetName="ds",
+    history=[{"role": "user", "msg": "What is this product?"}],
+)
 
 
 def make_item(**overrides):

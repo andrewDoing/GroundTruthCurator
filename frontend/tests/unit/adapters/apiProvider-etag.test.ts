@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ApiReference } from "../../../src/adapters/apiMapper";
 import { ApiProvider } from "../../../src/adapters/apiProvider";
 import type { components } from "../../../src/api/generated";
-import type { GroundTruthItem } from "../../../src/models/groundTruth";
+import {
+	type GroundTruthItem,
+	getLastAgentTurn,
+} from "../../../src/models/groundTruth";
 
 type ApiItem = components["schemas"]["AgenticGroundTruthEntry-Output"] & {
 	synthQuestion?: string | null;
 	editedQuestion?: string | null;
 	answer?: string | null;
-	refs?: components["schemas"]["Reference"][];
+	refs?: ApiReference[];
 	totalReferences?: number;
 	tags?: string[];
 	comment?: string | null;
@@ -67,7 +71,7 @@ describe("ApiProvider ETag 412 retry behavior", () => {
 		const freshItem = makeApiItem({ _etag: "etag-fresh" });
 		const updatedItem = makeApiItem({
 			_etag: "etag-after-update",
-			answer: "Updated answer",
+			history: [{ role: "assistant", msg: "Updated answer" }],
 		});
 
 		mockGetMyAssignments.mockResolvedValue([originalItem]);
@@ -85,7 +89,7 @@ describe("ApiProvider ETag 412 retry behavior", () => {
 
 		const domainItem: GroundTruthItem = {
 			...items[0],
-			answer: "Updated answer",
+			history: [{ role: "agent", content: "Updated answer" }],
 		};
 
 		const result = await provider.save(domainItem);
@@ -108,7 +112,7 @@ describe("ApiProvider ETag 412 retry behavior", () => {
 		expect(mockUpdateAssignedGroundTruth.mock.calls[1][4]).toBe("etag-fresh");
 
 		// Result should be the updated item
-		expect(result.answer).toBe("Updated answer");
+		expect(getLastAgentTurn(result)).toBe("Updated answer");
 	});
 
 	it("updates cache with fresh ETag after 412 retry", async () => {

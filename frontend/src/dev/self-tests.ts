@@ -16,7 +16,7 @@ export function runSelfTests() {
 		const item: GroundTruthItem = {
 			id: "T",
 			question: "q",
-			answer: "a",
+			history: [{ role: "agent", content: "a" }],
 			status: "draft",
 			providerId: "json",
 		};

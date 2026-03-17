@@ -47,14 +47,21 @@ vi.mock("../../../../src/services/datasets", () => ({
 
 const createMockItem = (
 	overrides: Partial<QuestionsExplorerItem> = {},
-): QuestionsExplorerItem => ({
-	id: "item-1",
-	question: "Test Question",
-	answer: "Test Answer",
-	status: "draft",
-	providerId: "test",
-	...overrides,
-});
+): QuestionsExplorerItem => {
+	const question = overrides.question ?? "Test Question";
+	const history = overrides.history ?? [
+		{ role: "user", content: question },
+		{ role: "agent", content: "Test Answer" },
+	];
+	return {
+		id: "item-1",
+		question,
+		history,
+		status: "draft",
+		providerId: "test",
+		...overrides,
+	};
+};
 
 describe("QuestionsExplorer", () => {
 	const mockOnAssign = vi.fn();

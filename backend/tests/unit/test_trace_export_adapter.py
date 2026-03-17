@@ -49,9 +49,11 @@ def test_trace_export_adapter_maps_trace_into_agentic_ground_truth() -> None:
     assert item.id == "trace-trace-123"
     assert item.datasetName == "customer-feedback"
     assert item.scenario_id == "trace-export:trace-123"
-    assert item.synth_question == "CX IS USING TOO MUCH DATA AND WANTS TO KNOW WHY"
-    assert item.answer is not None
-    assert "Root Cause" in item.answer
+    assert item.history[0].role == "user"
+    assert item.history[0].msg == "CX IS USING TOO MUCH DATA AND WANTS TO KNOW WHY"
+    assert item.history[1].role == "orchestrator-agent"
+    assert "cellular data" in item.history[1].msg
+    assert any("Root Cause" in turn.msg for turn in item.history)
     assert item.comment == "CUSTOMER WAS ON CELLULAR DATA INSTEAD OF WIFI"
     assert item.trace_ids == {
         "traceId": "trace-123",

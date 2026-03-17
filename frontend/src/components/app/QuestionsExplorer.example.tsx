@@ -10,7 +10,7 @@ import QuestionsExplorer, {
 } from "./QuestionsExplorer";
 
 // Sample data - now with 50 items to demonstrate pagination and dataset filtering
-const sampleItems: QuestionsExplorerItem[] = [
+const sampleItems: Array<QuestionsExplorerItem & { answer?: string }> = [
 	{
 		id: "gt-001",
 		question: "What is the capital of France?",

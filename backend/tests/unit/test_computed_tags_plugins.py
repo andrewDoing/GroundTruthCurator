@@ -26,7 +26,11 @@ class TestTagPluginRegistry:
     def test_empty_registry_returns_empty_tags(self):
         """An empty registry should return no tags."""
         registry = TagPluginRegistry()
-        item = AgenticGroundTruthEntry(id="test", datasetName="test", synthQuestion="Q")
+        item = AgenticGroundTruthEntry(
+            id="test",
+            datasetName="test",
+            history=[{"role": "user", "msg": "Q"}],
+        )
         assert registry.compute_all(item) == []
         assert registry.get_all_keys() == set()
 
@@ -207,7 +211,7 @@ class TestGroundTruthItemTagMerge:
         item = AgenticGroundTruthEntry(
             id="merge-test",
             datasetName="test-dataset",
-            synthQuestion="Test question",
+            history=[{"role": "user", "msg": "Test question"}],
             manualTags=["source:manual", "priority:high"],
             computedTags=["turns:singleturn"],
         )

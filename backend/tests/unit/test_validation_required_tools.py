@@ -97,7 +97,13 @@ def test_rag_pack_waives_required_tools_for_retrieval_items():
 
     item = _make_item(
         toolCalls=[{"name": "search"}],
-        totalReferences=3,
+        plugins={
+            "rag-compat": {
+                "kind": "rag-compat",
+                "version": "1.0",
+                "data": {"references": [{"url": "https://example.com/ref"}]},
+            }
+        },
     )
     core_errors = collect_approval_validation_errors(item)
     assert REQUIRED_TOOLS_ERROR in core_errors
@@ -113,7 +119,13 @@ def test_rag_pack_does_not_waive_required_tools_without_refs():
 
     item = _make_item(
         toolCalls=[{"name": "search"}],
-        totalReferences=0,
+        plugins={
+            "rag-compat": {
+                "kind": "rag-compat",
+                "version": "1.0",
+                "data": {"references": []},
+            }
+        },
     )
     core_errors = collect_approval_validation_errors(item)
     filtered = registry.filter_core_errors(item, core_errors)

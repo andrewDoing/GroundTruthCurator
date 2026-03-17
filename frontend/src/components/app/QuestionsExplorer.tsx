@@ -2,7 +2,11 @@ import { Lock } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import useTags from "../../hooks/useTags";
 import type { GroundTruthItem } from "../../models/groundTruth";
-import { getLastAgentTurn, getQueuePreview } from "../../models/groundTruth";
+import {
+	getItemReferences,
+	getLastAgentTurn,
+	getQueuePreview,
+} from "../../models/groundTruth";
 import { cn } from "../../models/utils";
 import { getExplorerExtensions } from "../../registry/ExplorerExtensions";
 import { fetchAvailableDatasets } from "../../services/datasets";
@@ -1232,7 +1236,7 @@ export default function QuestionsExplorer({
 											</td>
 											{/* Refs */}
 											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden lg:table-cell">
-												{item.totalReferences ?? 0}
+												{getItemReferences(item).length}
 											</td>
 											{/* Tag Count */}
 											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden xl:table-cell">

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from app.domain.conversation_fields import answer_text_from_item, question_text_from_item
 from app.domain.models import AgenticGroundTruthEntry, BulkImportError, HistoryEntry
 from app.services.tagging_service import validate_tags_with_cache
 
@@ -56,20 +57,21 @@ class ApprovalValidationError(Exception):
 
 def _normalized_history(item: AgenticGroundTruthEntry) -> list[HistoryEntry]:
     history = list(item.history or [])
-    question_text = item.edited_question or item.synth_question
+    question_text = question_text_from_item(item)
+    answer_text = answer_text_from_item(item)
     if history:
         roles = {entry.role.strip().lower() for entry in history}
         if "user" not in roles and question_text:
             history.insert(0, HistoryEntry(role="user", msg=question_text))
-        if "assistant" not in roles and item.answer:
-            history.append(HistoryEntry(role="assistant", msg=item.answer))
+        if "assistant" not in roles and answer_text:
+            history.append(HistoryEntry(role="assistant", msg=answer_text))
         return history
 
     synthesized: list[HistoryEntry] = []
     if question_text:
         synthesized.append(HistoryEntry(role="user", msg=question_text))
-    if item.answer:
-        synthesized.append(HistoryEntry(role="assistant", msg=item.answer))
+    if answer_text:
+        synthesized.append(HistoryEntry(role="assistant", msg=answer_text))
     return synthesized
 
 

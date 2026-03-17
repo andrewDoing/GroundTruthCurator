@@ -5,8 +5,8 @@ Detection is informational only - warnings are returned but do not block writes.
 
 Detection strategy:
 - Normalize whitespace and casing for comparison
-- Compare editedQuestion or synthQuestion (whichever is present)
-- Compare answer content
+- Compare canonical question text
+- Compare canonical answer text
 - Only check against approved items (drafts can have temporary duplicates)
 """
 
@@ -18,6 +18,7 @@ from typing import Sequence
 
 from pydantic import BaseModel, Field, ConfigDict
 
+from app.domain.conversation_fields import answer_text_from_item, question_text_from_item
 from app.domain.models import AgenticGroundTruthEntry
 from app.domain.enums import GroundTruthStatus
 
@@ -53,8 +54,8 @@ def _normalize_text(text: str | None) -> str:
 
 
 def _get_question_text(item: AgenticGroundTruthEntry) -> str:
-    """Get the effective question text (edited or synth)."""
-    return item.edited_question or item.synth_question or ""
+    """Get the effective question text from conversation history."""
+    return question_text_from_item(item)
 
 
 def _serialize_generic_value(value: object) -> str:
@@ -132,8 +133,8 @@ def _items_are_duplicates(
     # Check for exact question match when both items expose question text
     if draft_question and approved_question and draft_question == approved_question:
         # Also check answer for stronger signal
-        draft_answer = _normalize_text(draft.answer)
-        approved_answer = _normalize_text(approved.answer)
+        draft_answer = _normalize_text(answer_text_from_item(draft))
+        approved_answer = _normalize_text(answer_text_from_item(approved))
 
         if draft_answer and approved_answer and draft_answer == approved_answer:
             return (True, "exact question and answer match")

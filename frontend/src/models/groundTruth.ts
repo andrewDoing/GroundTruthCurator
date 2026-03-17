@@ -340,8 +340,6 @@ export type GroundTruthItem = {
 	bucket?: string;
 	/** Legacy compatibility projection derived from history when absent. */
 	question?: string;
-	/** Legacy compatibility projection derived from history when absent. */
-	answer?: string;
 	/** ISO date string of the last review, when provided by the API. */
 	reviewedAt?: string | null;
 	/**
@@ -349,8 +347,6 @@ export type GroundTruthItem = {
 	 * Rendered in a collapsible pane above the Question/Answer editors.
 	 */
 	curationInstructions?: string;
-	/** Backend-computed total count of references (item-level + all turn-level). */
-	totalReferences?: number;
 	/** ETag for optimistic concurrency control */
 	_etag?: string;
 };
@@ -421,7 +417,7 @@ export function getLastUserTurn(item: GroundTruthItem): string {
  */
 export function getLastAgentTurn(item: GroundTruthItem): string {
 	if (!Array.isArray(item.history)) {
-		return item.answer || "";
+		return "";
 	}
 	const history = ensureConversationTurnIdentity(item.history);
 	if (history.length === 0) {
@@ -477,7 +473,6 @@ export function withDerivedLegacyFields(
 	return {
 		...derivedItem,
 		question: getLastUserTurn(derivedItem),
-		answer: getLastAgentTurn(derivedItem),
 	};
 }
 

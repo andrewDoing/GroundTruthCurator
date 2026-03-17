@@ -12,8 +12,10 @@ def test_approval_validation_accepts_legacy_question_answer_payload():
         {
             "id": "item-1",
             "datasetName": "demo",
-            "synthQuestion": "What is Ground Truth Curator?",
-            "answer": "It is a curation application.",
+            "history": [
+                {"role": "user", "msg": "What is Ground Truth Curator?"},
+                {"role": "assistant", "msg": "It is a curation application."},
+            ],
         }
     )
 
