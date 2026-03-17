@@ -97,6 +97,14 @@ def test_refs_from_item_reads_owned_references():
     assert refs[0].url == "https://example.com/doc"
 
 
+def test_get_search_documents_includes_stable_id():
+    pack = RagCompatPack()
+    docs = pack.get_search_documents(_rag_item())
+    assert len(docs) == 1
+    assert docs[0]["id"] == "rag-001:ref:0"
+    assert docs[0]["url"] == "https://example.com/doc"
+
+
 def test_refs_from_item_reads_legacy_retrieval_payloads():
     pack = RagCompatPack()
     item = AgenticGroundTruthEntry.model_validate(

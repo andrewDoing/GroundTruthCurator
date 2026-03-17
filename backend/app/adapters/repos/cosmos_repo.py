@@ -33,7 +33,8 @@ from app.domain.models import (
 )
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.core.config import get_sampling_allocation
-from app.plugins.pack_registry import get_default_pack_registry, get_rag_compat_pack
+from app.plugins.base import PluginPackRegistry
+from app.plugins.pack_registry import get_default_pack_registry
 
 
 _SMART_PUNCT_REPLACEMENTS: dict[str, str] = {
@@ -221,6 +222,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         connection_verify: bool | str | None = None,
         test_mode: bool = False,
         credential: Any | None = None,
+        plugin_pack_registry: PluginPackRegistry | None = None,
     ):
         # Defer CosmosClient creation to _init so the underlying aiohttp session binds
         # to the event loop of the running app (avoids cross-loop RuntimeError in tests).
@@ -236,6 +238,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         self._db: DatabaseProxy | None = None
         self._gt_container: ContainerProxy | None = None
         self._assignments_container: ContainerProxy | None = None
+        self._plugin_pack_registry = plugin_pack_registry or get_default_pack_registry()
         # Track the event loop on which the aiohttp client/session was created to
         # guard against cross-loop usage during tests.
         self._loop: asyncio.AbstractEventLoop | None = None  # set in _init on first use
@@ -551,12 +554,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 status = getattr(e, "status_code", None)
                 if status == 409:
                     # Duplicate; report but continue others
-                    article_num = (
-                        get_rag_compat_pack().refs_from_item(it)[0].url
-                        if get_rag_compat_pack().refs_from_item(it)
-                        else "unknown"
-                    )
-                    message = f"exists (article: {article_num}, id: {doc.get('id', 'unknown')})"
+                    message = f"exists (id: {doc.get('id', 'unknown')})"
                     errors.append(message)
                     persistence_errors.append(
                         BulkImportPersistenceError(
@@ -566,13 +564,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                         )
                     )
                 else:
-                    article_num = (
-                        get_rag_compat_pack().refs_from_item(it)[0].url
-                        if get_rag_compat_pack().refs_from_item(it)
-                        else "unknown"
-                    )
                     message = (
-                        f"create_failed (article: {article_num}, id: {doc.get('id', 'unknown')}): "
+                        f"create_failed (id: {doc.get('id', 'unknown')}): "
                         f"{getattr(e, 'message', str(e))}"
                     )
                     errors.append(message)
@@ -702,7 +695,19 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         return field, direction
 
     @staticmethod
-    def _sort_key(item: AgenticGroundTruthEntry, field: SortField) -> tuple[Any, ...]:
+    def _sort_key(
+        item: AgenticGroundTruthEntry,
+        field: SortField,
+        plugin_sort: str | None = None,
+        plugin_pack_registry: PluginPackRegistry | None = None,
+    ) -> tuple[Any, ...]:
+        if plugin_sort:
+            if plugin_pack_registry is None:
+                return (-1, item.id)
+            return (
+                plugin_pack_registry.plugin_sort_value(item, plugin_sort),
+                item.id,
+            )
         if field == SortField.id:
             return (item.id or "",)
 
@@ -722,9 +727,6 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 item.reviewed_at or item.updated_at or datetime(1970, 1, 1, tzinfo=timezone.utc)
             )
             return (has_answer, reference_time, item.id)
-
-        if field == SortField.totalReferences:
-            return (get_rag_compat_pack().reference_count(item), item.id)
 
         if field == SortField.tag_count:
             tag_count = len(item.tags)
@@ -785,7 +787,6 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             SortField.updated_at: "c.updatedAt",
             SortField.reviewed_at: "c.reviewedAt",
             SortField.has_answer: "c.reviewedAt",  # Placeholder - actual sort is in-memory
-            SortField.totalReferences: "c.reviewedAt",  # Placeholder - actual sort is in-memory
         }
 
         # Security: Safe direction mapping (no user input)
@@ -815,9 +816,10 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         tags: list[str] | None = None,
         exclude_tags: list[str] | None = None,
         item_id: str | None = None,
-        ref_url: str | None = None,
+        plugin_filters: dict[str, str] | None = None,
         keyword: str | None = None,
         sort_by: SortField | None = None,
+        plugin_sort: str | None = None,
         sort_order: SortOrder | None = None,
         page: int = 1,
         limit: int = 25,
@@ -844,11 +846,11 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         if (
             normalized_tags
             or normalized_exclude_tags
-            or ref_url
+            or plugin_filters
             or keyword
             or sort_field == SortField.tag_count
             or sort_field == SortField.has_answer
-            or sort_field == SortField.totalReferences
+            or plugin_sort is not None
         ):
             # Always use in-memory filtering path for these filters
             # (Cosmos emulator has limitations, and keyword search needs in-memory filtering regardless)
@@ -858,9 +860,10 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 normalized_tags,
                 normalized_exclude_tags,
                 item_id,
-                ref_url,
+                plugin_filters,
                 keyword,
                 sort_by,
+                plugin_sort,
                 sort_order,
                 safe_page,
                 safe_limit,
@@ -873,9 +876,9 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             normalized_tags,
             normalized_exclude_tags,
             item_id,
-            ref_url,
+            None,
             include_tags=True,
-            include_ref_url=True,
+            include_ref_url=False,
         )
 
         # Build ORDER BY clause
@@ -939,9 +942,10 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         tags: list[str],
         exclude_tags: list[str],
         item_id: str | None,
-        ref_url: str | None,
+        plugin_filters: dict[str, str] | None,
         keyword: str | None,
         sort_by: SortField | None,
+        plugin_sort: str | None,
         sort_order: SortOrder | None,
         page: int,
         limit: int,
@@ -965,7 +969,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             tags,
             exclude_tags,
             item_id,
-            ref_url,
+            None,
             include_tags=False,  # Disable SQL-level tag filtering - filter in-memory instead
             include_ref_url=False,  # Disable ref_url filtering for emulator
         )
@@ -1028,30 +1032,23 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                     filtered_items_exclude.append(item)
             raw_items = filtered_items_exclude
 
-        # Filter by ref_url in-memory (EXISTS not supported by Cosmos DB emulator)
-        if ref_url:
+        # Filter by plugin-owned filters in-memory.
+        if plugin_filters:
             start = time.time()
-            filtered_items_ref: list[AgenticGroundTruthEntry] = []
-            total_refs_checked = 0
+            filtered_items_plugin: list[AgenticGroundTruthEntry] = []
 
             for item in raw_items:
-                # Check item-level refs
-                refs = get_rag_compat_pack().refs_from_item(item)
-                has_match = any(ref_url in ref.url for ref in refs)
-                total_refs_checked += len(refs)
-                if has_match:
-                    filtered_items_ref.append(item)
+                if self._plugin_pack_registry.matches_query_filters(item, plugin_filters):
+                    filtered_items_plugin.append(item)
 
             elapsed = time.time() - start
             self._logger.info(
-                "repo.ref_url_filter.performance"
+                "repo.plugin_filter.performance"
                 f"items_checked: {len(raw_items)}, "
-                f"items_matched: {len(filtered_items_ref)}, "
-                f"refs_checked: {total_refs_checked}, "
+                f"items_matched: {len(filtered_items_plugin)}, "
                 f"elapsed_ms: {elapsed * 1000}, "
-                f"ref_url_length: {len(ref_url)}, "
             )
-            raw_items = filtered_items_ref
+            raw_items = filtered_items_plugin
 
         # Filter by keyword in-memory (case-insensitive substring match)
         if keyword:
@@ -1074,7 +1071,15 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
         # Sort in-memory (required since ORDER BY conflicts with ARRAY_CONTAINS in Cosmos DB)
         reverse_sort = sort_direction == SortOrder.desc
-        raw_items.sort(key=lambda item: self._sort_key(item, sort_field), reverse=reverse_sort)
+        raw_items.sort(
+            key=lambda item: self._sort_key(
+                item,
+                sort_field,
+                plugin_sort=plugin_sort,
+                plugin_pack_registry=self._plugin_pack_registry,
+            ),
+            reverse=reverse_sort,
+        )
 
         total = len(raw_items)
         total_pages = math.ceil(total / limit) if total > 0 else 0

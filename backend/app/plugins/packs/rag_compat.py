@@ -367,3 +367,36 @@ class RagCompatPack(PluginPack):
                 transform=apply_export_projection,
             )
         ]
+
+    def matches_query_filter(
+        self, item: AgenticGroundTruthEntry, filter_key: str, filter_value: str
+    ) -> bool | None:
+        if filter_key != "refUrl":
+            return None
+        refs = self.refs_from_item(item)
+        return any(filter_value in (getattr(ref, "url", "") or "") for ref in refs)
+
+    def get_sort_value(self, item: AgenticGroundTruthEntry, sort_key: str) -> Any | None:
+        if sort_key != "totalReferences":
+            return None
+        return self.reference_count(item)
+
+    def get_search_documents(self, item: AgenticGroundTruthEntry) -> list[dict[str, Any]]:
+        docs: list[dict[str, Any]] = []
+        for idx, ref in enumerate(self.refs_from_item(item)):
+            docs.append(
+                {
+                    "id": f"{item.id}:ref:{idx}",
+                    "url": getattr(ref, "url", None),
+                    "title": getattr(ref, "title", None),
+                    "chunk": getattr(ref, "content", None) or getattr(ref, "keyExcerpt", None),
+                }
+            )
+        return docs
+
+    def get_primary_reference_url(self, item: AgenticGroundTruthEntry) -> str | None:
+        refs = self.refs_from_item(item)
+        if not refs:
+            return None
+        first_url = getattr(refs[0], "url", None)
+        return first_url if isinstance(first_url, str) and first_url else None

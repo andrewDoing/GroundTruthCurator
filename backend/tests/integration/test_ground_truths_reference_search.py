@@ -65,7 +65,7 @@ async def test_ref_url_search_matches_item_level_refs(
 
     # Search for "page1" should find the item
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "refUrl": "page1"}, headers=user_headers
+        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=page1"}, headers=user_headers
     )
     assert res.status_code == 200
 
@@ -108,7 +108,7 @@ async def test_ref_url_search_matches_history_level_refs(
 
     # Search for "article" should find the item
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "refUrl": "article"}, headers=user_headers
+        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=article"}, headers=user_headers
     )
     assert res.status_code == 200
 
@@ -148,7 +148,7 @@ async def test_ref_url_search_matches_both_levels(
 
     # Search for "bar" should find the item (matches both levels)
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "refUrl": "bar"}, headers=user_headers
+        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=bar"}, headers=user_headers
     )
     assert res.status_code == 200
 
@@ -188,7 +188,7 @@ async def test_ref_url_search_case_sensitive(
     # Search for lowercase "example.com" should NOT find the item (case-sensitive)
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "refUrl": "example.com"},
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=example.com"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -199,7 +199,7 @@ async def test_ref_url_search_case_sensitive(
     # Search for exact case "Example.COM" should find it
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "refUrl": "Example.COM"},
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=Example.COM"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -239,7 +239,7 @@ async def test_ref_url_search_partial_match(
     # Search for domain portion
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "refUrl": "docs.example"},
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=docs.example"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -247,7 +247,7 @@ async def test_ref_url_search_partial_match(
 
     # Search for path portion
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "refUrl": "/guide"}, headers=user_headers
+        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=/guide"}, headers=user_headers
     )
     assert res.status_code == 200
     assert len(res.json()["items"]) == 1
@@ -255,7 +255,7 @@ async def test_ref_url_search_partial_match(
     # Search for non-matching substring
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "refUrl": "nonexistent"},
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=nonexistent"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -298,7 +298,7 @@ async def test_ref_url_search_no_matches(async_client: AsyncClient, user_headers
     # Search for non-existent URL
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "refUrl": "nonexistent-url"},
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=nonexistent-url"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -342,7 +342,7 @@ async def test_ref_url_search_multiple_refs_per_item(
     # Search for the matching URL
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "refUrl": "matching-url"},
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=matching-url"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -415,7 +415,7 @@ async def test_ref_url_search_combined_with_other_filters(
     # Filter by dataset + refUrl → should get 2 items from dataset1
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset1, "refUrl": "example.com"},
+        params={"dataset": dataset1, "pluginFilter": "rag-compat:refUrl=example.com"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -425,7 +425,7 @@ async def test_ref_url_search_combined_with_other_filters(
     # Filter by dataset + status + refUrl → should get 1 item (approved in dataset1)
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset1, "status": "approved", "refUrl": "example.com"},
+        params={"dataset": dataset1, "status": "approved", "pluginFilter": "rag-compat:refUrl=example.com"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -469,7 +469,7 @@ async def test_ref_url_search_with_pagination(
     # Get first page with limit=10
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "refUrl": "example.com", "page": 1, "limit": 10},
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=example.com", "page": 1, "limit": 10},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -485,7 +485,7 @@ async def test_ref_url_search_with_pagination(
     # Get second page
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "refUrl": "example.com", "page": 2, "limit": 10},
+        params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=example.com", "page": 2, "limit": 10},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -536,7 +536,7 @@ async def test_ref_url_search_empty_string_ignored(
 
     # Empty string
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "refUrl": ""}, headers=user_headers
+        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl="}, headers=user_headers
     )
     assert res.status_code == 200
     response_data = res.json()
@@ -544,7 +544,7 @@ async def test_ref_url_search_empty_string_ignored(
 
     # Whitespace only
     res = await async_client.get(
-        "/v1/ground-truths", params={"dataset": dataset, "refUrl": "   "}, headers=user_headers
+        "/v1/ground-truths", params={"dataset": dataset, "pluginFilter": "rag-compat:refUrl=   "}, headers=user_headers
     )
     assert res.status_code == 200
     response_data = res.json()
@@ -600,11 +600,13 @@ async def test_ref_url_search_omitted_parameter(
 async def test_ref_url_search_too_long_returns_400(
     async_client: AsyncClient, user_headers: dict[str, str]
 ):
-    """Test that refUrl longer than 500 characters returns 400 error."""
+    """Test that pluginFilter value longer than 500 characters returns 400 error."""
     long_url = "https://example.com/" + "x" * 500  # >500 characters total
 
     res = await async_client.get(
-        "/v1/ground-truths", params={"refUrl": long_url}, headers=user_headers
+        "/v1/ground-truths",
+        params={"pluginFilter": f"rag-compat:refUrl={long_url}"},
+        headers=user_headers,
     )
     assert res.status_code == 400
     assert "500 characters" in res.json()["detail"]

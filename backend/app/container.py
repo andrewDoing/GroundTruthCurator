@@ -180,6 +180,7 @@ class Container:
             connection_verify=settings.COSMOS_CONNECTION_VERIFY,
             test_mode=settings.COSMOS_TEST_MODE,
             credential=credential,
+            plugin_pack_registry=self.plugin_pack_registry,
         )
         logger.info(
             "Using CosmosGroundTruthRepo (endpoint=%s, db=%s, container=%s)",
@@ -227,6 +228,7 @@ class Container:
         self.repo = InMemoryGroundTruthRepo(
             items=demo_items,
             curation_instructions=demo_instructions,
+            plugin_pack_registry=self.plugin_pack_registry,
         )
         self.assignment_service = AssignmentService(self.repo)
         self.snapshot_service = self._build_snapshot_service(self.repo)
@@ -235,7 +237,11 @@ class Container:
         self.tag_registry_service = TagRegistryService(self.tags_repo)
         self.tag_definitions_repo = cast(Any, None)
         self.search_service = (
-            SearchService(DemoSearchAdapter(demo_items)) if enable_demo_data else SearchService()
+            SearchService(
+                DemoSearchAdapter(demo_items, plugin_pack_registry=self.plugin_pack_registry)
+            )
+            if enable_demo_data
+            else SearchService()
         )
         logger.info(
             "Using InMemoryGroundTruthRepo (demo_mode=%s, items=%s)",

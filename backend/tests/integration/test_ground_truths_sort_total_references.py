@@ -92,7 +92,7 @@ async def test_sort_by_total_references_descending(
 
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "sortBy": "totalReferences", "sortOrder": "desc"},
+        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "desc"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -123,7 +123,7 @@ async def test_sort_by_total_references_ascending(
 
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "sortBy": "totalReferences", "sortOrder": "asc"},
+        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "asc"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -157,7 +157,7 @@ async def test_sort_by_total_references_with_history_refs(
 
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "sortBy": "totalReferences", "sortOrder": "desc"},
+        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "desc"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -199,7 +199,7 @@ async def test_sort_by_total_references_stable_pagination(
         "/v1/ground-truths",
         params={
             "dataset": dataset,
-            "sortBy": "totalReferences",
+            "pluginSort": "rag-compat:totalReferences",
             "sortOrder": "desc",
             "page": 1,
             "limit": 3,
@@ -214,7 +214,7 @@ async def test_sort_by_total_references_stable_pagination(
         "/v1/ground-truths",
         params={
             "dataset": dataset,
-            "sortBy": "totalReferences",
+            "pluginSort": "rag-compat:totalReferences",
             "sortOrder": "desc",
             "page": 2,
             "limit": 3,
@@ -271,7 +271,7 @@ async def test_sort_by_total_references_with_status_filter(
         params={
             "dataset": dataset,
             "status": "draft",
-            "sortBy": "totalReferences",
+            "pluginSort": "rag-compat:totalReferences",
             "sortOrder": "desc",
         },
         headers=user_headers,
@@ -303,7 +303,7 @@ async def test_sort_by_total_references_all_zero(
 
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "sortBy": "totalReferences", "sortOrder": "asc"},
+        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "asc"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -334,7 +334,7 @@ async def test_sort_by_total_references_large_counts(
 
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "sortBy": "totalReferences", "sortOrder": "desc"},
+        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "desc"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -363,7 +363,7 @@ async def test_sort_by_total_references_after_update(
     # Initial sort - item-static should be first (3 refs vs 1 ref)
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "sortBy": "totalReferences", "sortOrder": "desc"},
+        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "desc"},
         headers=user_headers,
     )
     assert res.status_code == 200
@@ -404,7 +404,7 @@ async def test_sort_by_total_references_after_update(
     # After update - item-to-update should now be first (5 refs vs 3 refs)
     res = await async_client.get(
         "/v1/ground-truths",
-        params={"dataset": dataset, "sortBy": "totalReferences", "sortOrder": "desc"},
+        params={"dataset": dataset, "pluginSort": "rag-compat:totalReferences", "sortOrder": "desc"},
         headers=user_headers,
     )
     assert res.status_code == 200
