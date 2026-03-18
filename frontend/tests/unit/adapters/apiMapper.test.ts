@@ -39,12 +39,12 @@ function withCompatData(
 
 describe("groundTruthFromApi", () => {
 	describe("role mapping", () => {
-		it("maps history role 'assistant' to 'agent'", () => {
+		it("preserves history role values from the API payload", () => {
 			const api = makeApiItem({
 				history: [{ role: "assistant", msg: "Hello from assistant" }],
 			});
 			const result = groundTruthFromApi(api);
-			expect(result.history?.[0].role).toBe("agent");
+			expect(result.history?.[0].role).toBe("assistant");
 			expect(result.history?.[0].content).toBe("Hello from assistant");
 		});
 
@@ -55,6 +55,19 @@ describe("groundTruthFromApi", () => {
 			const result = groundTruthFromApi(api);
 			expect(result.history?.[0].role).toBe("user");
 			expect(result.history?.[0].content).toBe("Hello from user");
+		});
+
+		it("derives compatibility question from the latest user turn", () => {
+			const api = makeApiItem({
+				history: [
+					{ role: "user", msg: "Initial question" },
+					{ role: "planner", msg: "Planner output" },
+					{ role: "user", msg: "Follow-up question" },
+					{ role: "assistant", msg: "Final answer" },
+				],
+			});
+			const result = groundTruthFromApi(api);
+			expect(result.question).toBe("Follow-up question");
 		});
 	});
 
@@ -119,7 +132,7 @@ describe("groundTruthFromApi", () => {
 			expect(ref.bonus).toBe(true);
 		});
 
-		it("assigns turn refs to correct messageIndex", () => {
+		it("ignores retired turn-level refs from history payloads", () => {
 			const api = makeApiItem({
 				history: [
 					{ role: "user", msg: "Question" },
@@ -143,39 +156,28 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			// Refs from history[1] should have messageIndex 1
-			const allRefs = getItemReferences(result);
-			const refsAt1 = allRefs.filter((r) => r.messageIndex === 1);
-			expect(refsAt1).toHaveLength(2);
-			expect(refsAt1.map((r) => r.url)).toEqual([
-				"https://ref1.com",
-				"https://ref2.com",
-			]);
-
-			// Refs from history[3] should have messageIndex 3
-			const refsAt3 = allRefs.filter((r) => r.messageIndex === 3);
-			expect(refsAt3).toHaveLength(1);
-			expect(refsAt3[0].url).toBe("https://ref3.com");
+			expect(getItemReferences(result)).toEqual([]);
 		});
 
-		it("maps ref fields correctly", () => {
+		it("maps canonical plugin reference fields correctly", () => {
 			const api = makeApiItem({
-				history: [
-					{ role: "user", msg: "Q" },
-					{
-						role: "assistant",
-						msg: "A",
-						refs: [
-							{
-								url: "https://example.com",
-								title: "Example Title",
-								content: "Snippet content",
-								keyExcerpt: "Key paragraph",
-								bonus: true,
-							},
-						],
+				plugins: {
+					"rag-compat": {
+						kind: "rag-compat",
+						version: "1.0",
+						data: {
+							references: [
+								{
+									url: "https://example.com",
+									title: "Example Title",
+									content: "Snippet content",
+									keyExcerpt: "Key paragraph",
+									bonus: true,
+								},
+							],
+						},
 					},
-				],
+				},
 			});
 			const result = groundTruthFromApi(api);
 			const ref = getItemReferences(result)[0];
@@ -190,8 +192,8 @@ describe("groundTruthFromApi", () => {
 		});
 	});
 
-	describe("legacy single-turn conversion", () => {
-		it("creates 2-turn history from editedQuestion and answer", () => {
+	describe("retired single-turn compat behavior", () => {
+		it("does not synthesize history from editedQuestion and answer", () => {
 			const api = makeApiItem({
 				history: undefined,
 				...withCompatData({
@@ -201,18 +203,10 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			expect(result.history).toHaveLength(2);
-			expect(result.history?.[0]).toMatchObject({
-				role: "user",
-				content: "What is X?",
-			});
-			expect(result.history?.[1]).toMatchObject({
-				role: "agent",
-				content: "X is Y",
-			});
+			expect(result.history).toBeUndefined();
 		});
 
-		it("falls back to synthQuestion when editedQuestion is empty", () => {
+		it("does not fall back to synthQuestion when editedQuestion is empty", () => {
 			const api = makeApiItem({
 				history: undefined,
 				...withCompatData({
@@ -223,10 +217,10 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			expect(result.history?.[0].content).toBe("Synth question?");
+			expect(result.history).toBeUndefined();
 		});
 
-		it("assigns legacy top-level refs to messageIndex 1", () => {
+		it("does not import legacy top-level refs", () => {
 			const api = makeApiItem({
 				history: undefined,
 				...withCompatData({
@@ -243,11 +237,10 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			expect(getItemReferences(result)).toHaveLength(1);
-			expect(getItemReferences(result)[0].messageIndex).toBe(1);
+			expect(getItemReferences(result)).toEqual([]);
 		});
 
-		it("creates empty agent turn when answer is empty", () => {
+		it("does not create synthetic turns when answer is empty", () => {
 			const api = makeApiItem({
 				history: undefined,
 				...withCompatData({
@@ -257,8 +250,7 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			expect(result.history).toHaveLength(2);
-			expect(result.history?.[1].content).toBe("");
+			expect(result.history).toBeUndefined();
 		});
 
 		it("treats explicit API empty history as authoritative over compat question/answer", () => {
@@ -276,7 +268,7 @@ describe("groundTruthFromApi", () => {
 	});
 
 	describe("multi-turn item top-level refs", () => {
-		it("assigns compat refs to undefined messageIndex for true multi-turn", () => {
+		it("does not import compat refs for true multi-turn", () => {
 			const api = makeApiItem({
 				history: [
 					{ role: "user", msg: "Q" },
@@ -294,8 +286,7 @@ describe("groundTruthFromApi", () => {
 			});
 			const result = groundTruthFromApi(api);
 
-			expect(getItemReferences(result)).toHaveLength(1);
-			expect(getItemReferences(result)[0].messageIndex).toBeUndefined();
+			expect(getItemReferences(result)).toEqual([]);
 		});
 
 		it("treats explicit empty canonical references as authoritative", () => {
@@ -437,7 +428,7 @@ describe("groundTruthToPatch", () => {
 	}
 
 	describe("role mapping", () => {
-		it("maps UI role 'agent' to API role 'assistant'", () => {
+		it("preserves UI role values when serializing patch payloads", () => {
 			const item = makeDomainItem({
 				history: [
 					{ role: "user", content: "Q" },
@@ -447,11 +438,33 @@ describe("groundTruthToPatch", () => {
 			const patch = groundTruthToPatch({ item });
 
 			expect(patch.history?.[0].role).toBe("user");
-			expect(patch.history?.[1].role).toBe("assistant");
+			expect(patch.history?.[1].role).toBe("agent");
 		});
 	});
 
 	describe("reference handling", () => {
+		it("does not create rag-compat plugin when history exists without compat payload", () => {
+			const item = makeDomainItem({
+				history: [
+					{ role: "user", content: "Q" },
+					{ role: "agent", content: "A" },
+				],
+				plugins: {
+					other: {
+						kind: "other",
+						version: "1.0",
+						data: { keep: true },
+					},
+				},
+			});
+			const patch = groundTruthToPatch({ item });
+			const patchPlugins = (patch as Record<string, unknown>).plugins as
+				| Record<string, { data?: Record<string, unknown> }>
+				| undefined;
+			expect(patchPlugins?.other?.data).toEqual({ keep: true });
+			expect(patchPlugins?.["rag-compat"]).toBeUndefined();
+		});
+
 		it("round-trips canonical rag-compat data.references through patch generation", () => {
 			const item = makeDomainItem({
 				history: [
@@ -478,12 +491,7 @@ describe("groundTruthToPatch", () => {
 			});
 
 			const patch = groundTruthToPatch({ item });
-			expect(patch.history?.[1].refs?.[0]).toMatchObject({
-				url: "https://canonical.roundtrip/ref",
-				title: "Round Trip Ref",
-				content: "Round trip snippet",
-				keyExcerpt: "Round trip excerpt",
-			});
+			expect(patch.history?.[1].refs).toBeUndefined();
 			const patchPlugins = (patch as Record<string, unknown>).plugins as
 				| Record<string, { data?: Record<string, unknown> }>
 				| undefined;
@@ -495,7 +503,47 @@ describe("groundTruthToPatch", () => {
 			]);
 		});
 
-		it("scrubs removed legacy compat keys while preserving canonical compat data", () => {
+		it("materializes retrieval-only rag-compat payloads into canonical references during save patch", () => {
+			const fromApi = groundTruthFromApi(
+				makeApiItem({
+					history: [
+						{ role: "user", msg: "Q", turnId: "turn-user" },
+						{ role: "assistant", msg: "A", turnId: "turn-answer" },
+					],
+					...withCompatData({
+						retrievals: {
+							tc1: {
+								candidates: [
+									{
+										url: "https://retrieval.only/ref",
+										title: "Retrieval Only Ref",
+										chunk: "retrieval snippet",
+										messageIndex: 1,
+									},
+								],
+							},
+						},
+					}),
+				}),
+			);
+
+			const patch = groundTruthToPatch({ item: fromApi });
+			const patchPlugins = (patch as Record<string, unknown>).plugins as
+				| Record<string, { data?: Record<string, unknown> }>
+				| undefined;
+
+			expect(patchPlugins?.["rag-compat"]?.data?.references).toEqual([
+				expect.objectContaining({
+					url: "https://retrieval.only/ref",
+					title: "Retrieval Only Ref",
+					toolCallId: "tc1",
+					turnId: "turn-answer",
+				}),
+			]);
+			expect(patchPlugins?.["rag-compat"]?.data?.retrievals).toBeUndefined();
+		});
+
+		it("scrubs removed legacy compat keys and deprecated compat retrievals", () => {
 			const item = makeDomainItem({
 				history: [
 					{ role: "user", content: "Q" },
@@ -539,13 +587,11 @@ describe("groundTruthToPatch", () => {
 			expect(compatData?.references).toEqual([
 				expect.objectContaining({ url: "https://canonical.ref" }),
 			]);
-			expect(compatData?.retrievals).toEqual({
-				_unassociated: { candidates: [{ url: "https://retrieval.ref" }] },
-			});
-			expect(compatData?.turnIdentity).toHaveLength(2);
+			expect(compatData?.retrievals).toBeUndefined();
+			expect(compatData?.turnIdentity).toBeUndefined();
 		});
 
-		it("includes refs only on agent turns in history", () => {
+		it("does not emit retired refs on user or agent turns in history", () => {
 			const item = makeDomainItem({
 				history: [
 					{ role: "user", content: "Q" },
@@ -573,12 +619,10 @@ describe("groundTruthToPatch", () => {
 			// User turn should not have refs
 			expect(patch.history?.[0].refs).toBeUndefined();
 
-			// Agent turn should have refs
-			expect(patch.history?.[1].refs).toHaveLength(1);
-			expect(patch.history?.[1].refs?.[0].url).toBe("https://ref.com");
+			expect(patch.history?.[1].refs).toBeUndefined();
 		});
 
-		it("keeps refs mapped to non-user turns", () => {
+		it("does not emit refs even when mapped to non-user turns", () => {
 			const item = makeDomainItem({
 				history: [
 					{ role: "user", content: "Q" },
@@ -603,10 +647,10 @@ describe("groundTruthToPatch", () => {
 			});
 			const patch = groundTruthToPatch({ item });
 
-			expect(patch.history?.[1]?.refs).toHaveLength(2);
+			expect(patch.history?.[1]?.refs).toBeUndefined();
 		});
 
-		it("keeps refs mapped when item history exists", () => {
+		it("does not emit refs when item history exists", () => {
 			const item = makeDomainItem({
 				history: [
 					{ role: "user", content: "Q" },
@@ -631,10 +675,10 @@ describe("groundTruthToPatch", () => {
 			});
 			const patch = groundTruthToPatch({ item });
 
-			expect(patch.history?.[1]?.refs).toHaveLength(2);
+			expect(patch.history?.[1]?.refs).toBeUndefined();
 		});
 
-		it("serializes refs into assistant history entries", () => {
+		it("does not serialize refs into assistant history entries", () => {
 			const item = makeDomainItem({
 				history: [
 					{ role: "user", content: "Q" },
@@ -656,11 +700,10 @@ describe("groundTruthToPatch", () => {
 			});
 			const patch = groundTruthToPatch({ item });
 
-			// Refs should be in history
-			expect(patch.history?.[1].refs).toHaveLength(1);
+			expect(patch.history?.[1].refs).toBeUndefined();
 		});
 
-		it("maps ref fields correctly in patch", () => {
+		it("omits ref fields from patch history entries", () => {
 			const item = makeDomainItem({
 				history: [
 					{ role: "user", content: "Q" },
@@ -690,13 +733,7 @@ describe("groundTruthToPatch", () => {
 				},
 			});
 			const patch = groundTruthToPatch({ item });
-			const ref = patch.history?.[1].refs?.[0];
-
-			expect(ref?.url).toBe("https://example.com");
-			expect(ref?.title).toBe("Title");
-			expect(ref?.content).toBe("Snippet");
-			expect(ref?.keyExcerpt).toBe("Key");
-			expect(ref?.bonus).toBe(true);
+			expect(patch.history?.[1].refs).toBeUndefined();
 		});
 	});
 
@@ -773,7 +810,7 @@ describe("groundTruthToPatch", () => {
 	});
 
 	describe("basic field mapping", () => {
-		it("serializes history content for question/answer turns", () => {
+		it("serializes canonical history content without role remapping", () => {
 			const item = makeDomainItem({
 				history: [
 					{ role: "user", content: "My question" },
@@ -786,7 +823,7 @@ describe("groundTruthToPatch", () => {
 				msg: "My question",
 			});
 			expect(patch.history?.[1]).toMatchObject({
-				role: "assistant",
+				role: "agent",
 				msg: "My answer",
 			});
 		});

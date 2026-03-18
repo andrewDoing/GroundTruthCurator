@@ -48,7 +48,7 @@ def test_core_requires_assistant_message_even_with_refs():
         },
     )
     errors = collect_approval_validation_errors(item)
-    assert "history must include at least one assistant message" in errors
+    assert "history must include at least one agent message" in errors
 
 
 def test_core_no_error_when_assistant_present():
@@ -81,7 +81,7 @@ def test_rag_pack_waives_assistant_error_when_refs_present():
     )
     core_errors = collect_approval_validation_errors(item)
     waivers = pack.collect_approval_waivers(item, core_errors)
-    assert "history must include at least one assistant message" in waivers
+    assert "history must include at least one agent message" in waivers
 
 
 def test_rag_pack_no_waiver_when_refs_zero():
@@ -182,10 +182,10 @@ def test_registry_filters_waived_errors():
         },
     )
     core_errors = collect_approval_validation_errors(item)
-    assert "history must include at least one assistant message" in core_errors
+    assert "history must include at least one agent message" in core_errors
 
     filtered = registry.filter_core_errors(item, core_errors)
-    assert "history must include at least one assistant message" not in filtered
+    assert "history must include at least one agent message" not in filtered
 
 
 def test_registry_preserves_non_waived_errors():

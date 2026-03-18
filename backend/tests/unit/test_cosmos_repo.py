@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest  # type: ignore[import-not-found]
 
-from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo, SELECT_CLAUSE_C
+from app.adapters.repos.cosmos_repo import (
+    CosmosGroundTruthRepo,
+    SELECT_CLAUSE_C,
+    _normalize_unicode_for_cosmos,
+    _restore_unicode_from_cosmos,
+)
 from app.plugins.pack_registry import get_rag_compat_pack
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.domain.models import AgenticGroundTruthEntry
@@ -105,6 +110,62 @@ def test_resolve_sort_with_overrides(repo: CosmosGroundTruthRepo) -> None:
     assert direction is SortOrder.asc
 
 
+def test_emulator_unicode_normalization_encodes_canonical_reference_content(monkeypatch) -> None:
+    monkeypatch.setattr("app.adapters.repos.cosmos_repo.settings.COSMOS_DISABLE_UNICODE_ESCAPE", True)
+
+    original_content = r"Snippet with invalid escape \q and unicode \u2603"
+    payload = {
+        "plugins": {
+            "rag-compat": {
+                "data": {
+                    "references": [
+                        {
+                            "url": "https://example.com/canonical",
+                            "content": original_content,
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    normalized = _normalize_unicode_for_cosmos(payload)
+    ref = normalized["plugins"]["rag-compat"]["data"]["references"][0]
+
+    assert ref.get("_contentEncoded") is True
+    assert ref["content"] != original_content
+
+    restored = _restore_unicode_from_cosmos(normalized)
+    restored_ref = restored["plugins"]["rag-compat"]["data"]["references"][0]
+    assert restored_ref["content"] == original_content
+    assert "_contentEncoded" not in restored_ref
+
+
+def test_emulator_unicode_normalization_does_not_base64_encode_legacy_refs(monkeypatch) -> None:
+    monkeypatch.setattr("app.adapters.repos.cosmos_repo.settings.COSMOS_DISABLE_UNICODE_ESCAPE", True)
+
+    original_content = r"Legacy snippet with invalid escape \q"
+    payload = {
+        "history": [
+            {
+                "role": "assistant",
+                "msg": "Answer",
+                "refs": [{"url": "https://example.com/legacy", "content": original_content}],
+            }
+        ]
+    }
+
+    normalized = _normalize_unicode_for_cosmos(payload)
+    ref = normalized["history"][0]["refs"][0]
+    assert "_contentEncoded" not in ref
+    assert ref["content"] != original_content
+
+    restored = _restore_unicode_from_cosmos(normalized)
+    restored_ref = restored["history"][0]["refs"][0]
+    assert restored_ref["content"] == original_content
+    assert "_contentEncoded" not in restored_ref
+
+
 def test_sort_key_has_answer(repo: CosmosGroundTruthRepo) -> None:
     example = make_test_entry(
         id="item",
@@ -135,28 +196,17 @@ def test_select_clause_includes_generic_phase_one_fields() -> None:
 
 
 # =============================================================================
-# Tests for totalReferences auto-computation (domain model validator)
+# Reference-count semantics via rag-compat pack helpers
 # =============================================================================
 
 
 class TestComputeTotalReferences:
-    """Unit tests for AgenticGroundTruthEntry.totalReferences computation.
+    """Unit tests for rag-compat reference_count behavior.
 
-    The property calculates total references with the following logic:
-    - If history has refs, count only history refs (history takes priority)
-    - If history has no refs, count plugin-stored refs as fallback
-
-    **Phase 5 Audit (2026-03-12)**: ACTIVE COMPUTATION LOGIC - BLOCKING
-    The totalReferences field has active property logic that computes
-    values from history and plugin refs. This is not just compatibility
-    testing - it's core functionality that is used by:
-    - Model validation on all item saves
-    - Sort/filter operations that check reference counts
-    - UI displays of reference totals
-
-    Cannot delete totalReferences until this computation is either:
-    - Moved to a computed property on AgenticGroundTruthEntry, OR
-    - Replaced by direct history ref counting in callers
+    These tests exercise reference counting through
+    ``get_rag_compat_pack().reference_count(item)`` using compatibility
+    payload shapes seeded in fixtures. The host model no longer owns
+    ``totalReferences`` behavior.
     """
 
     def _make_item(
@@ -182,7 +232,7 @@ class TestComputeTotalReferences:
         )
 
     # -------------------------------------------------------------------------
-    # History refs take priority over item refs
+    # Compat-reference counting with conversation history present
     # -------------------------------------------------------------------------
 
     def test_history_refs_take_priority_over_item_refs(self) -> None:
@@ -214,11 +264,11 @@ class TestComputeTotalReferences:
         assert get_rag_compat_pack().reference_count(item) == 3
 
     # -------------------------------------------------------------------------
-    # Item refs used when no history refs exist
+    # Compat-reference fallback when history contributes no refs
     # -------------------------------------------------------------------------
 
     def test_item_refs_fallback_when_no_history(self) -> None:
-        """Item refs are counted when there is no history."""
+        """Plugin-owned compat refs are counted when there is no history."""
         item = self._make_item(
             refs=[
                 {"url": "https://ref1.com"},
@@ -230,7 +280,7 @@ class TestComputeTotalReferences:
         assert get_rag_compat_pack().reference_count(item) == 3
 
     def test_item_refs_fallback_when_history_empty(self) -> None:
-        """Item refs are counted when history is an empty list."""
+        """Plugin-owned compat refs are counted when history is an empty list."""
         item = self._make_item(
             refs=[{"url": "https://ref1.com"}, {"url": "https://ref2.com"}],
             history=[],
@@ -238,7 +288,7 @@ class TestComputeTotalReferences:
         assert get_rag_compat_pack().reference_count(item) == 2
 
     def test_item_refs_fallback_when_history_has_no_refs(self) -> None:
-        """Item refs are counted when history exists but contains no refs."""
+        """Plugin-owned compat refs are counted when history exists but contains no refs."""
         item = self._make_item(
             refs=[{"url": "https://item-ref.com"}],
             history=[
@@ -246,11 +296,11 @@ class TestComputeTotalReferences:
                 {"role": "assistant", "msg": "Hi"},  # No refs
             ],
         )
-        # History has 0 refs, so item refs (1) should be used
+        # History contributes 0 compat refs, so top-level compat refs (1) are used
         assert get_rag_compat_pack().reference_count(item) == 1
 
     def test_item_refs_fallback_when_history_refs_are_empty_lists(self) -> None:
-        """Item refs are counted when history refs are empty lists."""
+        """Plugin-owned compat refs are counted when history refs are empty lists."""
         item = self._make_item(
             refs=[{"url": "https://item-ref.com"}],
             history=[
@@ -258,11 +308,11 @@ class TestComputeTotalReferences:
                 {"role": "assistant", "msg": "Hi", "refs": []},  # Empty refs list
             ],
         )
-        # History refs total is 0, so item refs (1) should be used
+        # History compat refs total is 0, so top-level compat refs (1) are used
         assert get_rag_compat_pack().reference_count(item) == 1
 
     # -------------------------------------------------------------------------
-    # Handle empty/null refs and history
+    # Handle empty/null compat refs and history
     # -------------------------------------------------------------------------
 
     def test_zero_when_no_refs_anywhere(self) -> None:
@@ -289,7 +339,7 @@ class TestComputeTotalReferences:
                 {"role": "assistant", "msg": "Hi", "refs": None},  # Explicitly None
             ],
         )
-        # History refs is 0, fallback to item refs
+        # History compat refs is 0, so top-level compat refs are used
         assert get_rag_compat_pack().reference_count(item) == 1
 
     # -------------------------------------------------------------------------

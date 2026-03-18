@@ -12,11 +12,6 @@ type ApiItem = Omit<
 	components["schemas"]["AgenticGroundTruthEntry-Output"],
 	"history"
 > & {
-	synthQuestion?: string | null;
-	editedQuestion?: string | null;
-	answer?: string | null;
-	refs?: ApiReference[];
-	totalReferences?: number;
 	tags?: string[];
 	comment?: string | null;
 	history?: (components["schemas"]["HistoryEntry"] & {
@@ -29,11 +24,7 @@ function makeApiItem(overrides: Partial<ApiItem> = {}): ApiItem {
 	return {
 		id: "gt-1",
 		status: "draft",
-		answer: "",
-		synthQuestion: "",
-		editedQuestion: "",
 		history: undefined,
-		refs: [],
 		tags: [],
 		comment: null,
 		datasetName: "dataset-1",
@@ -59,7 +50,7 @@ function withCompatData(
 
 describe("mapGroundTruthFromApi", () => {
 	describe("core-generic mapping", () => {
-		it("converts assistant role to agent and keeps stable turn ids", () => {
+		it("preserves assistant role values and keeps stable turn ids", () => {
 			const apiItem = makeApiItem({
 				history: [
 					{ role: "user", msg: "Question" },
@@ -72,14 +63,14 @@ describe("mapGroundTruthFromApi", () => {
 				content: "Question",
 			});
 			expect(result.history?.[1]).toMatchObject({
-				role: "agent",
+				role: "assistant",
 				content: "Answer",
 			});
 			expect(result.history?.[0].turnId).toBeTruthy();
 			expect(result.history?.[1].turnId).toBeTruthy();
 		});
 
-		it("preserves per-turn refs when canonical history already exists", () => {
+		it("ignores retired per-turn history refs", () => {
 			const apiItem = makeApiItem({
 				history: [
 					{ role: "user", msg: "Q1" },
@@ -97,17 +88,12 @@ describe("mapGroundTruthFromApi", () => {
 				],
 			});
 			const result = mapGroundTruthFromApi(apiItem);
-			const [ref] = getItemReferences(result);
-			expect(ref).toMatchObject({
-				url: "https://turn-ref.com",
-				messageIndex: 1,
-				turnId: result.history?.[1]?.turnId,
-			});
+			expect(getItemReferences(result)).toEqual([]);
 		});
 	});
 
-	describe("compat-migration read mapping", () => {
-		it("creates synthesized user and agent turns from legacy single-turn fields", () => {
+	describe("retired compat read mapping", () => {
+		it("does not synthesize history from retired single-turn fields", () => {
 			const apiItem = makeApiItem({
 				history: undefined,
 				...withCompatData({
@@ -117,18 +103,10 @@ describe("mapGroundTruthFromApi", () => {
 				}),
 			});
 			const result = mapGroundTruthFromApi(apiItem);
-			expect(result.history).toHaveLength(2);
-			expect(result.history?.[0]).toMatchObject({
-				role: "user",
-				content: "Edited",
-			});
-			expect(result.history?.[1]).toMatchObject({
-				role: "agent",
-				content: "A",
-			});
+			expect(result.history).toBeUndefined();
 		});
 
-		it("anchors legacy top-level refs to the synthesized agent turn when answer is empty", () => {
+		it("does not import retired compat refs", () => {
 			const apiItem = makeApiItem({
 				history: undefined,
 				...withCompatData({
@@ -145,30 +123,18 @@ describe("mapGroundTruthFromApi", () => {
 				}),
 			});
 			const result = mapGroundTruthFromApi(apiItem);
-			const [ref] = getItemReferences(result);
-			expect(result.history).toHaveLength(2);
-			expect(result.history?.[1]).toMatchObject({ role: "agent", content: "" });
-			expect(ref).toMatchObject({
-				url: "https://docs.example.com/auth",
-				messageIndex: 1,
-				turnId: result.history?.[1]?.turnId,
-			});
+			expect(getItemReferences(result)).toEqual([]);
 		});
 	});
 
 	describe("providerId", () => {
 		it("defaults to 'api' when not provided", () => {
-			const result = mapGroundTruthFromApi(
-				makeApiItem({ ...withCompatData({ synthQuestion: "Q" }) }),
-			);
+			const result = mapGroundTruthFromApi(makeApiItem());
 			expect(result.providerId).toBe("api");
 		});
 
 		it("uses provided providerId", () => {
-			const result = mapGroundTruthFromApi(
-				makeApiItem({ ...withCompatData({ synthQuestion: "Q" }) }),
-				"custom-provider",
-			);
+			const result = mapGroundTruthFromApi(makeApiItem(), "custom-provider");
 			expect(result.providerId).toBe("custom-provider");
 		});
 	});
@@ -243,10 +209,7 @@ describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
 					kind: "rag-compat",
 					version: "1.0",
 					data: {
-						answer: "Parity answer",
-						synthQuestion: "Synth parity Q",
-						editedQuestion: "Edited parity Q",
-						refs: [],
+						references: [],
 					},
 				},
 			},
@@ -254,7 +217,7 @@ describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
 		} as ApiGroundTruth;
 	}
 
-	it("produces identical output for a legacy single-turn payload", () => {
+	it("produces identical output for a canonical payload", () => {
 		const payload = makeSharedPayload();
 		const fromProvider = groundTruthFromApi(payload);
 		const fromService = mapGroundTruthFromApi(payload);
@@ -263,7 +226,7 @@ describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
 		);
 	});
 
-	it("produces identical output for a multi-turn payload with per-turn refs", () => {
+	it("produces identical output for a multi-turn payload with retired per-turn refs", () => {
 		const payload = makeSharedPayload({
 			history: [
 				{ role: "user", msg: "First question" },
@@ -285,7 +248,7 @@ describe("mapper parity: groundTruthFromApi and mapGroundTruthFromApi", () => {
 		expect(normalizeTurnIdentity(fromProvider)).toEqual(
 			normalizeTurnIdentity(fromService),
 		);
-		expect(getItemReferences(fromProvider)).toHaveLength(2);
+		expect(getItemReferences(fromProvider)).toHaveLength(0);
 	});
 
 	it("preserves reviewedAt through both paths identically", () => {

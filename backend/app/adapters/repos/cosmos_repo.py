@@ -54,7 +54,6 @@ _CONTROL_CHAR_TRANSLATION = {
     **{ord(ch): " " for ch in (chr(i) for i in range(32)) if ch not in ("\n", "\r", "\t")},
     ord("\u007f"): " ",
 }
-
 # Cosmos DB SELECT clause for AgenticGroundTruthEntry fields used in several functions
 # list_gt_paginated, _list_gt_paginated_with_emulator, list_gt_by_dataset
 SELECT_CLAUSE_C = (
@@ -148,7 +147,7 @@ def _sanitize_string_for_cosmos(value: str) -> str:
 def _normalize_unicode_for_cosmos(obj: Any) -> Any:
     """
     Recursively sanitize strings to work around Cosmos emulator Unicode bugs.
-    Also Base64-encodes 'content' fields in 'refs' arrays as a workaround.
+    Also Base64-encodes 'content' fields in reference arrays as a workaround.
     """
 
     if not settings.COSMOS_DISABLE_UNICODE_ESCAPE:
@@ -159,11 +158,11 @@ def _normalize_unicode_for_cosmos(obj: Any) -> Any:
     if isinstance(obj, dict):
         normalized = {}
         for k, v in obj.items():
-            # Special handling for 'refs' array - encode content fields
-            if k == "refs" and isinstance(v, list):
-                # First normalize the refs
+            # Special handling for canonical reference arrays - encode content fields
+            if k == "references" and isinstance(v, list):
+                # First normalize the reference entries
                 normalized_refs = [_normalize_unicode_for_cosmos(item) for item in v]
-                # Then Base64-encode content fields in refs
+                # Then Base64-encode content fields in references
                 normalized[k] = _base64_encode_refs_content(normalized_refs)
             else:
                 normalized[k] = _normalize_unicode_for_cosmos(v)
@@ -176,7 +175,7 @@ def _normalize_unicode_for_cosmos(obj: Any) -> Any:
 def _restore_unicode_from_cosmos(obj: Any) -> Any:
     """
     Reverse emulator-only sanitization markers after fetching documents.
-    Also Base64-decodes 'content' fields in 'refs' arrays.
+    Also Base64-decodes 'content' fields in reference arrays.
     """
 
     if not settings.COSMOS_DISABLE_UNICODE_ESCAPE:
@@ -189,8 +188,8 @@ def _restore_unicode_from_cosmos(obj: Any) -> Any:
     if isinstance(obj, dict):
         restored = {}
         for k, v in obj.items():
-            # Special handling for 'refs' array - decode content fields
-            if k == "refs" and isinstance(v, list):
+            # Special handling for canonical reference arrays - decode content fields
+            if k == "references" and isinstance(v, list):
                 # First decode Base64-encoded content fields
                 decoded_refs = _base64_decode_refs_content(v)
                 # Then restore backslash sentinels
@@ -655,15 +654,6 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                     f"ARRAY_CONTAINS(c.computedTags, {pname}))"
                 )
                 params.append({"name": pname, "value": tag})
-
-        # Ref URL filtering only if not using the Cosmos Emulator as it does not support EXISTS
-        # include_ref_url set to True when Comsomus Emulator is not used
-        if include_ref_url and ref_url:
-            clauses.append(
-                "(EXISTS(SELECT VALUE h FROM h IN c.history "
-                "WHERE EXISTS(SELECT VALUE r FROM r IN h.refs WHERE CONTAINS(r.url, @refUrl))))"
-            )
-            params.append({"name": "@refUrl", "value": ref_url})
 
         where_clause = " WHERE " + " AND ".join(clauses) if clauses else ""
         return where_clause, params

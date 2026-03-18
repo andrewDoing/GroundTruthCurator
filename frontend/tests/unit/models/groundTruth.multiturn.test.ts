@@ -7,6 +7,7 @@ import {
 	getLastUserTurn,
 	getTurnCount,
 	isMultiTurn,
+	withDerivedLegacyFields,
 } from "../../../src/models/groundTruth";
 
 describe("groundTruth multi-turn helpers", () => {
@@ -58,6 +59,16 @@ describe("groundTruth multi-turn helpers", () => {
 			expect(getLastAgentTurn(item)).toBe("");
 		});
 
+		it("treats custom non-user roles as answer turns", () => {
+			const item = makeItem({
+				history: [
+					{ role: "user", content: "User" },
+					{ role: "planner", content: "Intermediate planner output" },
+				],
+			});
+			expect(getLastAgentTurn(item)).toBe("Intermediate planner output");
+		});
+
 		it("returns latest matching turn content", () => {
 			const item = makeItem({
 				history: [
@@ -69,6 +80,29 @@ describe("groundTruth multi-turn helpers", () => {
 			});
 			expect(getLastUserTurn(item)).toBe("Follow-up");
 			expect(getLastAgentTurn(item)).toBe("Updated answer");
+		});
+
+		it("derives compatibility question from the latest user turn for cross-layer parity", () => {
+			const item = makeItem({
+				history: [
+					{ role: "user", content: "Initial question" },
+					{ role: "planner", content: "Interim planning output" },
+					{ role: "user", content: "Follow-up question" },
+					{ role: "assistant", content: "Final answer" },
+				],
+			});
+			expect(withDerivedLegacyFields(item).question).toBe("Follow-up question");
+		});
+
+		it("returns the last non-user turn regardless of role label", () => {
+			const item = makeItem({
+				history: [
+					{ role: "user", content: "Question" },
+					{ role: "assistant", content: "Assistant output" },
+					{ role: "planner", content: "Planner output" },
+				],
+			});
+			expect(getLastAgentTurn(item)).toBe("Planner output");
 		});
 	});
 

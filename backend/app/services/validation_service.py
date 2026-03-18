@@ -5,7 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from app.domain.conversation_fields import answer_text_from_item, question_text_from_item
+from app.domain.conversation_fields import (
+    answer_text_from_item,
+    is_non_user_role,
+    is_user_role,
+    question_text_from_item,
+)
 from app.domain.models import AgenticGroundTruthEntry, BulkImportError, HistoryEntry
 from app.services.tagging_service import validate_tags_with_cache
 
@@ -60,18 +65,17 @@ def _normalized_history(item: AgenticGroundTruthEntry) -> list[HistoryEntry]:
     question_text = question_text_from_item(item)
     answer_text = answer_text_from_item(item)
     if history:
-        roles = {entry.role.strip().lower() for entry in history}
-        if "user" not in roles and question_text:
+        if not any(is_user_role(entry.role) for entry in history) and question_text:
             history.insert(0, HistoryEntry(role="user", msg=question_text))
-        if "assistant" not in roles and answer_text:
-            history.append(HistoryEntry(role="assistant", msg=answer_text))
+        if not any(is_non_user_role(entry.role) for entry in history) and answer_text:
+            history.append(HistoryEntry(role="agent", msg=answer_text))
         return history
 
     synthesized: list[HistoryEntry] = []
     if question_text:
         synthesized.append(HistoryEntry(role="user", msg=question_text))
     if answer_text:
-        synthesized.append(HistoryEntry(role="assistant", msg=answer_text))
+        synthesized.append(HistoryEntry(role="agent", msg=answer_text))
     return synthesized
 
 
@@ -89,14 +93,12 @@ def collect_approval_validation_errors(item: AgenticGroundTruthEntry) -> list[st
     if not history:
         errors.append("history must contain at least one conversation message")
     else:
-        user_messages = [entry for entry in history if entry.role.strip().lower() == "user"]
-        assistant_messages = [
-            entry for entry in history if entry.role.strip().lower() == "assistant"
-        ]
+        user_messages = [entry for entry in history if is_user_role(entry.role)]
+        assistant_messages = [entry for entry in history if is_non_user_role(entry.role)]
         if not user_messages:
             errors.append("history must include at least one user message")
         if not assistant_messages:
-            errors.append("history must include at least one assistant message")
+            errors.append("history must include at least one agent message")
 
     tool_call_names = {tool.name for tool in item.tool_calls if tool.name}
     required_tools = [tool.name for tool in item.expected_tools.required if tool.name]

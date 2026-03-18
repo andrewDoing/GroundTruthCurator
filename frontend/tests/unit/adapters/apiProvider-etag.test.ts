@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ApiReference } from "../../../src/adapters/apiMapper";
 import { ApiProvider } from "../../../src/adapters/apiProvider";
 import type { components } from "../../../src/api/generated";
 import {
@@ -8,11 +7,6 @@ import {
 } from "../../../src/models/groundTruth";
 
 type ApiItem = components["schemas"]["AgenticGroundTruthEntry-Output"] & {
-	synthQuestion?: string | null;
-	editedQuestion?: string | null;
-	answer?: string | null;
-	refs?: ApiReference[];
-	totalReferences?: number;
 	tags?: string[];
 	comment?: string | null;
 };
@@ -44,11 +38,7 @@ function makeApiItem(overrides: Partial<ApiItem> = {}): ApiItem {
 	return {
 		id: "gt-1",
 		status: "draft",
-		answer: "Original answer",
-		synthQuestion: "Synth question",
-		editedQuestion: "Edited question",
 		history: [],
-		refs: [],
 		tags: [],
 		comment: null,
 		datasetName: "dataset-1",

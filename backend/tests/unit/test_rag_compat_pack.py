@@ -140,6 +140,46 @@ def test_refs_from_item_reads_legacy_retrieval_payloads():
     assert refs[0].messageIndex == 2
 
 
+def test_refs_from_item_respects_explicit_empty_canonical_references():
+    pack = RagCompatPack()
+    item = AgenticGroundTruthEntry.model_validate(
+        {
+            "id": "rag-002b",
+            "datasetName": "rag-dataset",
+            "history": [
+                {"role": "user", "msg": "Question"},
+            ],
+            "toolCalls": [{"id": "tc-1", "name": "search", "callType": "tool", "stepNumber": 3}],
+            "plugins": {
+                "rag-compat": {
+                    "kind": "rag-compat",
+                    "data": {
+                        "references": [],
+                        "retrievals": {
+                            "tc-1": {
+                                "candidates": [
+                                    {
+                                        "url": "https://example.com/stale",
+                                        "title": "Stale",
+                                        "chunk": "stale retrieval snippet",
+                                    }
+                                ]
+                            }
+                        },
+                    },
+                }
+            },
+        }
+    )
+
+    refs = pack.refs_from_item(item)
+    assert refs == []
+    assert pack.reference_count(item) == 0
+
+    core_errors = ["history must include at least one agent message"]
+    assert pack.collect_approval_waivers(item, core_errors) == []
+
+
 def test_attach_reference_adds_to_rag_item():
     pack = RagCompatPack()
     item = _rag_item()
@@ -217,6 +257,40 @@ def test_import_transform_normalizes_legacy_fields_to_history_and_references():
     assert normalized["plugins"]["rag-compat"]["data"] == {
         "references": [{"url": "https://example.com/doc", "bonus": False}]
     }
+
+
+def test_import_transform_preserves_explicit_empty_canonical_references():
+    pack = RagCompatPack()
+    transform = pack.get_import_transforms()[0].transform
+
+    normalized = transform(
+        {
+            "id": "legacy-002",
+            "datasetName": "rag-dataset",
+            "history": [{"role": "user", "msg": "Question only"}],
+            "plugins": {
+                "rag-compat": {
+                    "kind": "rag-compat",
+                    "version": "1.0",
+                    "data": {
+                        "references": [],
+                        "retrievals": {
+                            "tc-1": {
+                                "candidates": [
+                                    {
+                                        "url": "https://example.com/stale",
+                                        "chunk": "stale retrieval snippet",
+                                    }
+                                ]
+                            }
+                        },
+                    },
+                }
+            },
+        }
+    )
+
+    assert normalized["plugins"]["rag-compat"]["data"] == {"references": []}
 
 
 def test_export_transform_projects_references_and_count():

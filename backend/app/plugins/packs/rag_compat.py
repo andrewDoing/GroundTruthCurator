@@ -127,9 +127,10 @@ def compat_refs_from_payload(
 ) -> list[Any]:
     compat = rag_compat_data_from_payload(payload, plugin_name=plugin_name)
 
-    compat_refs = _coerce_reference_list(
-        compat.get(_PLUGIN_REFERENCES_KEY, compat.get(_LEGACY_REFS_KEY))
-    )
+    if _PLUGIN_REFERENCES_KEY in compat:
+        return _coerce_reference_list(compat.get(_PLUGIN_REFERENCES_KEY))
+
+    compat_refs = _coerce_reference_list(compat.get(_LEGACY_REFS_KEY))
     if compat_refs:
         return compat_refs
 
@@ -200,23 +201,30 @@ def normalize_legacy_payload_for_core_model(
 
     plugin_data_raw = plugin_dict.get("data")
     plugin_data = dict(plugin_data_raw) if isinstance(plugin_data_raw, dict) else {}
-    references = _coerce_reference_list(
-        plugin_data.get(_PLUGIN_REFERENCES_KEY, plugin_data.get(_LEGACY_REFS_KEY))
-    )
-    if not references:
-        top_level_refs = data.pop(_LEGACY_REFS_KEY, None)
-        references = _coerce_reference_list(top_level_refs)
-    if not references:
-        references = _extract_retrieval_refs(
-            {"plugins": plugins_payload, "toolCalls": data.get("toolCalls")}, plugin_data
-        )
-    if not references:
-        references = history_refs
+    has_canonical_references = _PLUGIN_REFERENCES_KEY in plugin_data
+    if has_canonical_references:
+        references = _coerce_reference_list(plugin_data.get(_PLUGIN_REFERENCES_KEY))
+    else:
+        references = _coerce_reference_list(plugin_data.get(_LEGACY_REFS_KEY))
+        if not references:
+            top_level_refs = data.pop(_LEGACY_REFS_KEY, None)
+            references = _coerce_reference_list(top_level_refs)
+        if not references:
+            references = _extract_retrieval_refs(
+                {"plugins": plugins_payload, "toolCalls": data.get("toolCalls")}, plugin_data
+            )
+        if not references:
+            references = history_refs
 
     for legacy_key in _LEGACY_KEYS_TO_DROP:
         plugin_data.pop(legacy_key, None)
 
-    if references:
+    if has_canonical_references:
+        plugin_data[_PLUGIN_REFERENCES_KEY] = [
+            ref.model_dump(by_alias=True, exclude_none=True) if hasattr(ref, "model_dump") else ref
+            for ref in references
+        ]
+    elif references:
         plugin_data[_PLUGIN_REFERENCES_KEY] = [
             ref.model_dump(by_alias=True, exclude_none=True) if hasattr(ref, "model_dump") else ref
             for ref in references
@@ -278,7 +286,7 @@ class RagCompatPack(PluginPack):
             return []
 
         waivers: list[str] = []
-        assistant_error = "history must include at least one assistant message"
+        assistant_error = "history must include at least one agent message"
         if assistant_error in core_errors:
             waivers.append(assistant_error)
 
@@ -305,9 +313,11 @@ class RagCompatPack(PluginPack):
 
     def reference_count(self, item: AgenticGroundTruthEntry) -> int:
         refs = self.refs_from_item(item)
+        compat = self.rag_compat_data(item)
+        if _PLUGIN_REFERENCES_KEY in compat:
+            return len(refs)
         if refs:
             return len(refs)
-        compat = self.rag_compat_data(item)
         explicit_total = compat.get("totalReferences")
         return explicit_total if isinstance(explicit_total, int) and explicit_total > 0 else 0
 
