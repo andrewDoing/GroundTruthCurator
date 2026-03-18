@@ -14,10 +14,10 @@ def make_item(dataset: str, *, assigned_to: str | None = None) -> dict[str, Any]
         "datasetName": dataset,
         # Use NIL UUID for explicit bucket to keep PK simple in tests
         "bucket": str(uuid.UUID("00000000-0000-0000-0000-000000000000")),
-        "synthQuestion": "Q?",
-        "samplingBucket": 0,
+        "history": [
+            {"role": "user", "msg": "Q?"},
+        ],
         "assignedTo": assigned_to,
-        "refs": [],
         "manualTags": ["source:synthetic"],
     }
 

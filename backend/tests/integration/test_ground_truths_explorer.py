@@ -29,9 +29,10 @@ def build_item(
         "datasetName": dataset,
         "bucket": str(uuid4()),
         "status": status,
-        "synthQuestion": f"Question {idx}",
-        "answer": answer,
-        "refs": [],
+        "history": [
+            {"role": "user", "msg": f"Question {idx}"},
+            *([{"role": "assistant", "msg": answer}] if answer else []),
+        ],
         "manualTags": tags or ["source:sme"],
         "reviewedAt": reviewed.isoformat(),
         "updatedAt": updated.isoformat(),

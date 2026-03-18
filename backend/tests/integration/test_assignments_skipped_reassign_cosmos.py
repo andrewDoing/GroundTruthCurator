@@ -5,11 +5,7 @@ from uuid import uuid4, UUID
 from datetime import datetime, timezone
 
 from httpx import AsyncClient
-from pydantic.type_adapter import TypeAdapter
 import pytest
-
-from app.domain.models import AgenticGroundTruthEntry
-
 
 def make_skipped_item(dataset: str, assigned_to: str) -> dict[str, Any]:
     return {
@@ -18,12 +14,12 @@ def make_skipped_item(dataset: str, assigned_to: str) -> dict[str, Any]:
         # Use NIL UUID for explicit bucket to keep PK simple in tests
         "bucket": str(UUID("00000000-0000-0000-0000-000000000000")),
         "status": "skipped",
-        "samplingBucket": 0,
-        "synthQuestion": "Q?",
+        "history": [
+            {"role": "user", "msg": "Q?"},
+        ],
         # Simulate a prior assignment to another SME
         "assignedTo": assigned_to,
         "assignedAt": datetime.now(timezone.utc).isoformat(),
-        "refs": [],
         "manualTags": ["source:synthetic", "split:validation"],
     }
 
@@ -48,23 +44,21 @@ async def test_self_serve_reassigns_skipped_and_lists_in_my(
     payload = cast(dict[str, Any], r.json())
     assert payload.get("assignedCount") == 1
 
-    assigned_items = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(
-        payload.get("assigned") or []
-    )
+    assigned_items = cast(list[dict[str, Any]], payload.get("assigned") or [])
     assert len(assigned_items) == 1
     gt = assigned_items[0]
 
     # After assignment, item should be assigned to current user and status should be draft
     # In integration tests, the effective user id comes from Easy Auth principal (tester@example.com)
     expected_user = "tester@example.com"
-    assert gt.assignedTo == expected_user
-    assert gt.status.value == "draft"
+    assert gt["assignedTo"] == expected_user
+    assert gt["status"] == "draft"
 
     # /my should list the item now (since it filters by assignedTo == user and status == draft)
     r = await async_client.get("/v1/assignments/my", headers=user_headers)
     assert r.status_code == 200
-    my_items = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(r.json())
+    my_items = cast(list[dict[str, Any]], r.json())
     assert len(my_items) == 1
-    assert my_items[0].id == gt.id
-    assert my_items[0].assignedTo == expected_user
-    assert my_items[0].status.value == "draft"
+    assert my_items[0]["id"] == gt["id"]
+    assert my_items[0]["assignedTo"] == expected_user
+    assert my_items[0]["status"] == "draft"

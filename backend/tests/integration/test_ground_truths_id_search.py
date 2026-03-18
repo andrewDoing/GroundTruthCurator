@@ -8,8 +8,6 @@ import pytest
 from httpx import AsyncClient
 from uuid import uuid4
 
-from app.domain.models import GroundTruthListResponse
-
 
 def make_item(dataset: str, gid: str | None = None) -> dict:
     """Helper to create a minimal ground truth item for testing."""
@@ -17,7 +15,9 @@ def make_item(dataset: str, gid: str | None = None) -> dict:
         "id": gid or f"test-{uuid4().hex[:8]}",
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
-        "synthQuestion": "Test question?",
+        "history": [
+            {"role": "user", "msg": "Test question?"},
+        ],
     }
 
 
@@ -39,9 +39,9 @@ async def test_list_ground_truths_search_by_id_exact_match(
         "/v1/ground-truths", params={"itemId": item_id}, headers=user_headers
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 1
-    assert response_data.items[0].id == item_id
+    response_data = res.json()
+    assert len(response_data["items"]) == 1
+    assert response_data["items"][0]["id"] == item_id
 
 
 @pytest.mark.anyio
@@ -66,9 +66,9 @@ async def test_list_ground_truths_search_by_id_partial_match(
         "/v1/ground-truths", params={"itemId": unique}, headers=user_headers
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 2
-    found_ids = {item.id for item in response_data.items}
+    response_data = res.json()
+    assert len(response_data["items"]) == 2
+    found_ids = {item["id"] for item in response_data["items"]}
     assert f"{unique}-suffix1" in found_ids
     assert f"{unique}-end" in found_ids
 
@@ -90,9 +90,9 @@ async def test_list_ground_truths_search_by_id_with_whitespace_trimming(
         "/v1/ground-truths", params={"itemId": f"  {item_id}  "}, headers=user_headers
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 1
-    assert response_data.items[0].id == item_id
+    response_data = res.json()
+    assert len(response_data["items"]) == 1
+    assert response_data["items"][0]["id"] == item_id
 
 
 @pytest.mark.anyio
@@ -112,9 +112,9 @@ async def test_list_ground_truths_search_by_id_whitespace_only_returns_all(
         "/v1/ground-truths", params={"itemId": "   ", "dataset": dataset}, headers=user_headers
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
+    response_data = res.json()
     # Should return all items from dataset (whitespace-only treated as omitted)
-    assert len(response_data.items) >= 3
+    assert len(response_data["items"]) >= 3
 
 
 @pytest.mark.anyio
@@ -141,10 +141,10 @@ async def test_list_ground_truths_search_by_id_combined_with_other_filters(
         headers=user_headers,
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
+    response_data = res.json()
     # Should find the 2 items with matching ID in this dataset
-    assert len(response_data.items) == 2
-    assert all(unique in item.id for item in response_data.items)
+    assert len(response_data["items"]) == 2
+    assert all(unique in item["id"] for item in response_data["items"])
 
 
 @pytest.mark.anyio
@@ -165,8 +165,8 @@ async def test_list_ground_truths_search_by_id_empty_results(
         headers=user_headers,
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 0
+    response_data = res.json()
+    assert len(response_data["items"]) == 0
 
 
 @pytest.mark.anyio
@@ -189,10 +189,10 @@ async def test_list_ground_truths_search_by_id_pagination(
         headers=user_headers,
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) == 2
-    assert response_data.pagination.has_next is True
-    assert response_data.pagination.total == 5
+    response_data = res.json()
+    assert len(response_data["items"]) == 2
+    assert response_data["pagination"]["hasNext"] is True
+    assert response_data["pagination"]["total"] == 5
 
 
 @pytest.mark.anyio
@@ -225,5 +225,5 @@ async def test_list_ground_truths_search_by_id_no_param_returns_all(
         "/v1/ground-truths", params={"dataset": dataset}, headers=user_headers
     )
     assert res.status_code == 200
-    response_data = GroundTruthListResponse.model_validate(res.json())
-    assert len(response_data.items) >= 3
+    response_data = res.json()
+    assert len(response_data["items"]) >= 3

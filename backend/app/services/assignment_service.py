@@ -619,7 +619,9 @@ class AssignmentService:
             new_tags.append(rephrase_tag)
 
         now = datetime.now(timezone.utc)
-        new_item = AgenticGroundTruthEntry.model_validate(original.model_dump(by_alias=True))
+        new_item = AgenticGroundTruthEntry.model_validate(
+            original.model_dump(by_alias=True, exclude_computed_fields=True)
+        )
         new_item.id = randomname.get_name()
         new_item.status = GroundTruthStatus.draft
         new_item.manual_tags = new_tags

@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Optional, cast
 
-from pydantic import TypeAdapter
 import pytest
 from uuid import uuid4
 from httpx import AsyncClient
 
-from app.domain.models import AgenticGroundTruthEntry
 
 
 def make_item(dataset: str, *, gid: Optional[str] = None) -> dict[str, Any]:
@@ -15,9 +13,10 @@ def make_item(dataset: str, *, gid: Optional[str] = None) -> dict[str, Any]:
         "id": gid or f"gt-{uuid4().hex[:8]}",
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
-        "synthQuestion": "What is the capital of France?",
-        "answer": "Paris",
-        "refs": [],
+        "history": [
+            {"role": "user", "msg": "What is the capital of France?"},
+            {"role": "assistant", "msg": "Paris"},
+        ],
         "manualTags": [
             "source:synthetic",
             "split:validation",
@@ -50,9 +49,9 @@ async def test_get_item_200_and_404(async_client: AsyncClient, user_headers: dic
         f"/v1/ground-truths/{dataset}/{bucket}/gt-200", headers=user_headers
     )
     assert res.status_code == 200
-    gt_item = TypeAdapter(AgenticGroundTruthEntry).validate_python(res.json())
-    assert gt_item.id == "gt-200"
-    assert gt_item.etag
+    gt_item = cast(dict[str, Any], res.json())
+    assert gt_item.get("id") == "gt-200"
+    assert gt_item.get("_etag")
 
     # 404 for missing
     res = await async_client.get(

@@ -1,11 +1,11 @@
-from httpx import AsyncClient
-from pydantic import TypeAdapter
-import pytest
 import uuid
+from typing import Any, cast
 
-from app.domain.models import AgenticGroundTruthEntry
-from app.container import container
+import pytest
+from httpx import AsyncClient
+
 from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo
+from app.container import container
 
 
 def make_item(dataset: str) -> dict:
@@ -14,8 +14,9 @@ def make_item(dataset: str) -> dict:
         "datasetName": dataset,
         # Use NIL UUID for explicit bucket in tests
         "bucket": str(uuid.UUID("00000000-0000-0000-0000-000000000000")),
-        "synthQuestion": "Q?",
-        "samplingBucket": 0,
+        "history": [
+            {"role": "user", "msg": "Q?"},
+        ],
         "assignedTo": None,
     }
 
@@ -56,13 +57,18 @@ async def test_assigned_ground_truths_update_and_approve(async_client: AsyncClie
     r = await async_client.post("/v1/assignments/self-serve", json=body, headers=user_headers)
     assert r.status_code == 200
     data: dict = r.json()
-    # mypy: data.get returns Optional[Any]; use default [] to ensure list type
-    adocs = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(data.get("assigned") or [])
+    adocs = cast(list[dict[str, Any]], data.get("assigned") or [])
     assert adocs and len(adocs) >= 1
-    gt_id = adocs[0].id
+    gt_id = cast(str, adocs[0]["id"])
+    etag = cast(str | None, adocs[0].get("_etag"))
+    assert etag
 
     # SME approves via assignments PUT
-    payload = {"approve": True, "answer": "ans", "etag": adocs[0].etag}
+    payload = {
+        "approve": True,
+        "etag": etag,
+        "history": [{"role": "user", "msg": "Q?"}, {"role": "assistant", "msg": "ans"}],
+    }
     r = await async_client.put(
         f"/v1/assignments/{dataset}/{bucket}/{gt_id}", json=payload, headers=user_headers
     )
@@ -103,14 +109,14 @@ async def assigned_ground_truth(async_client: AsyncClient, user_headers):
     )
     assert r.status_code == 200
     data = r.json()
-    adocs = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(data.get("assigned") or [])
+    adocs = cast(list[dict[str, Any]], data.get("assigned") or [])
     assert adocs and len(adocs) >= 1
     gt = adocs[0]
 
     # Verify assignment document exists
     repo = container.repo
     assert isinstance(repo, CosmosGroundTruthRepo)
-    assignment = await repo.get_assignment_by_gt(TEST_USER_ID, gt.id)
+    assignment = await repo.get_assignment_by_gt(TEST_USER_ID, cast(str, gt["id"]))
     assert assignment is not None, "Assignment document should exist after self-serve"
 
     yield {
@@ -135,16 +141,22 @@ async def test_approve_deletes_assignment_document(
     user_id = assigned_ground_truth["user_id"]
 
     # SME approves via assignments PUT
-    payload = {"approve": True, "answer": "ans", "etag": gt.etag}
+    etag = cast(str | None, gt.get("_etag"))
+    assert etag
+    payload = {
+        "approve": True,
+        "etag": etag,
+        "history": [{"role": "user", "msg": "Q?"}, {"role": "assistant", "msg": "ans"}],
+    }
     r = await async_client.put(
-        f"/v1/assignments/{dataset}/{bucket}/{gt.id}", json=payload, headers=user_headers
+        f"/v1/assignments/{dataset}/{bucket}/{gt['id']}", json=payload, headers=user_headers
     )
     assert r.status_code == 200
     res: dict = r.json()
     assert res.get("status") == "approved"
 
     # Verify assignment document is deleted after approval
-    assignment_after = await repo.get_assignment_by_gt(user_id, gt.id)
+    assignment_after = await repo.get_assignment_by_gt(user_id, cast(str, gt["id"]))
     assert assignment_after is None, "Assignment document should be deleted after approval"
 
 
@@ -160,14 +172,16 @@ async def test_delete_deletes_assignment_document(
     user_id = assigned_ground_truth["user_id"]
 
     # SME soft-deletes via assignments PUT with status=deleted
-    payload = {"status": "deleted", "etag": gt.etag}
+    etag = cast(str | None, gt.get("_etag"))
+    assert etag
+    payload = {"status": "deleted", "etag": etag}
     r = await async_client.put(
-        f"/v1/assignments/{dataset}/{bucket}/{gt.id}", json=payload, headers=user_headers
+        f"/v1/assignments/{dataset}/{bucket}/{gt['id']}", json=payload, headers=user_headers
     )
     assert r.status_code == 200
     res: dict = r.json()
     assert res.get("status") == "deleted"
 
     # Verify assignment document is deleted after soft-delete
-    assignment_after = await repo.get_assignment_by_gt(user_id, gt.id)
+    assignment_after = await repo.get_assignment_by_gt(user_id, cast(str, gt["id"]))
     assert assignment_after is None, "Assignment document should be deleted after soft-delete"
