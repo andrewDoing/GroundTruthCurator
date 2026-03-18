@@ -205,8 +205,8 @@ async def test_sort_by_total_references_with_history_refs(
     assert item_ids[3] == "no-refs"
 
     items_by_id = {item["id"]: item for item in response_data["items"]}
-    history_three_refs = (
-        items_by_id["history-3"]["plugins"]["rag-compat"]["data"].get("references", [])
+    history_three_refs = items_by_id["history-3"]["plugins"]["rag-compat"]["data"].get(
+        "references", []
     )
     assert {ref.get("messageIndex") for ref in history_three_refs} == {1, 2}
 

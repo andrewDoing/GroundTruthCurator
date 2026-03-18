@@ -111,7 +111,9 @@ def test_resolve_sort_with_overrides(repo: CosmosGroundTruthRepo) -> None:
 
 
 def test_emulator_unicode_normalization_encodes_canonical_reference_content(monkeypatch) -> None:
-    monkeypatch.setattr("app.adapters.repos.cosmos_repo.settings.COSMOS_DISABLE_UNICODE_ESCAPE", True)
+    monkeypatch.setattr(
+        "app.adapters.repos.cosmos_repo.settings.COSMOS_DISABLE_UNICODE_ESCAPE", True
+    )
 
     original_content = r"Snippet with invalid escape \q and unicode \u2603"
     payload = {
@@ -142,7 +144,9 @@ def test_emulator_unicode_normalization_encodes_canonical_reference_content(monk
 
 
 def test_emulator_unicode_normalization_does_not_base64_encode_legacy_refs(monkeypatch) -> None:
-    monkeypatch.setattr("app.adapters.repos.cosmos_repo.settings.COSMOS_DISABLE_UNICODE_ESCAPE", True)
+    monkeypatch.setattr(
+        "app.adapters.repos.cosmos_repo.settings.COSMOS_DISABLE_UNICODE_ESCAPE", True
+    )
 
     original_content = r"Legacy snippet with invalid escape \q"
     payload = {
