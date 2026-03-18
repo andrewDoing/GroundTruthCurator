@@ -61,7 +61,13 @@ async def test_update_with_etag(async_client: AsyncClient, user_headers):
     # update with If-Match header
     headers = dict(user_headers)
     headers.update({"If-Match": etag})
-    payload = {"history": [{"role": "user", "msg": "What is the capital of France?"}, {"role": "assistant", "msg": "Paris"}], "status": "approved"}
+    payload = {
+        "history": [
+            {"role": "user", "msg": "What is the capital of France?"},
+            {"role": "assistant", "msg": "Paris"},
+        ],
+        "status": "approved",
+    }
     r = await async_client.put(
         f"/v1/ground-truths/{dataset}/{bucket}/{item['id']}", json=payload, headers=headers
     )
@@ -147,7 +153,13 @@ async def test_snapshot_and_stats(async_client: AsyncClient, user_headers):
     bucket = data[0]["bucket"]
     headers = dict(user_headers)
     headers.update({"If-Match": etag})
-    payload = {"history": [{"role": "user", "msg": "What is the capital of France?"}, {"role": "assistant", "msg": "Paris"}], "status": "approved"}
+    payload = {
+        "history": [
+            {"role": "user", "msg": "What is the capital of France?"},
+            {"role": "assistant", "msg": "Paris"},
+        ],
+        "status": "approved",
+    }
     r = await async_client.put(
         f"/v1/ground-truths/{dataset}/{bucket}/{item['id']}", json=payload, headers=headers
     )

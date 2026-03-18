@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
+
 def make_item(dataset: str) -> dict[str, Any]:
     return {
         "id": f"gt-{uuid4().hex[:8]}",
