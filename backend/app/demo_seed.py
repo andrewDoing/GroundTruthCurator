@@ -11,8 +11,6 @@ from app.domain.models import (
     AgenticGroundTruthEntry,
     DatasetCurationInstructions,
     ExpectedTools,
-    HistoryEntry,
-    HistoryItem,
     Reference,
     ToolExpectation,
 )
@@ -513,21 +511,14 @@ DEMO_TRACE_EXPORTS: list[tuple[dict[str, object], DemoTraceConfig]] = [
 ]
 
 
-def _hydrate_history_with_refs(item: AgenticGroundTruthEntry, refs: list[Reference]) -> None:
-    if not item.history:
-        return
+def _set_rag_compat_refs(item: AgenticGroundTruthEntry, refs: list[Reference]) -> None:
+    from app.plugins.pack_registry import get_default_pack_registry, get_required_pack
 
-    enriched_history: list[HistoryEntry] = []
-    last_turn_index = len(item.history) - 1
-    for index, turn in enumerate(item.history):
-        enriched_history.append(
-            HistoryItem(
-                role=turn.role,
-                msg=turn.msg,
-                refs=refs if index == last_turn_index and turn.role != "user" else None,
-            )
-        )
-    item.history = enriched_history
+    pack = get_required_pack("rag-compat", get_default_pack_registry())
+    replace_references = getattr(pack, "replace_references", None)
+    if not callable(replace_references):
+        raise TypeError("Registered 'rag-compat' pack does not expose replace_references")
+    replace_references(item, refs)
 
 
 def _expected_tools(tool_names: list[str]) -> ExpectedTools:
@@ -558,7 +549,9 @@ def _build_demo_item(
         created_by="demo-seed",
     )
     adapted = adapter.adapt_payload({"trace_count": 1, "traces": [trace]})[0]
-    item = AgenticGroundTruthEntry.model_validate(adapted.model_dump(by_alias=True))
+    item = AgenticGroundTruthEntry.model_validate(
+        adapted.model_dump(by_alias=True, exclude={"tags"})
+    )
 
     item.id = item_id
     item.scenario_id = scenario_id
@@ -566,8 +559,7 @@ def _build_demo_item(
     item.manual_tags = sorted(set(item.manual_tags + manual_tags))
     item.metadata = {**item.metadata, "source": "demo-seed"}
     item.trace_ids = {**(item.trace_ids or {}), "demoItemId": item_id}
-    item.refs = refs
-    _hydrate_history_with_refs(item, refs)
+    _set_rag_compat_refs(item, refs)
     item.expected_tools = _expected_tools(required_tools)
 
     if assigned:

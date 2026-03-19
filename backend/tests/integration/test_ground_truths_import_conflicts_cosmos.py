@@ -12,9 +12,10 @@ def make_item(dataset: str, item_id: str) -> dict[str, Any]:
         "id": item_id,
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
-        "synthQuestion": "What is the capital of France?",
-        "answer": "Paris",
-        "refs": [],
+        "history": [
+            {"role": "user", "msg": "What is the capital of France?"},
+            {"role": "assistant", "msg": "Paris"},
+        ],
         "manualTags": [
             "source:synthetic",
             "split:validation",

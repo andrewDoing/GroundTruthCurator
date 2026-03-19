@@ -17,7 +17,9 @@ def make_item(
         "id": item_id,
         "datasetName": dataset,
         "bucket": bucket_id,
-        "synthQuestion": "What is the meaning of life?",
+        "history": [
+            {"role": "user", "msg": "What is the meaning of life?"},
+        ],
         "status": status,
     }
     if assigned_to:

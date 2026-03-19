@@ -8,8 +8,9 @@ def make_item(dataset: str) -> dict:
         "id": str(uuid.uuid4()),
         "datasetName": dataset,
         "bucket": str(uuid.UUID("00000000-0000-0000-0000-000000000000")),
-        "synthQuestion": "Q?",
-        "samplingBucket": 0,
+        "history": [
+            {"role": "user", "msg": "Q?"},
+        ],
         "assignedTo": None,
     }
 
@@ -32,7 +33,9 @@ async def test_sme_update_requires_etag_and_includes_updated_etag(
 
     # Try SME update without ETag -> 412
     r = await async_client.put(
-        f"/v1/assignments/{ds}/{bucket}/{item['id']}", json={"answer": "A1"}, headers=user_headers
+        f"/v1/assignments/{ds}/{bucket}/{item['id']}",
+        json={"history": [{"role": "user", "msg": "Q?"}, {"role": "assistant", "msg": "A1"}]},
+        headers=user_headers,
     )
     assert r.status_code == 412
 
@@ -43,11 +46,14 @@ async def test_sme_update_requires_etag_and_includes_updated_etag(
     headers = dict(user_headers)
     headers.update({"If-Match": etag})
     r = await async_client.put(
-        f"/v1/assignments/{ds}/{bucket}/{item['id']}", json={"answer": "A2"}, headers=headers
+        f"/v1/assignments/{ds}/{bucket}/{item['id']}",
+        json={"history": [{"role": "user", "msg": "Q?"}, {"role": "assistant", "msg": "A2"}]},
+        headers=headers,
     )
     assert r.status_code == 200
     body = r.json()
-    assert body.get("answer") == "A2"
+    history = body.get("history") or []
+    assert any(turn.get("role") == "assistant" and turn.get("msg") == "A2" for turn in history)
     assert body.get("_etag") and isinstance(body["_etag"], str)
 
 
@@ -73,7 +79,9 @@ async def test_sme_etag_mismatch_returns_412(async_client: AsyncClient, user_hea
     headers = dict(user_headers)
     headers.update({"If-Match": etag1})
     r = await async_client.put(
-        f"/v1/assignments/{ds}/{bucket}/{item['id']}", json={"answer": "v1"}, headers=headers
+        f"/v1/assignments/{ds}/{bucket}/{item['id']}",
+        json={"history": [{"role": "user", "msg": "Q?"}, {"role": "assistant", "msg": "v1"}]},
+        headers=headers,
     )
     assert r.status_code == 200
     new_etag = r.json().get("_etag")
@@ -83,14 +91,16 @@ async def test_sme_etag_mismatch_returns_412(async_client: AsyncClient, user_hea
     headers_stale = dict(user_headers)
     headers_stale.update({"If-Match": etag1})
     r = await async_client.put(
-        f"/v1/assignments/{ds}/{bucket}/{item['id']}", json={"answer": "v2"}, headers=headers_stale
+        f"/v1/assignments/{ds}/{bucket}/{item['id']}",
+        json={"history": [{"role": "user", "msg": "Q?"}, {"role": "assistant", "msg": "v2"}]},
+        headers=headers_stale,
     )
     assert r.status_code == 412
 
 
 @pytest.mark.anyio
-async def test_curator_put_refs_with_etag(async_client: AsyncClient, user_headers):
-    ds = "test-curator-refs"
+async def test_curator_put_plugins_with_etag(async_client: AsyncClient, user_headers):
+    ds = "test-curator-plugins"
     item = make_item(ds)
     bucket = item["bucket"]
     r = await async_client.post("/v1/ground-truths", json=[item], headers=user_headers)
@@ -103,15 +113,28 @@ async def test_curator_put_refs_with_etag(async_client: AsyncClient, user_header
     headers = dict(user_headers)
     headers.update({"If-Match": etag})
 
-    refs = [
-        {"url": "https://example.com/a", "content": "alpha"},
-        {"url": "https://example.com/b", "keyExcerpt": "beta"},
-    ]
-    payload = {"refs": refs, "answer": "Ans"}
+    plugin_data = {
+        "score": 0.87,
+        "notes": ["source-a", "source-b"],
+    }
+    payload = {
+        "history": [
+            {"role": "user", "msg": "Q?"},
+            {"role": "assistant", "msg": "Ans"},
+        ],
+        "plugins": {
+            "test-pack": {
+                "kind": "test-pack",
+                "version": "1.0",
+                "data": plugin_data,
+            }
+        },
+    }
     r = await async_client.put(
         f"/v1/ground-truths/{ds}/{bucket}/{item['id']}", json=payload, headers=headers
     )
     assert r.status_code == 200
     body = r.json()
-    assert body.get("refs") and isinstance(body["refs"], list) and len(body["refs"]) == 2
+    persisted_data = body.get("plugins", {}).get("test-pack", {}).get("data")
+    assert persisted_data == plugin_data
     assert body.get("_etag") and isinstance(body["_etag"], str)

@@ -24,9 +24,10 @@ def make_item(dataset: str, item_id: str) -> dict[str, Any]:
         "id": item_id,
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
-        "synthQuestion": "Q?",
-        "answer": "A",
-        "refs": [],
+        "history": [
+            {"role": "user", "msg": "Q?"},
+            {"role": "assistant", "msg": "A"},
+        ],
         "manualTags": ["source:synthetic", "topic:general"],
     }
 

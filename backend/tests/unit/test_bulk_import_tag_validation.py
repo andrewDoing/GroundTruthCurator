@@ -1,7 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from app.domain.models import AgenticGroundTruthEntry, BulkImportResult
+from app.domain.models import BulkImportResult
 from app.core.auth import UserContext
+from tests.test_helpers import make_test_entry
 
 
 @pytest.fixture
@@ -31,11 +32,11 @@ async def test_bulk_import_validates_tags(mock_container, mock_user):
     )
 
     items = [
-        AgenticGroundTruthEntry(
+        make_test_entry(
             id="test-1",
-            datasetName="test",
-            synthQuestion="What is Q?",
-            manualTags=["source:synthetic"],
+            dataset_name="test",
+            synth_question="What is Q?",
+            manual_tags=["source:synthetic"],
         )
     ]
 
@@ -65,8 +66,11 @@ async def test_bulk_import_rejects_invalid_tags(mock_container, mock_user):
     )
 
     items = [
-        AgenticGroundTruthEntry(
-            id="test-1", datasetName="test", synthQuestion="What is Q?", manualTags=["invalid:tag"]
+        make_test_entry(
+            id="test-1",
+            dataset_name="test",
+            synth_question="What is Q?",
+            manual_tags=["invalid:tag"],
         )
     ]
 
@@ -102,17 +106,17 @@ async def test_bulk_import_mixed_valid_invalid_tags(mock_container, mock_user):
     )
 
     items = [
-        AgenticGroundTruthEntry(
+        make_test_entry(
             id="test-1",
-            datasetName="test",
-            synthQuestion="Q1?",
-            manualTags=["source:synthetic"],  # valid
+            dataset_name="test",
+            synth_question="Q1?",
+            manual_tags=["source:synthetic"],  # valid
         ),
-        AgenticGroundTruthEntry(
+        make_test_entry(
             id="test-2",
-            datasetName="test",
-            synthQuestion="Q2?",
-            manualTags=["invalid:tag"],  # invalid
+            dataset_name="test",
+            synth_question="Q2?",
+            manual_tags=["invalid:tag"],  # invalid
         ),
     ]
 
@@ -149,11 +153,11 @@ async def test_bulk_import_no_tags(mock_container, mock_user):
     )
 
     items = [
-        AgenticGroundTruthEntry(
+        make_test_entry(
             id="test-1",
-            datasetName="test",
-            synthQuestion="What is Q?",
-            manualTags=[],  # no tags
+            dataset_name="test",
+            synth_question="What is Q?",
+            manual_tags=[],  # no tags
         )
     ]
 
@@ -183,11 +187,11 @@ async def test_bulk_import_tag_validation_single_registry_fetch(mock_container, 
     )
 
     items = [
-        AgenticGroundTruthEntry(
+        make_test_entry(
             id=f"test-{i}",
-            datasetName="test",
-            synthQuestion=f"Q{i}?",
-            manualTags=["source:synthetic"],
+            dataset_name="test",
+            synth_question=f"Q{i}?",
+            manual_tags=["source:synthetic"],
         )
         for i in range(10)
     ]

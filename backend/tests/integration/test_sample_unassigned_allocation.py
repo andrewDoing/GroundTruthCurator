@@ -13,10 +13,9 @@ def make_item(dataset: str) -> dict[str, Any]:
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
         "status": "draft",
-        "samplingBucket": 0,
-        "synthQuestion": "Q?",
-        "answer": None,
-        "refs": [],
+        "history": [
+            {"role": "user", "msg": "Q?"},
+        ],
         "manualTags": ["source:synthetic", "split:validation"],
     }
 

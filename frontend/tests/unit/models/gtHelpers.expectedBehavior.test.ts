@@ -23,7 +23,6 @@ describe("canApproveMultiTurn - Expected Behavior Validation", () => {
 		id: "test-1",
 		providerId: "test",
 		question: "Test question",
-		answer: "Test answer",
 		status: "draft",
 		expectedTools: { required: [{ name: "search" }] },
 		toolCalls: [{ id: "tc1", name: "search", callType: "tool" }],
@@ -311,7 +310,7 @@ describe("canApproveMultiTurn - expectedTools gating", () => {
 		id: "test-et",
 		providerId: "test",
 		question: "Test question",
-		answer: "Test answer",
+		history: [{ role: "agent", content: "Test answer" }],
 		status: "draft",
 	};
 	const validHistory: ConversationTurn[] = [

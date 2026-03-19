@@ -12,7 +12,9 @@ def make_item(dataset: str, status: str = "draft") -> dict:
         "id": str(uuid.uuid4()),
         "datasetName": dataset,
         "bucket": str(uuid.UUID("00000000-0000-0000-0000-000000000000")),
-        "synthQuestion": "What is the capital of France?",
+        "history": [
+            {"role": "user", "msg": "What is the capital of France?"},
+        ],
         "status": status,
     }
 

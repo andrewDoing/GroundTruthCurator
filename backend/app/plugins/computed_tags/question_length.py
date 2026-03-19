@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from app.domain.conversation_fields import question_text_from_item
 from app.plugins.base import ComputedTagPlugin
 
 if TYPE_CHECKING:
@@ -28,8 +29,8 @@ MEDIUM_MAX_WORDS = (
 def _get_question_word_count(doc: AgenticGroundTruthEntry) -> int:
     """Get the word count for the document's question.
 
-    Uses the computed property accessor which returns editedQuestion if available,
-    otherwise synthQuestion. Uses .split() to count words as specified in requirements.
+    Uses canonical question derivation from history.
+    Uses .split() to count words as specified in requirements.
 
     Args:
         doc: The AgenticGroundTruthEntry to evaluate.
@@ -37,7 +38,7 @@ def _get_question_word_count(doc: AgenticGroundTruthEntry) -> int:
     Returns:
         The number of words in the question.
     """
-    question = doc.edited_question or doc.synth_question or ""
+    question = question_text_from_item(doc)
     return len(question.split())
 
 

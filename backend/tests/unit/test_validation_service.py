@@ -12,12 +12,61 @@ def test_approval_validation_accepts_legacy_question_answer_payload():
         {
             "id": "item-1",
             "datasetName": "demo",
-            "synthQuestion": "What is Ground Truth Curator?",
-            "answer": "It is a curation application.",
+            "history": [
+                {"role": "user", "msg": "What is Ground Truth Curator?"},
+                {"role": "assistant", "msg": "It is a curation application."},
+            ],
         }
     )
 
     assert collect_approval_validation_errors(item) == []
+
+
+def test_approval_validation_accepts_agent_answer_role():
+    item = AgenticGroundTruthEntry.model_validate(
+        {
+            "id": "item-agent",
+            "datasetName": "demo",
+            "history": [
+                {"role": "user", "msg": "What is Ground Truth Curator?"},
+                {"role": "agent", "msg": "It is a curation application."},
+            ],
+        }
+    )
+
+    assert collect_approval_validation_errors(item) == []
+
+
+def test_approval_validation_accepts_custom_non_user_answer_role():
+    item = AgenticGroundTruthEntry.model_validate(
+        {
+            "id": "item-planner",
+            "datasetName": "demo",
+            "history": [
+                {"role": "user", "msg": "Plan the rollout."},
+                {"role": "planner", "msg": "Step 1: scope. Step 2: validate."},
+            ],
+        }
+    )
+
+    assert collect_approval_validation_errors(item) == []
+
+
+def test_approval_validation_rejects_all_user_history():
+    item = AgenticGroundTruthEntry.model_validate(
+        {
+            "id": "item-all-user",
+            "datasetName": "demo",
+            "history": [
+                {"role": "user", "msg": "Question one"},
+                {"role": "user", "msg": "Question two"},
+            ],
+        }
+    )
+
+    assert collect_approval_validation_errors(item) == [
+        "history must include at least one agent message"
+    ]
 
 
 def test_approval_validation_requires_required_tool_when_tool_calls_exist():

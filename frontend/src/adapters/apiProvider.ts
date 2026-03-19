@@ -85,7 +85,7 @@ export class ApiProvider implements Provider {
 			const fresh = await getGroundTruthRaw(dataset, bucket, item.id);
 			updatedApi = fresh;
 		} else {
-			const patch = groundTruthToPatch({ item, originalApi: e.api });
+			const patch = groundTruthToPatch({ item });
 			const doUpdate = async (nextEtag?: string | null) =>
 				updateAssignedGroundTruth(
 					dataset,

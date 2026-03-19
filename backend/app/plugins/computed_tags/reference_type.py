@@ -16,6 +16,7 @@ import re
 from typing import TYPE_CHECKING
 
 from app.plugins.base import ComputedTagPlugin
+from app.plugins.pack_registry import get_default_pack_registry
 
 if TYPE_CHECKING:
     from app.domain.models import AgenticGroundTruthEntry, Reference
@@ -61,17 +62,15 @@ def _get_all_references(doc: AgenticGroundTruthEntry) -> list[Reference]:
     Returns:
         A list of all Reference objects from the document.
     """
-    from app.domain.models import HistoryItem
+    from app.domain.models import Reference
 
-    refs: list[Reference] = list(doc.refs or [])
-
-    # Also gather refs from history turns
-    # HistoryItem (subclass of HistoryEntry) has refs field
-    if doc.history:
-        for turn in doc.history:
-            if isinstance(turn, HistoryItem) and turn.refs:
-                refs.extend(turn.refs)
-
+    docs = get_default_pack_registry().collect_search_documents(doc)
+    refs: list[Reference] = []
+    for candidate in docs:
+        url = candidate.get("url")
+        if not isinstance(url, str) or not url:
+            continue
+        refs.append(Reference(url=url))
     return refs
 
 

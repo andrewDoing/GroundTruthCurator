@@ -1,6 +1,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ConversationTurn } from "../../../src/models/groundTruth";
-import { getItemReferences } from "../../../src/models/groundTruth";
+import {
+	getItemReferences,
+	getLastAgentTurn,
+	getLastUserTurn,
+} from "../../../src/models/groundTruth";
 
 vi.mock("../../../src/config/demo", () => ({
 	default: true,
@@ -181,18 +185,18 @@ describe("useGroundTruth deleteTurn", () => {
 			},
 		];
 		await seedHistory(result, history);
-		expect(result.current.current?.question).toBe("Second question");
-		expect(result.current.current?.answer).toBe("Second answer");
+		expect(getLastUserTurn(result.current.current!)).toBe("Second question");
+		expect(getLastAgentTurn(result.current.current!)).toBe("Second answer");
 		await act(async () => {
 			result.current.deleteTurn(3);
 		});
-		expect(result.current.current?.question).toBe("Second question");
-		expect(result.current.current?.answer).toBe("First answer");
+		expect(getLastUserTurn(result.current.current!)).toBe("Second question");
+		expect(getLastAgentTurn(result.current.current!)).toBe("First answer");
 		await act(async () => {
 			result.current.deleteTurn(2);
 		});
-		expect(result.current.current?.question).toBe("First question");
-		expect(result.current.current?.answer).toBe("First answer");
+		expect(getLastUserTurn(result.current.current!)).toBe("First question");
+		expect(getLastAgentTurn(result.current.current!)).toBe("First answer");
 	});
 
 	it("handles empty or out-of-range deletions without breaking canonical state", async () => {
@@ -208,7 +212,7 @@ describe("useGroundTruth deleteTurn", () => {
 			result.current.deleteTurn(0);
 		});
 		expect(result.current.current?.history).toHaveLength(0);
-		expect(result.current.current?.question).toBe("");
-		expect(result.current.current?.answer).toBe("");
+		expect(getLastUserTurn(result.current.current!)).toBe("");
+		expect(getLastAgentTurn(result.current.current!)).toBe("");
 	});
 });

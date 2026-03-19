@@ -1,7 +1,8 @@
 """Test helpers for creating AgenticGroundTruthEntry fixtures.
 
-After Phase 6: canonical state is history[]; question/answer/refs are derived
-from history or stored in plugins["rag-compat"].
+After Phase 6: canonical state is history[]; question/answer are derived from
+history and plugin-owned reference compatibility lives in
+plugins["rag-compat"].data.references.
 """
 
 from __future__ import annotations
@@ -34,12 +35,12 @@ def make_test_entry(
         id: Item ID (default: "test-item")
         dataset_name: Dataset name (default: "test-dataset")
         status: Item status (default: draft)
-        history: Explicit history array. If None and synth_question/answer provided,
-                 a simple Q&A history will be auto-generated.
-        synth_question: Question text (stored in rag-compat plugin)
-        edited_question: Edited question text (stored in rag-compat plugin)
-        answer: Answer text (stored in rag-compat plugin)
-        refs: References (stored in rag-compat plugin)
+        history: Explicit history array. If None and question/answer inputs are provided,
+                  a simple Q&A history will be auto-generated.
+        synth_question: Fallback question text used when edited_question is absent
+        edited_question: Preferred question text for generated history
+        answer: Answer text used for generated history
+        refs: References stored in rag-compat plugin data
         manual_tags: Manual tags list
         comment: Item comment
         reviewed_at: Review timestamp
@@ -92,25 +93,23 @@ def make_test_entry(
     if history is not None:
         # Use explicit history
         payload["history"] = history
-    elif synth_question or answer:
+    elif edited_question or synth_question or answer:
         # Auto-generate simple Q&A history from legacy-style params
         auto_history: list[dict[str, Any]] = []
-        if synth_question:
-            auto_history.append({"role": "user", "msg": synth_question})
+        question = edited_question or synth_question
+        if question:
+            auto_history.append({"role": "user", "msg": question})
         if answer:
             auto_history.append({"role": "assistant", "msg": answer})
         payload["history"] = auto_history
 
-    # Build rag-compat plugin data if any legacy fields are provided
+    # Build rag-compat plugin data when references are provided
     rag_compat_data: dict[str, Any] = {}
-    if synth_question is not None:
-        rag_compat_data["synthQuestion"] = synth_question
-    if edited_question is not None:
-        rag_compat_data["editedQuestion"] = edited_question
-    if answer is not None:
-        rag_compat_data["answer"] = answer
     if refs is not None:
-        rag_compat_data["refs"] = refs
+        rag_compat_data["references"] = [
+            ref.model_dump(by_alias=True, exclude_none=True) if hasattr(ref, "model_dump") else ref
+            for ref in refs
+        ]
 
     if rag_compat_data:
         payload["plugins"] = {

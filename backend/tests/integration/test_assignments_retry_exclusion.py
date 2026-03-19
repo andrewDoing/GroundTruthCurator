@@ -12,10 +12,8 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from httpx import AsyncClient
-from pydantic.type_adapter import TypeAdapter
 import pytest
 
-from app.domain.models import AgenticGroundTruthEntry
 from app.adapters.repos.cosmos_repo import CosmosGroundTruthRepo
 
 
@@ -26,10 +24,10 @@ def make_unassigned_item(dataset: str, item_id: str | None = None) -> dict[str, 
         "datasetName": dataset,
         "bucket": str(UUID("00000000-0000-0000-0000-000000000000")),
         "status": "draft",
-        "samplingBucket": 0,
-        "synthQuestion": f"Question about {uuid4().hex[:4]}?",
+        "history": [
+            {"role": "user", "msg": f"Question about {uuid4().hex[:4]}?"},
+        ],
         "assignedTo": None,
-        "refs": [],
         "manualTags": ["source:synthetic", "split:test"],
     }
 
@@ -110,16 +108,14 @@ async def test_skipped_items_excluded_from_user_resampling(
         "/v1/assignments/self-serve", json={"limit": 2}, headers=user_headers
     )
     assert r.status_code == 200
-    first_batch = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(
-        r.json().get("assigned") or []
-    )
+    first_batch = r.json().get("assigned") or []
     assert len(first_batch) == 2
 
     # Skip one item
     skipped_item = first_batch[0]
     r = await async_client.put(
-        f"/v1/ground-truths/{dataset}/{skipped_item.bucket}/{skipped_item.id}",
-        json={"status": "skipped", "etag": skipped_item.etag},
+        f"/v1/ground-truths/{dataset}/{skipped_item['bucket']}/{skipped_item['id']}",
+        json={"status": "skipped", "etag": skipped_item["_etag"]},
         headers=user_headers,
     )
     assert r.status_code == 200
@@ -129,19 +125,17 @@ async def test_skipped_items_excluded_from_user_resampling(
         "/v1/assignments/self-serve", json={"limit": 3}, headers=user_headers
     )
     assert r.status_code == 200
-    second_batch = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(
-        r.json().get("assigned") or []
-    )
+    second_batch = r.json().get("assigned") or []
     assert len(second_batch) == 3
 
-    second_batch_ids = {item.id for item in second_batch}
+    second_batch_ids = {item["id"] for item in second_batch}
     non_skipped_item = first_batch[1]
 
     # Core assertions: skipped item not returned, non-skipped item is returned
-    assert skipped_item.id not in second_batch_ids, "Bug: Skipped item was resampled"
-    assert non_skipped_item.id in second_batch_ids, "Non-skipped item should be included"
+    assert skipped_item["id"] not in second_batch_ids, "Bug: Skipped item was resampled"
+    assert non_skipped_item["id"] in second_batch_ids, "Non-skipped item should be included"
 
     # Should have 2 new items (not from first batch)
-    first_batch_ids = {item.id for item in first_batch}
+    first_batch_ids = {item["id"] for item in first_batch}
     new_items = second_batch_ids - first_batch_ids
     assert len(new_items) == 2

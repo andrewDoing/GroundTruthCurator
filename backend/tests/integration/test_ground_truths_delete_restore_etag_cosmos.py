@@ -13,9 +13,10 @@ def make_item(dataset: str, item_id: str) -> dict[str, Any]:
         "datasetName": dataset,
         # Use NIL UUID so tests don't depend on bucket assignment logic
         "bucket": str(UUID("00000000-0000-0000-0000-000000000000")),
-        "synthQuestion": "How do I reset my password?",
-        "answer": "Use the reset link",
-        "refs": [],
+        "history": [
+            {"role": "user", "msg": "How do I reset my password?"},
+            {"role": "assistant", "msg": "Use the reset link"},
+        ],
         "manualTags": [
             "source:synthetic",
             "split:validation",

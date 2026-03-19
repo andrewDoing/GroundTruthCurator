@@ -5,6 +5,7 @@ from math import ceil
 from typing import Iterable
 from uuid import UUID
 
+from app.domain.conversation_fields import answer_text_from_item, question_text_from_item
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.domain.models import (
     AgenticGroundTruthEntry,
@@ -15,6 +16,8 @@ from app.domain.models import (
     PaginationMetadata,
     Stats,
 )
+from app.plugins.base import PluginPackRegistry
+from app.plugins.pack_registry import get_default_pack_registry
 
 ZERO_UUID = UUID("00000000-0000-0000-0000-000000000000")
 
@@ -25,12 +28,14 @@ class InMemoryGroundTruthRepo:
         *,
         items: list[AgenticGroundTruthEntry] | None = None,
         curation_instructions: list[DatasetCurationInstructions] | None = None,
+        plugin_pack_registry: PluginPackRegistry | None = None,
     ) -> None:
         self.items: dict[str, AgenticGroundTruthEntry] = {}
         self._locations: dict[tuple[str, UUID, str], str] = {}
         self._assignment_docs: dict[tuple[str, str], AssignmentDocument] = {}
         self._curation: dict[str, DatasetCurationInstructions] = {}
         self._etag_version = 0
+        self._plugin_pack_registry = plugin_pack_registry or get_default_pack_registry()
 
         for item in items or []:
             self._store_initial_item(item)
@@ -45,7 +50,9 @@ class InMemoryGroundTruthRepo:
         return f"memory-etag-{self._etag_version}"
 
     def _clone_item(self, item: AgenticGroundTruthEntry) -> AgenticGroundTruthEntry:
-        return AgenticGroundTruthEntry.model_validate(item.model_dump(by_alias=True))
+        return AgenticGroundTruthEntry.model_validate(
+            item.model_dump(by_alias=True, exclude={"tags"})
+        )
 
     def _clone_instruction(self, doc: DatasetCurationInstructions) -> DatasetCurationInstructions:
         return DatasetCurationInstructions.model_validate(doc.model_dump(by_alias=True))
@@ -104,28 +111,30 @@ class InMemoryGroundTruthRepo:
         )
 
     def _collect_urls(self, item: AgenticGroundTruthEntry) -> Iterable[str]:
-        for ref in item.refs:
-            yield ref.url
-        for turn in item.history or []:
-            for ref in getattr(turn, "refs", None) or []:
-                yield ref.url
+        for doc in self._plugin_pack_registry.collect_search_documents(item):
+            url = doc.get("url")
+            if isinstance(url, str) and url:
+                yield url
 
     def _collect_text(self, item: AgenticGroundTruthEntry) -> str:
         parts = [
             item.id,
             item.datasetName,
-            item.synth_question or "",
-            item.edited_question or "",
-            item.answer or "",
+            question_text_from_item(item),
+            answer_text_from_item(item),
             item.comment or "",
         ]
         for turn in item.history or []:
             parts.append(turn.msg)
-        for ref in item.refs:
-            parts.extend([ref.title or "", ref.url, ref.content or "", ref.keyExcerpt or ""])
-        for turn in item.history or []:
-            for ref in getattr(turn, "refs", None) or []:
-                parts.extend([ref.title or "", ref.url, ref.content or "", ref.keyExcerpt or ""])
+        for doc in self._plugin_pack_registry.collect_search_documents(item):
+            parts.extend(
+                [
+                    str(doc.get("id") or ""),
+                    str(doc.get("title") or ""),
+                    str(doc.get("url") or ""),
+                    str(doc.get("chunk") or ""),
+                ]
+            )
         return " ".join(parts).lower()
 
     def _is_unassigned_candidate(self, item: AgenticGroundTruthEntry) -> bool:
@@ -138,24 +147,27 @@ class InMemoryGroundTruthRepo:
         self,
         items: list[AgenticGroundTruthEntry],
         sort_by: SortField | None,
+        plugin_sort: str | None,
         sort_order: SortOrder | None,
     ) -> list[AgenticGroundTruthEntry]:
         field = sort_by or SortField.reviewed_at
         reverse = (sort_order or SortOrder.desc) == SortOrder.desc
 
         def key(item: AgenticGroundTruthEntry):
+            if plugin_sort:
+                plugin_value = self._plugin_pack_registry.plugin_sort_value(item, plugin_sort)
+                return (
+                    plugin_value if plugin_value is not None else -1,
+                    item.updated_at or datetime.min.replace(tzinfo=timezone.utc),
+                    item.id,
+                )
             if field == SortField.updated_at:
                 return item.updated_at or datetime.min.replace(tzinfo=timezone.utc)
             if field == SortField.id:
                 return item.id
             if field == SortField.has_answer:
                 return (
-                    1 if (item.answer or "").strip() else 0,
-                    item.updated_at or datetime.min.replace(tzinfo=timezone.utc),
-                )
-            if field == SortField.totalReferences:
-                return (
-                    item.totalReferences,
+                    1 if answer_text_from_item(item) else 0,
                     item.updated_at or datetime.min.replace(tzinfo=timezone.utc),
                 )
             if field == SortField.tag_count:
@@ -194,7 +206,7 @@ class InMemoryGroundTruthRepo:
             items = [item for item in items if item.status == status]
         return [
             self._clone_item(item)
-            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)
+            for item in self._sort_items(items, SortField.updated_at, None, SortOrder.desc)
         ]
 
     async def list_all_gt(
@@ -205,7 +217,7 @@ class InMemoryGroundTruthRepo:
             items = [item for item in items if item.status == status]
         return [
             self._clone_item(item)
-            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)
+            for item in self._sort_items(items, SortField.updated_at, None, SortOrder.desc)
         ]
 
     async def list_gt_paginated(
@@ -215,9 +227,10 @@ class InMemoryGroundTruthRepo:
         tags: list[str] | None = None,
         exclude_tags: list[str] | None = None,
         item_id: str | None = None,
-        ref_url: str | None = None,
+        plugin_filters: dict[str, str] | None = None,
         keyword: str | None = None,
         sort_by: SortField | None = None,
+        plugin_sort: str | None = None,
         sort_order: SortOrder | None = None,
         page: int = 1,
         limit: int = 25,
@@ -235,15 +248,17 @@ class InMemoryGroundTruthRepo:
             filtered = [item for item in filtered if not banned.intersection(set(item.tags))]
         if item_id:
             filtered = [item for item in filtered if item_id in item.id]
-        if ref_url:
+        if plugin_filters:
             filtered = [
-                item for item in filtered if any(ref_url in url for url in self._collect_urls(item))
+                item
+                for item in filtered
+                if self._plugin_pack_registry.matches_query_filters(item, plugin_filters)
             ]
         if keyword:
             lowered = keyword.lower()
             filtered = [item for item in filtered if lowered in self._collect_text(item)]
 
-        sorted_items = self._sort_items(filtered, sort_by, sort_order)
+        sorted_items = self._sort_items(filtered, sort_by, plugin_sort, sort_order)
         total = len(sorted_items)
         start = (page - 1) * limit
         end = start + limit
@@ -325,7 +340,7 @@ class InMemoryGroundTruthRepo:
         items = [item for item in self.items.values() if self._is_unassigned_candidate(item)]
         return [
             self._clone_item(item)
-            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)[:limit]
+            for item in self._sort_items(items, SortField.updated_at, None, SortOrder.desc)[:limit]
         ]
 
     async def sample_unassigned(
@@ -346,7 +361,7 @@ class InMemoryGroundTruthRepo:
         ]
         return [
             self._clone_item(item)
-            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)[:take]
+            for item in self._sort_items(items, SortField.updated_at, None, SortOrder.desc)[:take]
         ]
 
     async def query_unassigned_global(
@@ -360,7 +375,7 @@ class InMemoryGroundTruthRepo:
         ]
         return [
             self._clone_item(item)
-            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)[:take]
+            for item in self._sort_items(items, SortField.updated_at, None, SortOrder.desc)[:take]
         ]
 
     async def assign_to(self, item_id: str, user_id: str) -> bool:
@@ -399,7 +414,7 @@ class InMemoryGroundTruthRepo:
         ]
         return [
             self._clone_item(item)
-            for item in self._sort_items(items, SortField.updated_at, SortOrder.desc)
+            for item in self._sort_items(items, SortField.updated_at, None, SortOrder.desc)
         ]
 
     async def upsert_assignment_doc(

@@ -12,7 +12,6 @@ function MiniCurateApp() {
 		{
 			id: "1",
 			question: "Q-1",
-			answer: "",
 			history: [{ role: "user", content: "Q-1" }],
 			status: "draft",
 			providerId: "json",
@@ -21,7 +20,6 @@ function MiniCurateApp() {
 		{
 			id: "2",
 			question: "Q-2",
-			answer: "",
 			history: [{ role: "user", content: "Q-2" }],
 			status: "draft",
 			providerId: "json",

@@ -13,7 +13,6 @@ class SortField(str, Enum):
     updated_at = "updatedAt"
     id = "id"
     has_answer = "hasAnswer"
-    totalReferences = "totalReferences"
     tag_count = "tagCount"
 
 

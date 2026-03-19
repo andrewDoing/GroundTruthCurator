@@ -165,7 +165,7 @@ class TestGroundTruthItemScanning:
     """Tests for scanning GroundTruthItem fields."""
 
     def test_scans_synth_question(self):
-        """Should detect PII in synthQuestion field."""
+        """Should detect PII in canonical question field."""
         item = make_test_entry(
             id="test-1",
             dataset_name="test-dataset",
@@ -174,12 +174,12 @@ class TestGroundTruthItemScanning:
         warnings = scan_item_for_pii(item)
         # Should find PII in multiple representations (history, plugin data, computed fields)
         assert len(warnings) >= 1
-        # Check that at least one warning is for synthQuestion
-        assert any(w.field == "synthQuestion" for w in warnings)
+        # Check that at least one warning is for canonical question text
+        assert any(w.field == "history.question" for w in warnings)
         assert any("email" in w.pattern_type for w in warnings)
 
     def test_scans_edited_question(self):
-        """Should detect PII in editedQuestion field."""
+        """Should detect PII in edited question via canonical question field."""
         item = make_test_entry(
             id="test-1",
             dataset_name="test-dataset",
@@ -187,13 +187,12 @@ class TestGroundTruthItemScanning:
             edited_question="Contact support@company.org for assistance",
         )
         warnings = scan_item_for_pii(item)
-        # Should find PII in multiple representations
         assert len(warnings) >= 1
-        assert any(w.field == "editedQuestion" for w in warnings)
+        assert any(w.field == "history.question" for w in warnings)
         assert any("email" in w.pattern_type for w in warnings)
 
     def test_scans_answer(self):
-        """Should detect PII in answer field."""
+        """Should detect PII in canonical answer field."""
         item = make_test_entry(
             id="test-1",
             dataset_name="test-dataset",
@@ -203,7 +202,7 @@ class TestGroundTruthItemScanning:
         warnings = scan_item_for_pii(item)
         # Should find PII in multiple representations
         assert len(warnings) >= 1
-        assert any(w.field == "answer" for w in warnings)
+        assert any(w.field == "history.answer" for w in warnings)
         assert any("phone" in w.pattern_type for w in warnings)
 
     def test_scans_comment(self):
@@ -231,9 +230,10 @@ class TestGroundTruthItemScanning:
             ],
         )
         warnings = scan_item_for_pii(item)
-        assert len(warnings) == 2
+        assert len(warnings) >= 2
         # Check field names include index
         fields = {w.field for w in warnings}
+        assert "history.question" in fields
         assert "history[0].msg" in fields
         assert "history[2].msg" in fields
 
@@ -360,14 +360,14 @@ class TestEdgeCases:
         """PIIWarning should serialize correctly."""
         warning = PIIWarning(
             item_id="test-1",
-            field="synthQuestion",
+            field="history.question",
             pattern_type="email",
             snippet="...[u***@e***e.com]...",
             position=10,
         )
         data = warning.model_dump()
         assert data["item_id"] == "test-1"
-        assert data["field"] == "synthQuestion"
+        assert data["field"] == "history.question"
         assert data["pattern_type"] == "email"
         assert data["snippet"] == "...[u***@e***e.com]..."
         assert data["position"] == 10

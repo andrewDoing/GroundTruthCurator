@@ -24,6 +24,7 @@ from app.domain.models import (
     BulkImportResult,
     HistoryEntry,
 )
+from app.plugins.pack_registry import get_rag_compat_pack
 from app.domain.enums import GroundTruthStatus
 
 
@@ -210,11 +211,11 @@ class TestBulkImportApprovalValidation:
 
 
 class TestAssignmentHistoryReset:
-    """Test IV-002: Assignment route history edits reset totalReferences."""
+    """Test IV-002: Assignment route history edits preserve compat totalReferences."""
 
     @pytest.mark.asyncio
     async def test_assignment_update_history_resets_total_references(self):
-        """When history is updated via assignment route, totalReferences should be reset to 0."""
+        """When history updates, compat plugin totalReferences remains unchanged."""
         from app.core.auth import UserContext
         from app.container import container
         from app.api.v1.assignments import update_item
@@ -235,7 +236,13 @@ class TestAssignmentHistoryReset:
                 HistoryEntry(role="user", msg="Old question"),
                 HistoryEntry(role="assistant", msg="Old answer"),
             ],
-            totalReferences=5,  # Stale value
+            plugins={
+                "rag-compat": {
+                    "kind": "rag-compat",
+                    "version": "1.0",
+                    "data": {"totalReferences": 5},
+                }
+            },
             _etag="test-etag",
         )
 
@@ -277,16 +284,16 @@ class TestAssignmentHistoryReset:
                 if_match=None,
             )
 
-            # Verify totalReferences was reset to 0
+            # Verify compat totalReferences was preserved on the plugin payload
             assert saved_item is not None
-            assert saved_item.totalReferences == 0
+            assert get_rag_compat_pack().reference_count(saved_item) == 5
 
         finally:
             container.repo = original_repo
 
     @pytest.mark.asyncio
     async def test_assignment_clear_history_resets_total_references(self):
-        """When history is cleared via assignment route, totalReferences should be reset to 0."""
+        """When history is cleared, compat plugin totalReferences remains unchanged."""
         from app.core.auth import UserContext
         from app.container import container
         from app.api.v1.assignments import update_item
@@ -307,7 +314,13 @@ class TestAssignmentHistoryReset:
                 HistoryEntry(role="user", msg="Question"),
                 HistoryEntry(role="assistant", msg="Answer"),
             ],
-            totalReferences=3,
+            plugins={
+                "rag-compat": {
+                    "kind": "rag-compat",
+                    "version": "1.0",
+                    "data": {"totalReferences": 3},
+                }
+            },
             _etag="test-etag",
         )
 
@@ -344,9 +357,9 @@ class TestAssignmentHistoryReset:
                 if_match=None,
             )
 
-            # Verify totalReferences was reset to 0
+            # Verify compat totalReferences was preserved on the plugin payload
             assert saved_item is not None
-            assert saved_item.totalReferences == 0
+            assert get_rag_compat_pack().reference_count(saved_item) == 3
 
         finally:
             container.repo = original_repo

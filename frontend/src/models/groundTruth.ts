@@ -1,3 +1,10 @@
+import {
+	collectCanonicalReferencesFromCompatData,
+	getCompatData,
+	getCompatRetrievalsFromData,
+	writeCompatPluginEnvelope,
+} from "./ragCompatPayload";
+
 // Domain models and constants for Ground Truth items
 
 // ---------------------------------------------------------------------------
@@ -66,51 +73,8 @@ export type RetrievalCandidate = {
 	toolCallId?: string;
 };
 
-// ---------------------------------------------------------------------------
-// Per-call retrieval helpers (Phase 6 — retrieval normalization)
-//
-// References are stored in plugins["rag-compat"].data.retrievals per tool
-// call.  The helpers below provide flat Reference[] access for UI
-// components that still consume the legacy Reference shape.
-// ---------------------------------------------------------------------------
-
-const _RAG_COMPAT_KEY = "rag-compat";
-const _UNASSOCIATED_KEY = "_unassociated";
-
-/** Per-call retrieval bucket as stored in plugin data. */
-type RetrievalBucket = {
-	candidates: Array<{
-		url: string;
-		title?: string;
-		chunk?: string;
-		rawPayload?: Record<string, unknown>;
-		relevance?: string;
-		toolCallId?: string | null;
-		messageIndex?: number;
-		turnId?: string;
-		keyParagraph?: string;
-		bonus?: boolean;
-		visitedAt?: string | null;
-	}>;
-};
-
-/** Typed shorthand for the retrievals dict inside rag-compat plugin data. */
-type RetrievalsMap = Record<string, RetrievalBucket>;
-
-/**
- * Read the per-call retrievals map from plugin data.
- * Returns `undefined` when no per-call state exists.
- */
-export function getRetrievalsMap(
-	item: Pick<GroundTruthItem, "plugins">,
-): RetrievalsMap | undefined {
-	const data = item.plugins?.[_RAG_COMPAT_KEY]?.data;
-	if (!data) return undefined;
-	const r = data.retrievals;
-	if (r && typeof r === "object" && !Array.isArray(r)) {
-		return r as RetrievalsMap;
-	}
-	return undefined;
+export function getRetrievalsMap(item: Pick<GroundTruthItem, "plugins">) {
+	return getCompatRetrievalsFromData(getCompatData(item.plugins));
 }
 
 /**
@@ -121,41 +85,15 @@ export function getRetrievalsMap(
  * exists (caller should provide legacy references separately if needed).
  */
 export function getItemReferences(item: GroundTruthItem): Reference[] {
-	const retrievals = getRetrievalsMap(item);
-	if (!retrievals) return [];
 	const history = ensureConversationTurnIdentity(item.history);
 	const indexByTurnId = getTurnIndexById(history);
+	const historyTurnIds = history.map((turn) => turn.turnId);
 
-	const refs: Reference[] = [];
-	let refIndex = 0;
-	for (const [toolCallId, bucket] of Object.entries(retrievals)) {
-		if (!bucket?.candidates) continue;
-		for (const c of bucket.candidates) {
-			const storedTurnId = c.turnId;
-			const resolvedMessageIndex =
-				storedTurnId && indexByTurnId.has(storedTurnId)
-					? indexByTurnId.get(storedTurnId)
-					: c.messageIndex;
-			const resolvedTurnId =
-				storedTurnId ||
-				(typeof resolvedMessageIndex === "number"
-					? history[resolvedMessageIndex]?.turnId
-					: undefined);
-			refs.push({
-				id: `ref_${refIndex++}`,
-				title: c.title,
-				url: c.url,
-				snippet: c.chunk,
-				visitedAt: c.visitedAt ?? null,
-				keyParagraph: c.keyParagraph,
-				bonus: c.bonus ?? false,
-				messageIndex: resolvedMessageIndex,
-				turnId: resolvedTurnId,
-				toolCallId: toolCallId !== _UNASSOCIATED_KEY ? toolCallId : undefined,
-			});
-		}
-	}
-	return refs;
+	return collectCanonicalReferencesFromCompatData({
+		data: getCompatData(item.plugins),
+		historyTurnIds,
+		indexByTurnId,
+	});
 }
 
 /**
@@ -167,35 +105,10 @@ export function withUpdatedReferences(
 	item: GroundTruthItem,
 	refs: Reference[],
 ): GroundTruthItem {
-	const retrievals: RetrievalsMap = {};
-	for (const ref of refs) {
-		const key = ref.toolCallId || _UNASSOCIATED_KEY;
-		if (!retrievals[key]) {
-			retrievals[key] = { candidates: [] };
-		}
-		retrievals[key].candidates.push({
-			url: ref.url,
-			title: ref.title,
-			chunk: ref.snippet,
-			relevance: undefined,
-			toolCallId: ref.toolCallId || undefined,
-			messageIndex: ref.turnId ? undefined : ref.messageIndex,
-			turnId: ref.turnId,
-			keyParagraph: ref.keyParagraph,
-			bonus: ref.bonus,
-			visitedAt: ref.visitedAt,
-		});
-	}
-
-	const plugins = { ...(item.plugins || {}) };
-	const existing = plugins[_RAG_COMPAT_KEY];
-	plugins[_RAG_COMPAT_KEY] = {
-		kind: _RAG_COMPAT_KEY,
-		version: existing?.version || "1.0",
-		data: { ...(existing?.data || {}), retrievals },
+	return {
+		...item,
+		plugins: writeCompatPluginEnvelope({ plugins: item.plugins, refs }),
 	};
-
-	return { ...item, plugins };
 }
 
 // ---------------------------------------------------------------------------
@@ -214,8 +127,8 @@ export type ConversationTurn = {
 	turnId?: string;
 	/** Stable workflow-step identity when a turn maps to a durable step. */
 	stepId?: string;
-	/** Free-form role string. "user" marks the human turn; any other value is a non-user (agent/assistant) turn.
-	 *  Common values: "user", "agent", "assistant", "output-agent", "orchestrator-agent". */
+	/** Free-form role string. "user" marks the human turn; all non-user roles
+	 *  represent non-user/answer content (e.g. "agent", "assistant", "planner"). */
 	role: string;
 	content: string;
 	/** Expected behavior(s) for this turn in the conversation (agent turns only, legacy/compat) */
@@ -340,8 +253,6 @@ export type GroundTruthItem = {
 	bucket?: string;
 	/** Legacy compatibility projection derived from history when absent. */
 	question?: string;
-	/** Legacy compatibility projection derived from history when absent. */
-	answer?: string;
 	/** ISO date string of the last review, when provided by the API. */
 	reviewedAt?: string | null;
 	/**
@@ -349,8 +260,6 @@ export type GroundTruthItem = {
 	 * Rendered in a collapsible pane above the Question/Answer editors.
 	 */
 	curationInstructions?: string;
-	/** Backend-computed total count of references (item-level + all turn-level). */
-	totalReferences?: number;
 	/** ETag for optimistic concurrency control */
 	_etag?: string;
 };
@@ -367,6 +276,18 @@ export type LegacyHostDeleteGate = (typeof LEGACY_HOST_DELETE_GATES)[number];
 
 export function getLegacyHostDeleteGates(): LegacyHostDeleteGate[] {
 	return [...LEGACY_HOST_DELETE_GATES];
+}
+
+function normalizeRole(role: string): string {
+	return role.trim().toLowerCase();
+}
+
+export function isUserRole(role: string): boolean {
+	return normalizeRole(role) === "user";
+}
+
+export function isNonUserRole(role: string): boolean {
+	return !isUserRole(role);
 }
 
 export function createConversationTurn(args: {
@@ -408,7 +329,7 @@ export function getLastUserTurn(item: GroundTruthItem): string {
 	}
 	// Find the last user turn
 	for (let i = history.length - 1; i >= 0; i--) {
-		if (history[i].role === "user") {
+		if (isUserRole(history[i].role)) {
 			return history[i].content;
 		}
 	}
@@ -417,19 +338,19 @@ export function getLastUserTurn(item: GroundTruthItem): string {
 
 /**
  * Returns the last agent message from history.
- * "Agent" is any turn whose role is not "user" (supports free-form roles).
+ * Non-user turns are treated as answer content.
  */
 export function getLastAgentTurn(item: GroundTruthItem): string {
 	if (!Array.isArray(item.history)) {
-		return item.answer || "";
+		return "";
 	}
 	const history = ensureConversationTurnIdentity(item.history);
 	if (history.length === 0) {
 		return "";
 	}
-	// Find the last non-user turn (any agent/assistant/orchestrator role)
+	// Find the last non-user turn.
 	for (let i = history.length - 1; i >= 0; i--) {
-		if (history[i].role !== "user") {
+		if (isNonUserRole(history[i].role)) {
 			return history[i].content;
 		}
 	}
@@ -458,8 +379,8 @@ export function getQueuePreview(item: GroundTruthItem): string {
 	if (!Array.isArray(item.history)) {
 		return item.question || "(no message)";
 	}
-	const first = ensureConversationTurnIdentity(item.history).find(
-		(t) => t.role === "user",
+	const first = ensureConversationTurnIdentity(item.history).find((t) =>
+		isUserRole(t.role),
 	);
 	return first?.content || "(no message)";
 }
@@ -477,7 +398,6 @@ export function withDerivedLegacyFields(
 	return {
 		...derivedItem,
 		question: getLastUserTurn(derivedItem),
-		answer: getLastAgentTurn(derivedItem),
 	};
 }
 

@@ -11,7 +11,9 @@ def make_item(dataset: str) -> dict:
         "datasetName": dataset,
         # Use NIL UUID for explicit bucket in tests
         "bucket": str(uuid.UUID("00000000-0000-0000-0000-000000000000")),
-        "synthQuestion": "What is the capital of France?",
+        "history": [
+            {"role": "user", "msg": "What is the capital of France?"},
+        ],
     }
 
 
@@ -59,13 +61,22 @@ async def test_update_with_etag(async_client: AsyncClient, user_headers):
     # update with If-Match header
     headers = dict(user_headers)
     headers.update({"If-Match": etag})
-    payload = {"answer": "Paris", "status": "approved"}
+    payload = {
+        "history": [
+            {"role": "user", "msg": "What is the capital of France?"},
+            {"role": "assistant", "msg": "Paris"},
+        ],
+        "status": "approved",
+    }
     r = await async_client.put(
         f"/v1/ground-truths/{dataset}/{bucket}/{item['id']}", json=payload, headers=headers
     )
     assert r.status_code == 200
     res = r.json()
-    assert res["answer"] == "Paris"
+    assert any(
+        turn.get("role") == "assistant" and turn.get("msg") == "Paris"
+        for turn in (res.get("history") or [])
+    )
     assert res["status"] == GroundTruthStatus.approved.value
 
 
@@ -142,7 +153,13 @@ async def test_snapshot_and_stats(async_client: AsyncClient, user_headers):
     bucket = data[0]["bucket"]
     headers = dict(user_headers)
     headers.update({"If-Match": etag})
-    payload = {"answer": "Paris", "status": "approved"}
+    payload = {
+        "history": [
+            {"role": "user", "msg": "What is the capital of France?"},
+            {"role": "assistant", "msg": "Paris"},
+        ],
+        "status": "approved",
+    }
     r = await async_client.put(
         f"/v1/ground-truths/{dataset}/{bucket}/{item['id']}", json=payload, headers=headers
     )
@@ -165,8 +182,9 @@ async def test_snapshot_and_stats(async_client: AsyncClient, user_headers):
 async def test_import_with_approve_flag(async_client: AsyncClient, user_headers):
     dataset = "test-approve-on-import"
 
-    # Item WITHOUT history: approval validation should reject it
+    # Item WITHOUT assistant response: approval validation should reject it
     invalid_item = make_item(dataset)
+    invalid_item["history"] = [{"role": "user", "msg": "What is the capital of France?"}]
     r = await async_client.post(
         "/v1/ground-truths?approve=true", json=[invalid_item], headers=user_headers
     )

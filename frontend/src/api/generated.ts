@@ -689,16 +689,6 @@ export interface components {
             };
             /** Tags */
             readonly tags: string[];
-            /** Synthquestion */
-            readonly synthQuestion: string | null;
-            /** Editedquestion */
-            readonly editedQuestion: string | null;
-            /** Answer */
-            readonly answer: string | null;
-            /** Refs */
-            readonly refs: components["schemas"]["Reference"][];
-            /** Totalreferences */
-            readonly totalReferences: number;
         };
         /**
          * AssignItemRequest
@@ -1056,7 +1046,7 @@ export interface components {
             item_id: string;
             /**
              * Field
-             * @description Field name where PII was detected (e.g., 'synthQuestion', 'history[2].msg')
+             * @description Field name where the PII was detected (e.g., 'history.question', 'history[2].msg')
              */
             field: string;
             /**
@@ -1163,35 +1153,6 @@ export interface components {
              */
             duration_ms: number;
         };
-        /**
-         * Reference
-         * @description Legacy RAG reference object retained for compatibility helpers and tests.
-         */
-        Reference: {
-            /**
-             * Url
-             * @description Reference URL (required, non-empty)
-             */
-            url: string;
-            /**
-             * Title
-             * @description Human-readable title for the reference
-             */
-            title?: string | null;
-            /** Content */
-            content?: string | null;
-            /** Keyexcerpt */
-            keyExcerpt?: string | null;
-            /** Type */
-            type?: string | null;
-            /**
-             * Bonus
-             * @default false
-             */
-            bonus: boolean;
-            /** Messageindex */
-            messageIndex?: number | null;
-        };
         /** RemoveTagsRequest */
         RemoveTagsRequest: {
             /** Tags */
@@ -1219,7 +1180,7 @@ export interface components {
          * SortField
          * @enum {string}
          */
-        SortField: "reviewedAt" | "updatedAt" | "id" | "hasAnswer" | "totalReferences" | "tagCount";
+        SortField: "reviewedAt" | "updatedAt" | "id" | "hasAnswer" | "tagCount";
         /**
          * SortOrder
          * @enum {string}
@@ -1450,11 +1411,13 @@ export interface operations {
                 excludeTags?: string | null;
                 /** @description Search for items by ID (case-sensitive partial match) */
                 itemId?: string | null;
-                /** @description Search for items by reference URL (case-sensitive partial match) */
-                refUrl?: string | null;
+                /** @description Plugin-namespaced filters in key=value form (repeat query param). Example: pluginFilter=rag-compat:refUrl=https://example.com */
+                pluginFilter?: string[] | null;
                 /** @description Search for items by keyword (case-insensitive text search across questions, answers, and history) */
                 keyword?: string | null;
                 sortBy?: components["schemas"]["SortField"];
+                /** @description Plugin-namespaced sort key, e.g. rag-compat:totalReferences */
+                pluginSort?: string | null;
                 sortOrder?: components["schemas"]["SortOrder"];
                 page?: number;
                 limit?: number;

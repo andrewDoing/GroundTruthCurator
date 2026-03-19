@@ -101,7 +101,7 @@ class ComputedTagPlugin(ABC):
                 return "length:long"
 
             def compute(self, doc: AgenticGroundTruthEntry) -> str | None:
-                content = doc.answer or ""
+                content = "\n".join(turn.msg for turn in (doc.history or []))
                 return self.tag_key if len(content) > 10000 else None
 
     Example (dynamic tag):
@@ -130,8 +130,7 @@ class ComputedTagPlugin(ABC):
 
         Args:
             doc: The AgenticGroundTruthEntry to evaluate.
-                 Contains fields like 'answer', 'history', 'refs', etc.
-                 Legacy fields like synthQuestion, editedQuestion are accessed via computed properties.
+                 Contains canonical fields like 'history', 'plugins', 'tool_calls', etc.
 
         Returns:
             The tag string if applicable, None otherwise.
@@ -326,7 +325,7 @@ class PluginPack(ABC):
                 self, item: AgenticGroundTruthEntry
             ) -> list[str]:
                 errors: list[str] = []
-                if not item.refs:
+                if not item.history:
                     errors.append("strict-ref: at least one reference is required")
                 return errors
     """
@@ -437,6 +436,45 @@ class PluginPack(ABC):
             A list of export transforms contributed by this pack.
         """
         return []
+
+    def matches_query_filter(
+        self, item: AgenticGroundTruthEntry, filter_key: str, filter_value: str
+    ) -> bool | None:
+        """Evaluate a plugin-namespaced query filter for an item.
+
+        Args:
+            item: Item being evaluated.
+            filter_key: Pack-local filter key (namespace removed by host).
+            filter_value: Filter value from the request.
+
+        Returns:
+            True/False when this pack handles the key, or None when unsupported.
+        """
+        return None
+
+    def get_sort_value(self, item: AgenticGroundTruthEntry, sort_key: str) -> Any | None:
+        """Return a plugin-owned sort value for a namespaced sort key.
+
+        Args:
+            item: Item being sorted.
+            sort_key: Pack-local sort key (namespace removed by host).
+
+        Returns:
+            Sort value when handled, or None when unsupported.
+        """
+        return None
+
+    def get_search_documents(self, item: AgenticGroundTruthEntry) -> list[dict[str, Any]]:
+        """Return plugin-owned search candidate docs for a single item.
+
+        Each candidate should include at least ``url`` when applicable and may
+        include ``id``, ``title``, and ``chunk``.
+        """
+        return []
+
+    def get_primary_reference_url(self, item: AgenticGroundTruthEntry) -> str | None:
+        """Return a primary reference URL for diagnostics/error reporting."""
+        return None
 
 
 class PluginPackRegistry:
@@ -624,6 +662,59 @@ class PluginPackRegistry:
     def __len__(self) -> int:
         """Return the number of registered packs."""
         return len(self._packs)
+
+    @staticmethod
+    def _split_namespaced_key(namespaced_key: str) -> tuple[str, str] | None:
+        pack_name, sep, pack_key = namespaced_key.partition(":")
+        if not sep or not pack_name.strip() or not pack_key.strip():
+            return None
+        return pack_name.strip(), pack_key.strip()
+
+    def matches_query_filters(
+        self, item: AgenticGroundTruthEntry, filters: Mapping[str, str] | None
+    ) -> bool:
+        """Return True when an item satisfies all plugin-namespaced filters."""
+        if not filters:
+            return True
+
+        for namespaced_key, value in filters.items():
+            split = self._split_namespaced_key(namespaced_key)
+            if split is None:
+                return False
+            pack_name, pack_key = split
+            pack = self.get(pack_name)
+            if pack is None:
+                return False
+            result = pack.matches_query_filter(item, pack_key, value)
+            if result is None or result is False:
+                return False
+        return True
+
+    def plugin_sort_value(self, item: AgenticGroundTruthEntry, namespaced_sort_key: str) -> Any:
+        """Resolve a plugin-namespaced sort key for an item."""
+        split = self._split_namespaced_key(namespaced_sort_key)
+        if split is None:
+            return None
+        pack_name, pack_key = split
+        pack = self.get(pack_name)
+        if pack is None:
+            return None
+        return pack.get_sort_value(item, pack_key)
+
+    def collect_search_documents(self, item: AgenticGroundTruthEntry) -> list[dict[str, Any]]:
+        """Collect plugin-owned search candidate documents for an item."""
+        docs: list[dict[str, Any]] = []
+        for pack in self._packs.values():
+            docs.extend(pack.get_search_documents(item))
+        return docs
+
+    def primary_reference_url(self, item: AgenticGroundTruthEntry) -> str | None:
+        """Return the first available plugin-owned primary reference URL."""
+        for pack in self._packs.values():
+            candidate = pack.get_primary_reference_url(item)
+            if candidate:
+                return candidate
+        return None
 
 
 # ---------------------------------------------------------------------------

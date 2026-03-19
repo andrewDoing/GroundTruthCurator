@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.models import AgenticGroundTruthEntry, Reference
+from app.domain.models import Reference
 from app.plugins.computed_tags.reference_type import (
     ReferenceTypeArticlePlugin,
     ReferenceTypeHelpcenterPlugin,
     _is_article_url,
     _is_helpcenter_url,
 )
+from tests.test_helpers import make_test_entry
 
 
 class TestUrlPatternDetection:
@@ -48,20 +49,18 @@ class TestReferenceTypePlugins:
 
     def test_no_refs_gets_no_tags(self):
         """Item with no refs should get neither tag."""
-        item = AgenticGroundTruthEntry(
-            id="test-no-refs",
-            datasetName="test-dataset",
-            synthQuestion="Question",
+        item = make_test_entry(
+            id="test-no-refs", dataset_name="test-dataset", synth_question="Question"
         )
         assert ReferenceTypeArticlePlugin().compute(item) is None
         assert ReferenceTypeHelpcenterPlugin().compute(item) is None
 
     def test_item_can_have_both_tags(self):
         """Item with both reference types should get both tags."""
-        item = AgenticGroundTruthEntry(
+        item = make_test_entry(
             id="test-both",
-            datasetName="test-dataset",
-            synthQuestion="Question",
+            dataset_name="test-dataset",
+            synth_question="Question",
             refs=[
                 Reference(url="https://docs.example.com/support/article/CS431120"),
                 Reference(url="https://support.example.com/help/product/page.html"),
@@ -72,10 +71,10 @@ class TestReferenceTypePlugins:
 
     def test_type_field_is_ignored(self):
         """Only URL matters, not the type field on Reference."""
-        item = AgenticGroundTruthEntry(
+        item = make_test_entry(
             id="test-type-ignored",
-            datasetName="test-dataset",
-            synthQuestion="Question",
+            dataset_name="test-dataset",
+            synth_question="Question",
             refs=[Reference(url="https://example.com/page", type="article")],
         )
         # URL doesn't match article pattern, so no tag even though type="article"

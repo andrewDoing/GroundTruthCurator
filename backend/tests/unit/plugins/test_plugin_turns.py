@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.models import AgenticGroundTruthEntry, HistoryItem
+from app.domain.models import HistoryItem
 from app.domain.enums import HistoryItemRole
 from app.plugins.computed_tags.turns import MultiTurnPlugin, SingleTurnPlugin
+from tests.test_helpers import make_test_entry
 
 
 class TestTurnsPlugins:
@@ -36,10 +37,10 @@ class TestTurnsPlugins:
             else None
         )
 
-        item = AgenticGroundTruthEntry(
+        item = make_test_entry(
             id="test-id",
-            datasetName="test-dataset",
-            synthQuestion="Question",
+            dataset_name="test-dataset",
+            synth_question="Question",
             history=history,
         )
 

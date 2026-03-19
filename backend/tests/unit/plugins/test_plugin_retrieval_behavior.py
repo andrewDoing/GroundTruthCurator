@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.models import AgenticGroundTruthEntry, Reference, HistoryItem
+from app.domain.models import Reference
 from app.domain.enums import HistoryItemRole
 from app.plugins.computed_tags.retrieval_behavior import (
     RetrievalBehaviorNoRefsPlugin,
@@ -12,6 +12,7 @@ from app.plugins.computed_tags.retrieval_behavior import (
     RetrievalBehaviorTwoRefsPlugin,
     RetrievalBehaviorRichPlugin,
 )
+from tests.test_helpers import make_test_entry
 
 
 class TestRetrievalBehaviorPlugins:
@@ -30,10 +31,10 @@ class TestRetrievalBehaviorPlugins:
     )
     def test_mutually_exclusive_classification(self, num_refs, expected_tag):
         """Each document gets exactly one retrieval behavior tag."""
-        item = AgenticGroundTruthEntry(
+        item = make_test_entry(
             id=f"test-{num_refs}-refs",
-            datasetName="test-dataset",
-            synthQuestion="Question",
+            dataset_name="test-dataset",
+            synth_question="Question",
             refs=[Reference(url=f"https://example.com/doc{i}") for i in range(num_refs)],
         )
 
@@ -51,27 +52,21 @@ class TestRetrievalBehaviorPlugins:
         assert non_none[0] == expected_tag
 
     def test_refs_in_history_are_counted(self):
-        """References in history turns are included in the count."""
-        item = AgenticGroundTruthEntry(
+        """Canonical plugin references with turn ownership are included in the count."""
+        item = make_test_entry(
             id="test-history-refs",
-            datasetName="test-dataset",
-            synthQuestion="Follow up question",
+            dataset_name="test-dataset",
+            synth_question="Follow up question",
             history=[
-                HistoryItem(role=HistoryItemRole.user, msg="First question"),
-                HistoryItem(
-                    role=HistoryItemRole.assistant,
-                    msg="First answer",
-                    refs=[
-                        Reference(url="https://example.com/doc1"),
-                        Reference(url="https://example.com/doc2"),
-                    ],
-                ),
-                HistoryItem(role=HistoryItemRole.user, msg="Second question"),
-                HistoryItem(
-                    role=HistoryItemRole.assistant,
-                    msg="Second answer",
-                    refs=[Reference(url="https://example.com/doc3")],
-                ),
+                {"role": HistoryItemRole.user, "msg": "First question"},
+                {"role": HistoryItemRole.assistant, "msg": "First answer"},
+                {"role": HistoryItemRole.user, "msg": "Second question"},
+                {"role": HistoryItemRole.assistant, "msg": "Second answer"},
+            ],
+            refs=[
+                Reference(url="https://example.com/doc1", messageIndex=1),
+                Reference(url="https://example.com/doc2", messageIndex=1),
+                Reference(url="https://example.com/doc3", messageIndex=3),
             ],
         )
         # 3 refs total in history -> rich

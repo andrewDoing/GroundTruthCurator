@@ -21,6 +21,7 @@ from azure.core import MatchConditions
 from azure.cosmos.exceptions import CosmosHttpResponseError, CosmosResourceNotFoundError
 
 from app.adapters.repos.base import GroundTruthRepo
+from app.domain.conversation_fields import answer_text_from_item, question_text_from_item
 from app.domain.models import (
     AgenticGroundTruthEntry,
     Stats,
@@ -32,6 +33,8 @@ from app.domain.models import (
 )
 from app.domain.enums import GroundTruthStatus, SortField, SortOrder
 from app.core.config import get_sampling_allocation
+from app.plugins.base import PluginPackRegistry
+from app.plugins.pack_registry import get_default_pack_registry
 
 
 _SMART_PUNCT_REPLACEMENTS: dict[str, str] = {
@@ -51,19 +54,16 @@ _CONTROL_CHAR_TRANSLATION = {
     **{ord(ch): " " for ch in (chr(i) for i in range(32)) if ch not in ("\n", "\r", "\t")},
     ord("\u007f"): " ",
 }
-
 # Cosmos DB SELECT clause for AgenticGroundTruthEntry fields used in several functions
 # list_gt_paginated, _list_gt_paginated_with_emulator, list_gt_by_dataset
-# Note: legacy fields like synthQuestion, editedQuestion are still selected for compatibility
-# during migration, but the model will access them via computed properties
 SELECT_CLAUSE_C = (
     "SELECT c.id, c.datasetName, c.bucket, c.status, c.docType, c.schemaVersion, "
-    "c.synthQuestion, c.editedQuestion, c.answer, c.refs, c.tags, c.manualTags, c.computedTags, c.comment, c.plugins, "
+    "c.tags, c.manualTags, c.computedTags, c.comment, c.plugins, "
     "c.scenarioId, c.history, c.contextEntries, c.traceIds, c.toolCalls, c.expectedTools, "
     "c.feedback, c.metadata, c.createdBy, c.createdAt, c.tracePayload, "
     "c.contextUsedForGeneration, c.contextSource, c.modelUsedForGeneration, "
     "c.semanticClusterNumber, c.weight, c.samplingBucket, c.questionLength, "
-    "c.assignedTo, c.assignedAt, c.totalReferences, c.updatedAt, c.updatedBy, c.reviewedAt, c._etag "
+    "c.assignedTo, c.assignedAt, c.updatedAt, c.updatedBy, c.reviewedAt, c._etag "
 )
 
 
@@ -147,7 +147,7 @@ def _sanitize_string_for_cosmos(value: str) -> str:
 def _normalize_unicode_for_cosmos(obj: Any) -> Any:
     """
     Recursively sanitize strings to work around Cosmos emulator Unicode bugs.
-    Also Base64-encodes 'content' fields in 'refs' arrays as a workaround.
+    Also Base64-encodes 'content' fields in reference arrays as a workaround.
     """
 
     if not settings.COSMOS_DISABLE_UNICODE_ESCAPE:
@@ -158,11 +158,11 @@ def _normalize_unicode_for_cosmos(obj: Any) -> Any:
     if isinstance(obj, dict):
         normalized = {}
         for k, v in obj.items():
-            # Special handling for 'refs' array - encode content fields
-            if k == "refs" and isinstance(v, list):
-                # First normalize the refs
+            # Special handling for canonical reference arrays - encode content fields
+            if k == "references" and isinstance(v, list):
+                # First normalize the reference entries
                 normalized_refs = [_normalize_unicode_for_cosmos(item) for item in v]
-                # Then Base64-encode content fields in refs
+                # Then Base64-encode content fields in references
                 normalized[k] = _base64_encode_refs_content(normalized_refs)
             else:
                 normalized[k] = _normalize_unicode_for_cosmos(v)
@@ -175,7 +175,7 @@ def _normalize_unicode_for_cosmos(obj: Any) -> Any:
 def _restore_unicode_from_cosmos(obj: Any) -> Any:
     """
     Reverse emulator-only sanitization markers after fetching documents.
-    Also Base64-decodes 'content' fields in 'refs' arrays.
+    Also Base64-decodes 'content' fields in reference arrays.
     """
 
     if not settings.COSMOS_DISABLE_UNICODE_ESCAPE:
@@ -188,8 +188,8 @@ def _restore_unicode_from_cosmos(obj: Any) -> Any:
     if isinstance(obj, dict):
         restored = {}
         for k, v in obj.items():
-            # Special handling for 'refs' array - decode content fields
-            if k == "refs" and isinstance(v, list):
+            # Special handling for canonical reference arrays - decode content fields
+            if k == "references" and isinstance(v, list):
                 # First decode Base64-encoded content fields
                 decoded_refs = _base64_decode_refs_content(v)
                 # Then restore backslash sentinels
@@ -221,6 +221,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         connection_verify: bool | str | None = None,
         test_mode: bool = False,
         credential: Any | None = None,
+        plugin_pack_registry: PluginPackRegistry | None = None,
     ):
         # Defer CosmosClient creation to _init so the underlying aiohttp session binds
         # to the event loop of the running app (avoids cross-loop RuntimeError in tests).
@@ -236,6 +237,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         self._db: DatabaseProxy | None = None
         self._gt_container: ContainerProxy | None = None
         self._assignments_container: ContainerProxy | None = None
+        self._plugin_pack_registry = plugin_pack_registry or get_default_pack_registry()
         # Track the event loop on which the aiohttp client/session was created to
         # guard against cross-loop usage during tests.
         self._loop: asyncio.AbstractEventLoop | None = None  # set in _init on first use
@@ -394,10 +396,6 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         # Dump in JSON mode so datetimes/enums are serialized to strings
         d = item.model_dump(mode="json", by_alias=True)
 
-        # Ensure totalReferences is computed and persisted for sorting/querying
-        # Use the property getter which handles both explicit values and plugin storage
-        d["totalReferences"] = item.totalReferences
-
         if d.get("bucket") is not None:
             d["bucket"] = str(d["bucket"])  # store UUID as string
         # Ensure updatedAt present as ISO string
@@ -406,58 +404,23 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
         return d
 
-    @staticmethod
-    def _from_doc(doc: dict[str, Any]) -> AgenticGroundTruthEntry:
+    def _from_doc(self, doc: dict[str, Any]) -> AgenticGroundTruthEntry:
         # Normalize doc before validation
         normalized_doc = (
             _restore_unicode_from_cosmos(doc) if settings.COSMOS_DISABLE_UNICODE_ESCAPE else doc
         )
-        from app.plugins.packs.rag_compat import _LEGACY_PLUGIN_FIELDS
-
-        allowed_keys = (
-            {field_name for field_name in AgenticGroundTruthEntry.model_fields}
-            | {
-                field.alias
-                for field in AgenticGroundTruthEntry.model_fields.values()
-                if field.alias is not None
-            }
-            | {
-                # Include computed_fields that need to be preserved from Cosmos documents
-                "totalReferences"  # Computed and persisted for sorting/querying
-            }
-            | set(_LEGACY_PLUGIN_FIELDS)
-        )
-        normalized_doc = {
-            key: value for key, value in normalized_doc.items() if key in allowed_keys
+        allowed_keys = {field_name for field_name in AgenticGroundTruthEntry.model_fields} | {
+            field.alias
+            for field in AgenticGroundTruthEntry.model_fields.values()
+            if field.alias is not None
         }
+        transformed_doc: dict[str, Any] = dict(normalized_doc)
+        for transform in self._plugin_pack_registry.collect_import_transforms():
+            transformed_doc = transform.transform(transformed_doc)
 
-        plugins = normalized_doc.get("plugins")
-        rag_plugin = plugins.get("rag-compat") if isinstance(plugins, dict) else None
-        rag_data = rag_plugin.get("data") if isinstance(rag_plugin, dict) else None
-        history_annotations = (
-            rag_data.get("historyAnnotations") if isinstance(rag_data, dict) else None
-        )
-        history = normalized_doc.get("history")
-        if isinstance(history, list) and isinstance(history_annotations, list):
-            merged_history: list[Any] = []
-            for index, entry in enumerate(history):
-                if isinstance(entry, dict):
-                    entry_dict = dict(entry)
-                    annotation = (
-                        history_annotations[index] if index < len(history_annotations) else None
-                    )
-                    if isinstance(annotation, dict):
-                        if "refs" in annotation and "refs" not in entry_dict:
-                            entry_dict["refs"] = annotation["refs"]
-                        if (
-                            "expectedBehavior" in annotation
-                            and "expectedBehavior" not in entry_dict
-                        ):
-                            entry_dict["expectedBehavior"] = annotation["expectedBehavior"]
-                    merged_history.append(entry_dict)
-                else:
-                    merged_history.append(entry)
-            normalized_doc["history"] = merged_history
+        normalized_doc = {
+            key: value for key, value in transformed_doc.items() if key in allowed_keys
+        }
 
         # Convert None to [] for history field (legacy data compatibility)
         if normalized_doc.get("history") is None:
@@ -465,12 +428,6 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
         # Pydantic will parse aliases automatically
         item = AgenticGroundTruthEntry.model_validate(normalized_doc)
-
-        # IMPORTANT: totalReferences is a @computed_field, so Pydantic won't deserialize it
-        # from the document. We need to manually set it in __dict__ so the property getter
-        # can find it. This preserves the value we computed and persisted in _to_doc.
-        if "totalReferences" in normalized_doc:
-            item.__dict__["totalReferences"] = normalized_doc["totalReferences"]
 
         return item
 
@@ -595,12 +552,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 status = getattr(e, "status_code", None)
                 if status == 409:
                     # Duplicate; report but continue others
-                    article_num = (
-                        doc.get("refs", [{}])[0].get("url", "unknown")
-                        if doc.get("refs")
-                        else "unknown"
-                    )
-                    message = f"exists (article: {article_num}, id: {doc.get('id', 'unknown')})"
+                    message = f"exists (id: {doc.get('id', 'unknown')})"
                     errors.append(message)
                     persistence_errors.append(
                         BulkImportPersistenceError(
@@ -610,13 +562,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                         )
                     )
                 else:
-                    article_num = (
-                        doc.get("refs", [{}])[0].get("url", "unknown")
-                        if doc.get("refs")
-                        else "unknown"
-                    )
                     message = (
-                        f"create_failed (article: {article_num}, id: {doc.get('id', 'unknown')}): "
+                        f"create_failed (id: {doc.get('id', 'unknown')}): "
                         f"{getattr(e, 'message', str(e))}"
                     )
                     errors.append(message)
@@ -708,16 +655,6 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 )
                 params.append({"name": pname, "value": tag})
 
-        # Ref URL filtering only if not using the Cosmos Emulator as it does not support EXISTS
-        # include_ref_url set to True when Comsomus Emulator is not used
-        if include_ref_url and ref_url:
-            clauses.append(
-                "(EXISTS(SELECT VALUE r FROM r IN c.refs WHERE CONTAINS(r.url, @refUrl)) "
-                "OR EXISTS(SELECT VALUE h FROM h IN c.history "
-                "WHERE EXISTS(SELECT VALUE r FROM r IN h.refs WHERE CONTAINS(r.url, @refUrl))))"
-            )
-            params.append({"name": "@refUrl", "value": ref_url})
-
         where_clause = " WHERE " + " AND ".join(clauses) if clauses else ""
         return where_clause, params
 
@@ -747,7 +684,19 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         return field, direction
 
     @staticmethod
-    def _sort_key(item: AgenticGroundTruthEntry, field: SortField) -> tuple[Any, ...]:
+    def _sort_key(
+        item: AgenticGroundTruthEntry,
+        field: SortField,
+        plugin_sort: str | None = None,
+        plugin_pack_registry: PluginPackRegistry | None = None,
+    ) -> tuple[Any, ...]:
+        if plugin_sort:
+            if plugin_pack_registry is None:
+                return (-1, item.id)
+            return (
+                plugin_pack_registry.plugin_sort_value(item, plugin_sort),
+                item.id,
+            )
         if field == SortField.id:
             return (item.id or "",)
 
@@ -762,14 +711,11 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         if field == SortField.has_answer:
             # In-memory sort: Primary by presence of non-empty answer, secondary by reviewed_at
             # (Cosmos ORDER BY uses c.reviewedAt placeholder - see _build_secure_sort_clause)
-            has_answer = 1 if item.answer and item.answer.strip() else 0
+            has_answer = 1 if answer_text_from_item(item) else 0
             reference_time = (
                 item.reviewed_at or item.updated_at or datetime(1970, 1, 1, tzinfo=timezone.utc)
             )
             return (has_answer, reference_time, item.id)
-
-        if field == SortField.totalReferences:
-            return (item.totalReferences, item.id)
 
         if field == SortField.tag_count:
             tag_count = len(item.tags)
@@ -789,8 +735,8 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         """Check if item matches keyword search (case-insensitive substring match).
 
         Searches across:
-        - synth_question and edited_question fields
-        - answer field
+        - canonical question text (derived from history/plugin data)
+        - canonical answer text (derived from history/plugin data)
         - history[*].msg content (all turns)
         """
         if not keyword:
@@ -799,13 +745,13 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         search_term = keyword.lower()
 
         # Search question fields
-        if item.synth_question and search_term in item.synth_question.lower():
-            return True
-        if item.edited_question and search_term in item.edited_question.lower():
+        question_text = question_text_from_item(item)
+        if question_text and search_term in question_text.lower():
             return True
 
         # Search answer field
-        if item.answer and search_term in item.answer.lower():
+        answer_text = answer_text_from_item(item)
+        if answer_text and search_term in answer_text.lower():
             return True
 
         # Search history messages
@@ -830,7 +776,6 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             SortField.updated_at: "c.updatedAt",
             SortField.reviewed_at: "c.reviewedAt",
             SortField.has_answer: "c.reviewedAt",  # Placeholder - actual sort is in-memory
-            SortField.totalReferences: "c.totalReferences",
         }
 
         # Security: Safe direction mapping (no user input)
@@ -860,9 +805,10 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         tags: list[str] | None = None,
         exclude_tags: list[str] | None = None,
         item_id: str | None = None,
-        ref_url: str | None = None,
+        plugin_filters: dict[str, str] | None = None,
         keyword: str | None = None,
         sort_by: SortField | None = None,
+        plugin_sort: str | None = None,
         sort_order: SortOrder | None = None,
         page: int = 1,
         limit: int = 25,
@@ -889,9 +835,11 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         if (
             normalized_tags
             or normalized_exclude_tags
-            or ref_url
+            or plugin_filters
             or keyword
             or sort_field == SortField.tag_count
+            or sort_field == SortField.has_answer
+            or plugin_sort is not None
         ):
             # Always use in-memory filtering path for these filters
             # (Cosmos emulator has limitations, and keyword search needs in-memory filtering regardless)
@@ -901,9 +849,10 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                 normalized_tags,
                 normalized_exclude_tags,
                 item_id,
-                ref_url,
+                plugin_filters,
                 keyword,
                 sort_by,
+                plugin_sort,
                 sort_order,
                 safe_page,
                 safe_limit,
@@ -916,9 +865,9 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             normalized_tags,
             normalized_exclude_tags,
             item_id,
-            ref_url,
+            None,
             include_tags=True,
-            include_ref_url=True,
+            include_ref_url=False,
         )
 
         # Build ORDER BY clause
@@ -982,9 +931,10 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
         tags: list[str],
         exclude_tags: list[str],
         item_id: str | None,
-        ref_url: str | None,
+        plugin_filters: dict[str, str] | None,
         keyword: str | None,
         sort_by: SortField | None,
+        plugin_sort: str | None,
         sort_order: SortOrder | None,
         page: int,
         limit: int,
@@ -1008,7 +958,7 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
             tags,
             exclude_tags,
             item_id,
-            ref_url,
+            None,
             include_tags=False,  # Disable SQL-level tag filtering - filter in-memory instead
             include_ref_url=False,  # Disable ref_url filtering for emulator
         )
@@ -1071,39 +1021,23 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
                     filtered_items_exclude.append(item)
             raw_items = filtered_items_exclude
 
-        # Filter by ref_url in-memory (EXISTS not supported by Cosmos DB emulator)
-        if ref_url:
+        # Filter by plugin-owned filters in-memory.
+        if plugin_filters:
             start = time.time()
-            filtered_items_ref: list[AgenticGroundTruthEntry] = []
-            total_refs_checked = 0
+            filtered_items_plugin: list[AgenticGroundTruthEntry] = []
 
             for item in raw_items:
-                # Check item-level refs
-                has_match = any(ref_url in ref.url for ref in item.refs)
-                total_refs_checked += len(item.refs)
-
-                # Check history-level refs if no match yet
-                if not has_match and item.history:
-                    for turn in item.history:
-                        turn_refs = getattr(turn, "refs", None)
-                        if turn_refs:
-                            total_refs_checked += len(turn_refs)
-                            if any(ref_url in ref.url for ref in turn_refs):
-                                has_match = True
-                                break
-                if has_match:
-                    filtered_items_ref.append(item)
+                if self._plugin_pack_registry.matches_query_filters(item, plugin_filters):
+                    filtered_items_plugin.append(item)
 
             elapsed = time.time() - start
             self._logger.info(
-                "repo.ref_url_filter.performance"
+                "repo.plugin_filter.performance"
                 f"items_checked: {len(raw_items)}, "
-                f"items_matched: {len(filtered_items_ref)}, "
-                f"refs_checked: {total_refs_checked}, "
+                f"items_matched: {len(filtered_items_plugin)}, "
                 f"elapsed_ms: {elapsed * 1000}, "
-                f"ref_url_length: {len(ref_url)}, "
             )
-            raw_items = filtered_items_ref
+            raw_items = filtered_items_plugin
 
         # Filter by keyword in-memory (case-insensitive substring match)
         if keyword:
@@ -1126,7 +1060,15 @@ class CosmosGroundTruthRepo(GroundTruthRepo):
 
         # Sort in-memory (required since ORDER BY conflicts with ARRAY_CONTAINS in Cosmos DB)
         reverse_sort = sort_direction == SortOrder.desc
-        raw_items.sort(key=lambda item: self._sort_key(item, sort_field), reverse=reverse_sort)
+        raw_items.sort(
+            key=lambda item: self._sort_key(
+                item,
+                sort_field,
+                plugin_sort=plugin_sort,
+                plugin_pack_registry=self._plugin_pack_registry,
+            ),
+            reverse=reverse_sort,
+        )
 
         total = len(raw_items)
         total_pages = math.ceil(total / limit) if total > 0 else 0

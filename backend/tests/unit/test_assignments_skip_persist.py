@@ -129,7 +129,7 @@ async def test_status_skipped_keeps_assignment(async_client, user_headers):
             id=item_id,
             datasetName=dataset,
             bucket=bucket,
-            synthQuestion="Q?",
+            history=[{"role": "user", "msg": "Q?"}],
             status=GroundTruthStatus.draft,
             assignedTo=user_headers["X-User-Id"],
             assignedAt=assigned_at,

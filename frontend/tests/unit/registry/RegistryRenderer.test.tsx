@@ -25,7 +25,7 @@ function renderExtension(toolCall: ToolCallRecord) {
 				item: {
 					id: "item-1",
 					question: "q",
-					answer: "",
+					history: [{ role: "agent", content: "" }],
 					status: "draft",
 					providerId: "json",
 					tags: [],

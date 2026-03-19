@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ApiReference } from "../../../src/adapters/apiMapper";
 import { ApiProvider } from "../../../src/adapters/apiProvider";
 import type { components } from "../../../src/api/generated";
 import type {
@@ -34,18 +35,15 @@ vi.mock("../../../src/services/groundTruths", () => ({
 }));
 
 type ApiHistoryEntry = components["schemas"]["HistoryEntry"] & {
-	refs?: components["schemas"]["Reference"][];
+	refs?: ApiReference[];
 	expectedBehavior?: string[];
+	turnId?: string;
+	stepId?: string;
 };
 type ApiItem = Omit<
 	components["schemas"]["AgenticGroundTruthEntry-Output"],
 	"history"
 > & {
-	synthQuestion?: string | null;
-	editedQuestion?: string | null;
-	answer?: string | null;
-	refs?: components["schemas"]["Reference"][];
-	totalReferences?: number;
 	tags?: string[];
 	comment?: string | null;
 	history?: ApiHistoryEntry[];
@@ -57,11 +55,7 @@ function makeApiItem(overrides: Partial<ApiItem> = {}): ApiItem {
 	return {
 		id: "gt-1",
 		status: "draft",
-		answer: "Original answer",
-		synthQuestion: "Synth question",
-		editedQuestion: "Edited question",
 		history: [],
-		refs: [],
 		tags: [],
 		comment: null,
 		datasetName: "dataset-1",
@@ -69,6 +63,20 @@ function makeApiItem(overrides: Partial<ApiItem> = {}): ApiItem {
 		_etag: "etag-1",
 		...overrides,
 	} as ApiItem;
+}
+
+function withCompatData(
+	data: Record<string, unknown>,
+): Pick<ApiItem, "plugins"> {
+	return {
+		plugins: {
+			"rag-compat": {
+				kind: "rag-compat",
+				version: "1.0",
+				data,
+			},
+		},
+	};
 }
 
 beforeEach(() => {
@@ -94,14 +102,14 @@ describe("ApiProvider mapping", () => {
 			expect(history).toHaveLength(2);
 			expect(history[0]).toMatchObject({ role: "user", content: "How do I?" });
 			expect(history[1]).toMatchObject({
-				role: "agent",
+				role: "assistant",
 				content: "Use the regenerate command.",
 			});
 			expect(history[0]?.turnId).toBeTruthy();
 			expect(history[1]?.turnId).toBeTruthy();
 		});
 
-		it("maps per-turn refs onto the owning non-user turn", async () => {
+		it("ignores retired history refs payloads on read", async () => {
 			const apiItem = makeApiItem({
 				history: [
 					{ role: "user", msg: "Q" },
@@ -122,77 +130,53 @@ describe("ApiProvider mapping", () => {
 			mockGetMyAssignments.mockResolvedValue([apiItem]);
 			const provider = new ApiProvider();
 			const { items } = await provider.list();
-			const turn = items[0].history?.[1];
-			const [ref] = getItemReferences(items[0]);
-			expect(ref).toMatchObject({
-				url: "https://turn.ref",
-				bonus: true,
-				messageIndex: 1,
-				turnId: turn?.turnId,
-			});
+			expect(getItemReferences(items[0])).toEqual([]);
 		});
 	});
 
-	describe("compat-migration read projections", () => {
-		it("projects legacy single-turn payloads into stable user and agent turns", async () => {
+	describe("retired compat read behavior", () => {
+		it("does not synthesize history from retired compat question/answer fields", async () => {
 			const apiItem = makeApiItem({
-				synthQuestion: "What is X?",
-				editedQuestion: "What is X exactly?",
-				answer: "X is Y",
-				tags: ["important", "technical"],
 				history: undefined,
+				...withCompatData({
+					synthQuestion: "What is X?",
+					editedQuestion: "What is X exactly?",
+					answer: "X is Y",
+				}),
 			});
 			mockGetMyAssignments.mockResolvedValue([apiItem]);
 			const provider = new ApiProvider();
 			const { items } = await provider.list();
-			const history = items[0].history ?? [];
-			expect(history).toHaveLength(2);
-			expect(history[0]).toMatchObject({
-				role: "user",
-				content: "What is X exactly?",
-			});
-			expect(history[1]).toMatchObject({
-				role: "agent",
-				content: "X is Y",
-			});
+			expect(items[0].history).toBeUndefined();
 		});
 
-		it("anchors legacy top-level refs to the synthesized agent turn even without an answer", async () => {
+		it("does not import retired compat refs into canonical references", async () => {
 			const apiItem = makeApiItem({
-				editedQuestion: "How do I configure authentication for my app?",
-				answer: "",
-				refs: [
-					{
-						url: "https://docs.example.com/auth",
-						content: "Authentication documentation content",
-						keyExcerpt: "Use OAuth 2.0 for authentication",
-						bonus: false,
-					},
-				],
 				history: undefined,
+				...withCompatData({
+					editedQuestion: "How do I configure authentication for my app?",
+					answer: "",
+					refs: [
+						{
+							url: "https://docs.example.com/auth",
+							content: "Authentication documentation content",
+							keyExcerpt: "Use OAuth 2.0 for authentication",
+							bonus: false,
+						},
+					],
+				}),
 			});
 			mockGetMyAssignments.mockResolvedValue([apiItem]);
 			const provider = new ApiProvider();
 			const { items } = await provider.list();
-			const history = items[0].history ?? [];
-			const [ref] = getItemReferences(items[0]);
-			expect(history).toHaveLength(2);
-			expect(history[0]?.content).toBe(
-				"How do I configure authentication for my app?",
-			);
-			expect(history[1]).toMatchObject({ role: "agent", content: "" });
-			expect(ref).toMatchObject({
-				url: "https://docs.example.com/auth",
-				messageIndex: 1,
-				turnId: history[1]?.turnId,
-			});
+			expect(getItemReferences(items[0])).toEqual([]);
 		});
 	});
 });
 
 describe("ApiProvider serialization", () => {
 	describe("core-generic multi-turn writes", () => {
-		it("serializes history roles and keeps refs scoped to non-user turns", async () => {
+		it("serializes history roles and omits retired history refs", async () => {
 			const apiItem = makeApiItem({
 				history: [
 					{ role: "user", msg: "Original Q" },
@@ -207,10 +191,6 @@ describe("ApiProvider serialization", () => {
 						...apiItem,
 						id,
 						history: (patch.history as ApiItem["history"]) ?? apiItem.history,
-						refs: (patch.refs as ApiItem["refs"]) ?? apiItem.refs,
-						answer: (patch.answer as string) ?? apiItem.answer,
-						editedQuestion:
-							(patch.editedQuestion as string) ?? apiItem.editedQuestion,
 						status: (patch.status as ApiItem["status"]) ?? apiItem.status,
 					} as ApiItem;
 				},
@@ -230,11 +210,6 @@ describe("ApiProvider serialization", () => {
 					url: "https://turn",
 					turnId: "turn-agent-updated",
 				},
-				{
-					id: "user-ref",
-					url: "https://user",
-					turnId: "turn-user-updated",
-				},
 			];
 			const updated: GroundTruthItem = withUpdatedReferences(
 				{ ...domain, history },
@@ -245,73 +220,29 @@ describe("ApiProvider serialization", () => {
 			const patch = capturedPatch as Patch;
 			const patchHistory = patch.history as ApiItem["history"];
 			expect(patchHistory?.[0]?.role).toBe("user");
-			expect(patchHistory?.[1]?.role).toBe("assistant");
+			expect(patchHistory?.[1]?.role).toBe("agent");
 			expect(patchHistory?.[0]?.refs).toBeUndefined();
-			expect(patchHistory?.[1]?.refs).toHaveLength(1);
-			expect(patchHistory?.[1]?.refs?.[0]?.url).toBe("https://turn");
-		});
-
-		it("keeps true multi-turn refs out of top-level compatibility fields", async () => {
-			const apiItem = makeApiItem({
-				history: [
-					{ role: "user", msg: "Question" },
-					{
-						role: "assistant",
-						msg: "Answer",
-						refs: [
-							{
-								url: "https://turn.ref",
-								content: "Turn content",
-								bonus: false,
-							},
-						],
-					},
-				],
-				refs: [],
-			});
-			let capturedPatch: Patch | undefined;
-			mockUpdateAssignedGroundTruth.mockImplementation(
-				async (
-					_dataset: string,
-					_bucket: string,
-					_id: string,
-					patch: Patch,
-				) => {
-					capturedPatch = patch;
-					return apiItem;
-				},
-			);
-			mockGetMyAssignments.mockResolvedValue([apiItem]);
-			const provider = new ApiProvider();
-			const { items } = await provider.list();
-			await provider.save(items[0]);
-			const patch = capturedPatch as Patch;
-			const patchHistory = patch.history as ApiItem["history"];
-			expect(patch.refs).toHaveLength(0);
-			expect(patchHistory?.[1]?.refs).toHaveLength(1);
-			expect(patchHistory?.[1]?.refs?.[0]?.url).toBe("https://turn.ref");
+			expect(patchHistory?.[1]?.refs).toBeUndefined();
+			expect((patch as Record<string, unknown>).refs).toBeUndefined();
 		});
 	});
 
-	describe("compat-migration write projections", () => {
-		it("preserves legacy top-level refs when saving a synthesized single-turn item", async () => {
+	describe("canonical write projections", () => {
+		it("persists canonical plugin references without history refs emission", async () => {
 			const apiItem = makeApiItem({
-				synthQuestion: "What is X?",
-				answer: "X is Y",
-				refs: [
-					{
-						url: "https://legacy.ref/doc1",
-						content: "Legacy content",
-						keyExcerpt: "Key paragraph",
-						bonus: false,
-					},
-					{
-						url: "https://legacy.ref/doc2",
-						content: "Bonus content",
-						bonus: true,
-					},
+				history: [
+					{ role: "user", msg: "Q", turnId: "t-user" },
+					{ role: "assistant", msg: "A", turnId: "t-agent" },
 				],
-				history: undefined,
+				...withCompatData({
+					references: [
+						{
+							url: "https://canonical.ref/doc1",
+							content: "Canonical content",
+							messageIndex: 1,
+						},
+					],
+				}),
 			});
 			let capturedPatch: Patch | undefined;
 			mockUpdateAssignedGroundTruth.mockImplementation(
@@ -320,7 +251,7 @@ describe("ApiProvider serialization", () => {
 					return {
 						...apiItem,
 						id,
-						refs: (patch.refs as ApiItem["refs"]) ?? apiItem.refs,
+						plugins: (patch.plugins as ApiItem["plugins"]) ?? apiItem.plugins,
 						status: (patch.status as ApiItem["status"]) ?? apiItem.status,
 					} as ApiItem;
 				},
@@ -328,11 +259,11 @@ describe("ApiProvider serialization", () => {
 			mockGetMyAssignments.mockResolvedValue([apiItem]);
 			const provider = new ApiProvider();
 			const { items } = await provider.list();
-			const legacyRefs = getItemReferences(items[0]);
+			const existingRefs = getItemReferences(items[0]);
 			const updated: GroundTruthItem = withUpdatedReferences(
 				items[0],
-				legacyRefs.map((ref) =>
-					ref.url === "https://legacy.ref/doc1"
+				existingRefs.map((ref) =>
+					ref.url === "https://canonical.ref/doc1"
 						? { ...ref, bonus: true, keyParagraph: "Updated key" }
 						: ref,
 				),
@@ -340,17 +271,12 @@ describe("ApiProvider serialization", () => {
 			await provider.save(updated);
 			const patch = capturedPatch as Patch;
 			const patchHistory = patch.history as ApiItem["history"];
-			expect(patch.refs).toHaveLength(2);
-			expect(patch.refs?.[0]).toMatchObject({
-				url: "https://legacy.ref/doc1",
-				bonus: true,
-				keyExcerpt: "Updated key",
-			});
-			expect(patch.refs?.[1]).toMatchObject({
-				url: "https://legacy.ref/doc2",
-				bonus: true,
-			});
-			expect(patchHistory?.[1]?.refs).toHaveLength(2);
+			expect((patch as Record<string, unknown>).refs).toBeUndefined();
+			expect(patchHistory?.[1]?.refs).toBeUndefined();
+			expect(
+				(patch.plugins?.["rag-compat"]?.data as { references?: unknown })
+					.references,
+			).toBeDefined();
 		});
 	});
 });

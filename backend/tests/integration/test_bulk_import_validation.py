@@ -15,13 +15,17 @@ async def test_bulk_import_with_valid_items_passes(
         {
             "id": "",
             "datasetName": "test-dataset",
-            "synthQuestion": "What is the capital of France?",
-            "refs": [{"url": "https://example.com", "content": "Paris info"}],
+            "history": [
+                {"role": "user", "msg": "What is the capital of France?"},
+                {"role": "assistant", "msg": "Paris."},
+            ],
         },
         {
             "id": "",
             "datasetName": "test-dataset",
-            "synthQuestion": "How does gravity work?",
+            "history": [
+                {"role": "user", "msg": "How does gravity work?"},
+            ],
         },
     ]
 
@@ -53,18 +57,23 @@ async def test_bulk_import_filters_invalid_items(
         {
             "id": "valid-1",
             "datasetName": "test-dataset",
-            "synthQuestion": "This is a valid question that meets length requirements?",
+            "history": [
+                {"role": "user", "msg": "This is a valid question that meets length requirements?"},
+            ],
         },
         {
             "id": "valid-2",
             "datasetName": "test-dataset",
-            "synthQuestion": "Another valid question that is long enough?",
+            "history": [
+                {"role": "user", "msg": "Another valid question that is long enough?"},
+            ],
         },
         {
-            "id": "invalid-url",
+            "id": "invalid-history",
             "datasetName": "test-dataset",
-            "synthQuestion": "Question with bad reference URL?",
-            "refs": [{"url": ""}],
+            "history": [
+                {"role": "user", "msg": ""},
+            ],
         },
     ]
 
@@ -78,5 +87,5 @@ async def test_bulk_import_filters_invalid_items(
     data = response.json()
 
     # Check that errors mention validation issues
-    error_text = data["detail"][0]["msg"]
-    assert "Reference URL cannot be empty" in error_text or "invalid-url" in error_text
+    details = data.get("detail") or []
+    assert any("history fields cannot be empty" in err.get("msg", "") for err in details)

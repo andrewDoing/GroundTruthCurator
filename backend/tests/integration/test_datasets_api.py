@@ -9,7 +9,9 @@ def make_gt_item(dataset: str, *, bucket: str | None = None) -> dict:
         "id": str(uuid.uuid4()),
         "datasetName": dataset,
         "bucket": bucket or str(uuid.UUID("00000000-0000-0000-0000-000000000000")),
-        "synthQuestion": f"Question for {dataset}?",
+        "history": [
+            {"role": "user", "msg": f"Question for {dataset}?"},
+        ],
         "docType": "ground-truth-item",
     }
 

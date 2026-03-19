@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DEMO_JSON } from "../../../src/models/demoData";
-import { getItemReferences } from "../../../src/models/groundTruth";
+import {
+	getItemReferences,
+	getLastAgentTurn,
+} from "../../../src/models/groundTruth";
 import { JsonProvider } from "../../../src/models/provider";
 
 describe("JsonProvider duplicate", () => {
@@ -16,7 +19,7 @@ describe("JsonProvider duplicate", () => {
 		expect(created.id.startsWith("temp-")).toBe(true);
 		// Core fields copied
 		expect(created.question).toBe(original.question);
-		expect(created.answer).toBe(original.answer);
+		expect(getLastAgentTurn(created)).toBe(getLastAgentTurn(original));
 		expect(getItemReferences(created).length).toBe(
 			getItemReferences(original).length,
 		);

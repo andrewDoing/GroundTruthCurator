@@ -22,7 +22,6 @@ from app.domain.models import (
     ExpectedTools,
     FeedbackEntry,
     GroundTruthListResponse,
-    HistoryItem,
     PluginPayload,
     ToolCallRecord,
     BulkImportError,
@@ -39,7 +38,6 @@ from app.services.ground_truth_update_service import (
     ETagRequiredError,
     apply_shared_update,
     persist_shared_update,
-    read_legacy_compat_update,
 )
 from app.services.validation_service import (
     ApprovalValidationError,
@@ -138,17 +136,6 @@ class GroundTruthUpdateRequest(BaseModel):
     trace_payload: dict[str, Any] | None = Field(default=None, alias="tracePayload")
     scenario_id: str | None = Field(default=None, alias="scenarioId")
     etag: str | None = Field(default=None, alias="etag")
-
-
-def _coerce_history_for_internal_use(item: AgenticGroundTruthEntry) -> None:
-    if not item.history:
-        return
-    item.history = [
-        entry
-        if isinstance(entry, HistoryItem)
-        else HistoryItem.model_validate(entry.model_dump(by_alias=True))
-        for entry in item.history
-    ]
 
 
 @router.post("", response_model=ImportBulkResponse)
@@ -274,7 +261,6 @@ async def import_bulk(
         # Fetch registry once for performance (avoids O(n) singleton lookups)
         registry = get_default_registry()
         for it in gt_items:
-            _coerce_history_for_internal_use(it)
             apply_computed_tags(it, registry)
 
         result = await container.repo.import_bulk_gt(gt_items, buckets=buckets)
@@ -442,16 +428,24 @@ async def list_all_ground_truths(
         alias="itemId",
         description="Search for items by ID (case-sensitive partial match)",
     ),
-    ref_url: str | None = Query(
+    plugin_filter: list[str] | None = Query(
         default=None,
-        alias="refUrl",
-        description="Search for items by reference URL (case-sensitive partial match)",
+        alias="pluginFilter",
+        description=(
+            "Plugin-namespaced filters in key=value form (repeat query param). "
+            "Example: pluginFilter=rag-compat:refUrl=https://example.com"
+        ),
     ),
     keyword: str | None = Query(
         default=None,
         description="Search for items by keyword (case-insensitive text search across questions, answers, and history)",
     ),
     sort_by: SortField = Query(default=SortField.reviewed_at.value, alias="sortBy"),
+    plugin_sort: str | None = Query(
+        default=None,
+        alias="pluginSort",
+        description="Plugin-namespaced sort key, e.g. rag-compat:totalReferences",
+    ),
     sort_order: SortOrder = Query(default=SortOrder.desc.value, alias="sortOrder"),
     page: int = Query(default=1),
     limit: int = Query(default=25),
@@ -479,17 +473,51 @@ async def list_all_ground_truths(
         else:
             item_id_search = item_id
 
-    # Reference URL search validation
-    ref_url_search = None
-    if ref_url is not None:
-        ref_url = ref_url.strip()
-        if not ref_url:
-            # Empty after trim - treat as if parameter not provided
-            ref_url = None
-        elif len(ref_url) > 500:
-            raise HTTPException(status_code=400, detail="refUrl must be 500 characters or less")
-        else:
-            ref_url_search = ref_url
+    plugin_filters: dict[str, str] | None = None
+    if plugin_filter:
+        parsed: dict[str, str] = {}
+        for raw_filter in plugin_filter:
+            candidate = raw_filter.strip()
+            if not candidate:
+                continue
+            key, sep, value = candidate.partition("=")
+            if not sep:
+                raise HTTPException(
+                    status_code=400,
+                    detail="pluginFilter entries must use key=value format",
+                )
+            key = key.strip()
+            value = value.strip()
+            if not key:
+                raise HTTPException(
+                    status_code=400,
+                    detail="pluginFilter entries must include a non-empty key",
+                )
+            if ":" not in key:
+                raise HTTPException(
+                    status_code=400,
+                    detail="pluginFilter key must be namespaced (pack:key)",
+                )
+            if not value:
+                continue
+            if len(value) > 500:
+                raise HTTPException(
+                    status_code=400,
+                    detail="pluginFilter value must be 500 characters or less",
+                )
+            parsed[key] = value
+        plugin_filters = parsed or None
+
+    plugin_sort_key = None
+    if plugin_sort is not None:
+        plugin_sort = plugin_sort.strip()
+        if plugin_sort:
+            if ":" not in plugin_sort:
+                raise HTTPException(
+                    status_code=400,
+                    detail="pluginSort must be namespaced (pack:key)",
+                )
+            plugin_sort_key = plugin_sort
 
     # Keyword search validation
     keyword_search = None
@@ -557,9 +585,10 @@ async def list_all_ground_truths(
         tags=tag_list,
         exclude_tags=exclude_tag_list,
         item_id=item_id_search,
-        ref_url=ref_url_search,
+        plugin_filters=plugin_filters,
         keyword=keyword_search,
         sort_by=sort_by,
+        plugin_sort=plugin_sort_key,
         sort_order=sort_order,
         page=page,
         limit=limit,
@@ -639,7 +668,6 @@ async def update_ground_truth(
             manual_tags=payload.manual_tags,
             status=payload.status,
             actor_user_id=user.user_id,
-            legacy_update=read_legacy_compat_update(payload_extras),
         )
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=e.message)

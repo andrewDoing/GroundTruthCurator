@@ -7,7 +7,9 @@ def make_item(dataset: str, with_bucket: bool = False, bucket: str | None = None
     item = {
         "id": str(uuid.uuid4()),
         "datasetName": dataset,
-        "synthQuestion": "Q?",
+        "history": [
+            {"role": "user", "msg": "Q?"},
+        ],
     }
     if with_bucket:
         item["bucket"] = bucket or str(uuid.uuid4())

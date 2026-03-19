@@ -230,22 +230,25 @@
 						"description": "Search for items by ID (case-sensitive partial match)"
 					},
 					{
-						"name": "refUrl",
+						"name": "pluginFilter",
 						"in": "query",
 						"required": false,
 						"schema": {
 							"anyOf": [
 								{
-									"type": "string"
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
 								},
 								{
 									"type": "null"
 								}
 							],
-							"description": "Search for items by reference URL (case-sensitive partial match)",
-							"title": "Refurl"
+							"description": "Plugin-namespaced filters in key=value form (repeat query param). Example: pluginFilter=rag-compat:refUrl=https://example.com",
+							"title": "Pluginfilter"
 						},
-						"description": "Search for items by reference URL (case-sensitive partial match)"
+						"description": "Plugin-namespaced filters in key=value form (repeat query param). Example: pluginFilter=rag-compat:refUrl=https://example.com"
 					},
 					{
 						"name": "keyword",
@@ -273,6 +276,24 @@
 							"$ref": "#/components/schemas/SortField",
 							"default": "reviewedAt"
 						}
+					},
+					{
+						"name": "pluginSort",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"anyOf": [
+								{
+									"type": "string"
+								},
+								{
+									"type": "null"
+								}
+							],
+							"description": "Plugin-namespaced sort key, e.g. rag-compat:totalReferences",
+							"title": "Pluginsort"
+						},
+						"description": "Plugin-namespaced sort key, e.g. rag-compat:totalReferences"
 					},
 					{
 						"name": "sortOrder",
@@ -1983,69 +2004,11 @@
 						"type": "array",
 						"title": "Tags",
 						"readOnly": true
-					},
-					"synthQuestion": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Synthquestion",
-						"readOnly": true
-					},
-					"editedQuestion": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Editedquestion",
-						"readOnly": true
-					},
-					"answer": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Answer",
-						"readOnly": true
-					},
-					"refs": {
-						"items": {
-							"$ref": "#/components/schemas/Reference"
-						},
-						"type": "array",
-						"title": "Refs",
-						"readOnly": true
-					},
-					"totalReferences": {
-						"type": "integer",
-						"title": "Totalreferences",
-						"readOnly": true
 					}
 				},
 				"additionalProperties": false,
 				"type": "object",
-				"required": [
-					"id",
-					"datasetName",
-					"tags",
-					"synthQuestion",
-					"editedQuestion",
-					"answer",
-					"refs",
-					"totalReferences"
-				],
+				"required": ["id", "datasetName", "tags"],
 				"title": "AgenticGroundTruthEntry",
 				"description": "Generic agentic-first host model.\n\nThe core contract intentionally exposes only the generic schema in OpenAPI. Legacy\nRAG-shaped payloads are translated into this shape when validating this base class so\nexisting data can be carried forward without remaining top-level contract fields."
 			},
@@ -2899,7 +2862,7 @@
 					"field": {
 						"type": "string",
 						"title": "Field",
-						"description": "Field name where PII was detected (e.g., 'synthQuestion', 'history[2].msg')"
+						"description": "Field name where the PII was detected (e.g., 'history.question', 'history[2].msg')"
 					},
 					"pattern_type": {
 						"type": "string",
@@ -3041,80 +3004,6 @@
 				"title": "RecomputeTagsResponse",
 				"description": "Response for bulk computed tag recomputation."
 			},
-			"Reference": {
-				"properties": {
-					"url": {
-						"type": "string",
-						"title": "Url",
-						"description": "Reference URL (required, non-empty)"
-					},
-					"title": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Title",
-						"description": "Human-readable title for the reference"
-					},
-					"content": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Content"
-					},
-					"keyExcerpt": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Keyexcerpt"
-					},
-					"type": {
-						"anyOf": [
-							{
-								"type": "string"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Type"
-					},
-					"bonus": {
-						"type": "boolean",
-						"title": "Bonus",
-						"default": false
-					},
-					"messageIndex": {
-						"anyOf": [
-							{
-								"type": "integer"
-							},
-							{
-								"type": "null"
-							}
-						],
-						"title": "Messageindex"
-					}
-				},
-				"type": "object",
-				"required": ["url"],
-				"title": "Reference",
-				"description": "Legacy RAG reference object retained for compatibility helpers and tests."
-			},
 			"RemoveTagsRequest": {
 				"properties": {
 					"tags": {
@@ -3206,14 +3095,7 @@
 			},
 			"SortField": {
 				"type": "string",
-				"enum": [
-					"reviewedAt",
-					"updatedAt",
-					"id",
-					"hasAnswer",
-					"totalReferences",
-					"tagCount"
-				],
+				"enum": ["reviewedAt", "updatedAt", "id", "hasAnswer", "tagCount"],
 				"title": "SortField"
 			},
 			"SortOrder": {

@@ -3,11 +3,8 @@ from __future__ import annotations
 from typing import Any, cast
 from uuid import uuid4
 
-from pydantic.type_adapter import TypeAdapter
 import pytest
 from httpx import AsyncClient
-
-from app.domain.models import AgenticGroundTruthEntry
 
 
 def make_item(dataset: str) -> dict[str, Any]:
@@ -16,10 +13,9 @@ def make_item(dataset: str) -> dict[str, Any]:
         "datasetName": dataset,
         "bucket": "00000000-0000-0000-0000-000000000000",
         "status": "draft",
-        "samplingBucket": 0,
-        "synthQuestion": "Q?",
-        "answer": None,
-        "refs": [],
+        "history": [
+            {"role": "user", "msg": "Q?"},
+        ],
         "manualTags": ["source:synthetic", "topic:general"],
     }
 
@@ -41,24 +37,26 @@ async def test_self_serve_list_and_approve(async_client: AsyncClient, user_heade
     assert r.status_code == 200
     resp = cast(dict[str, Any], r.json())
     assert resp.get("assignedCount") == 2
-    assigned = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(
-        resp.get("assigned") or []
-    )
+    assigned = cast(list[dict[str, Any]], resp.get("assigned") or [])
     assert len(assigned) == 2
 
     # List my assignments
     r = await async_client.get("/v1/assignments/my", headers=user_headers)
     assert r.status_code == 200
-    docs = TypeAdapter(list[AgenticGroundTruthEntry]).validate_python(r.json())
+    docs = cast(list[dict[str, Any]], r.json())
     assert len(docs) == 2
 
     # Approve first via assignments PUT
-    gt_id = docs[0].id
-    etag = docs[0].etag
+    gt_id = docs[0]["id"]
+    etag = docs[0]["_etag"]
     r = await async_client.put(
         f"/v1/assignments/{dataset}/{bucket}/{gt_id}",
         headers=user_headers,
-        json={"approve": True, "answer": "ans", "etag": etag},
+        json={
+            "approve": True,
+            "etag": etag,
+            "history": [{"role": "user", "msg": "Q?"}, {"role": "assistant", "msg": "ans"}],
+        },
     )
     assert r.status_code == 200
     res = cast(dict[str, Any], r.json())
@@ -162,6 +160,7 @@ async def test_exclusive_tag_error_prevents_persistence(
     actual_bucket = assigned[0]["bucket"]
     etag = assigned[0]["_etag"]
     original_tags = assigned[0]["manualTags"]
+    original_history = assigned[0]["history"]
 
     # Attempt invalid update with exclusive tag conflict
     r = await async_client.put(
@@ -172,7 +171,6 @@ async def test_exclusive_tag_error_prevents_persistence(
                 "difficulty:easy",
                 "difficulty:hard",
             ],  # Both difficulty tags - conflict!
-            "answer": "This should not be saved",
             "etag": etag,
         },
     )
@@ -189,8 +187,8 @@ async def test_exclusive_tag_error_prevents_persistence(
 
     # Tags should still be the original ones
     assert item_after["manualTags"] == original_tags
-    # Answer should still be None (not the rejected value)
-    assert item_after["answer"] is None
+    # History should also remain unchanged after the rejected update.
+    assert item_after["history"] == original_history
 
 
 @pytest.mark.anyio

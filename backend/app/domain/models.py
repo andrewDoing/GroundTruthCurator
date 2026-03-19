@@ -1,19 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, ClassVar, Optional, Literal, cast
+from typing import Any, ClassVar, Optional, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict, computed_field, field_validator, model_validator
 
 from app.domain.enums import GroundTruthStatus
 from app.domain.validators import GroundTruthItemTagValidators
-
-LEGACY_HOST_FIELD_DELETE_GATES = (
-    "stored-data audit completed",
-    "caller audit completed",
-    "import/export verification completed",
-)
 
 
 class Reference(BaseModel):
@@ -51,9 +45,8 @@ class HistoryEntry(BaseModel):
 
 
 class HistoryItem(HistoryEntry):
-    """Legacy RAG-compatible history item retained for internal compatibility."""
+    """Canonical history item used by generic core flows."""
 
-    refs: Optional[list[Reference]] = None
     expected_behavior: Optional[list[str]] = Field(default=None, alias="expectedBehavior")
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -258,82 +251,11 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
 
     _RAG_COMPAT_PLUGIN: ClassVar[str] = "rag-compat"
 
-    # --- Legacy compatibility layer ---
-    # The model_validator, computed_fields, and property accessors below exist because
-    # stored Cosmos DB documents may still carry top-level RAG fields (synthQuestion,
-    # editedQuestion, answer, refs, etc.). They transparently relocate those fields into
-    # plugins["rag-compat"] on read and re-expose them for internal code that still
-    # accesses .synth_question, .answer, .refs, .totalReferences.
-    #
-    # Hard-delete only after all LEGACY_HOST_FIELD_DELETE_GATES are satisfied. Until then,
-    # these accessors are migration projections, not long-term host ownership.
-
-    @model_validator(mode="before")
-    @classmethod
-    def translate_legacy_payload_for_core_model(cls, value: object) -> object:
-        if cls is not AgenticGroundTruthEntry:
-            return value
-        from app.plugins.packs.rag_compat import normalize_legacy_payload_for_core_model
-
-        return normalize_legacy_payload_for_core_model(value, plugin_name=cls._RAG_COMPAT_PLUGIN)
-
-    @model_validator(mode="after")
-    def restore_history_annotations(self) -> "AgenticGroundTruthEntry":
-        history_annotations = self._rag_compat_data().get("historyAnnotations")
-        if not isinstance(history_annotations, list) or not self.history:
-            return self
-
-        merged_history: list[HistoryEntry] = []
-        changed = False
-        for index, entry in enumerate(self.history):
-            annotation = history_annotations[index] if index < len(history_annotations) else None
-            if not isinstance(annotation, dict) or not annotation:
-                merged_history.append(entry)
-                continue
-
-            entry_payload = entry.model_dump(by_alias=True)
-            if "refs" in annotation:
-                entry_payload["refs"] = annotation["refs"]
-                changed = True
-            if "expectedBehavior" in annotation:
-                entry_payload["expectedBehavior"] = annotation["expectedBehavior"]
-                changed = True
-            merged_history.append(HistoryItem.model_validate(entry_payload))
-
-        if changed:
-            self.history = merged_history
-        return self
-
     @computed_field
     @property
     def tags(self) -> list[str]:
         merged = set(self.manual_tags or []) | set(self.computed_tags or [])
         return sorted(merged)
-
-    @computed_field(alias="synthQuestion")
-    @property
-    def compat_synth_question(self) -> str | None:
-        return self.synth_question
-
-    @computed_field(alias="editedQuestion")
-    @property
-    def compat_edited_question(self) -> str | None:
-        return self.edited_question
-
-    @computed_field(alias="answer")
-    @property
-    def compat_answer(self) -> str | None:
-        return self.answer
-
-    @computed_field(alias="refs")
-    @property
-    def compat_refs(self) -> list[Reference]:
-        return self.refs
-
-    @computed_field(alias="totalReferences")
-    @property
-    def compat_total_references(self) -> int:
-        return self.totalReferences
 
     def set_plugin(self, slot: str, data: dict[str, Any], *, version: str = "1.0") -> None:
         self.plugins[slot] = PluginPayload(kind=slot, version=version, data=data)
@@ -344,149 +266,6 @@ class AgenticGroundTruthEntry(GroundTruthItemTagValidators, BaseModel):
 
     def export_json_schema(self) -> dict[str, Any]:
         return self.model_json_schema()
-
-    def _rag_compat_data(self) -> dict[str, Any]:
-        plugin = self.plugins.get(self._RAG_COMPAT_PLUGIN)
-        if plugin is None:
-            return {}
-        return plugin.data
-
-    def _set_rag_compat_value(self, key: str, value: Any) -> None:
-        plugin = self.plugins.get(self._RAG_COMPAT_PLUGIN)
-        if plugin is None:
-            plugin = PluginPayload(kind=self._RAG_COMPAT_PLUGIN, version="1.0", data={})
-            self.plugins[self._RAG_COMPAT_PLUGIN] = plugin
-        if value is None:
-            plugin.data.pop(key, None)
-        else:
-            plugin.data[key] = value
-
-    def _find_history_message(self, role: str, *, reverse: bool = False) -> str | None:
-        history = self.history or []
-        history_iterable = reversed(history) if reverse else history
-        for turn in history_iterable:
-            if turn.role == role and turn.msg:
-                return turn.msg
-        return None
-
-    def _find_last_agent_message(self) -> str | None:
-        """Return the last non-user history message (any agent role)."""
-        for turn in reversed(self.history or []):
-            if turn.role != "user" and turn.msg:
-                return turn.msg
-        return None
-
-    @property
-    def synth_question(self) -> str | None:
-        if "synth_question" in self.__dict__:
-            return cast(str | None, self.__dict__.get("synth_question"))
-        compat = self._rag_compat_data()
-        return cast(str | None, compat.get("synthQuestion")) or self._find_history_message("user")
-
-    @synth_question.setter
-    def synth_question(self, value: str | None) -> None:
-        if "synth_question" in getattr(type(self), "model_fields", {}):
-            self.__dict__["synth_question"] = value
-            return
-        self._set_rag_compat_value("synthQuestion", value)
-
-    @property
-    def edited_question(self) -> str | None:
-        if "edited_question" in self.__dict__:
-            return cast(str | None, self.__dict__.get("edited_question"))
-        compat = self._rag_compat_data()
-        return cast(str | None, compat.get("editedQuestion")) or self.synth_question
-
-    @edited_question.setter
-    def edited_question(self, value: str | None) -> None:
-        if "edited_question" in getattr(type(self), "model_fields", {}):
-            self.__dict__["edited_question"] = value
-            return
-        self._set_rag_compat_value("editedQuestion", value)
-
-    @property
-    def answer(self) -> str | None:
-        if "answer" in self.__dict__:
-            return cast(str | None, self.__dict__.get("answer"))
-        compat = self._rag_compat_data()
-        return cast(str | None, compat.get("answer")) or self._find_last_agent_message()
-
-    @answer.setter
-    def answer(self, value: str | None) -> None:
-        if "answer" in getattr(type(self), "model_fields", {}):
-            self.__dict__["answer"] = value
-            return
-        self._set_rag_compat_value("answer", value)
-
-    @property
-    def refs(self) -> list[Reference]:
-        direct_value = self.__dict__.get("refs")
-        if isinstance(direct_value, list):
-            return [
-                ref if isinstance(ref, Reference) else Reference.model_validate(ref)
-                for ref in direct_value
-            ]
-        from app.plugins.packs.rag_compat import compat_refs_from_payload
-
-        return cast(
-            list[Reference],
-            compat_refs_from_payload(
-                {
-                    "plugins": self.plugins,
-                    "toolCalls": self.tool_calls,
-                    "history": self.history,
-                },
-                plugin_name=self._RAG_COMPAT_PLUGIN,
-            ),
-        )
-
-    @refs.setter
-    def refs(self, value: list[Reference] | list[dict[str, Any]] | None) -> None:
-        if "refs" in getattr(type(self), "model_fields", {}):
-            self.__dict__["refs"] = list(value or [])
-            return
-        # Handle both Reference objects and dict representations
-        serialized = []
-        for ref in value or []:
-            if isinstance(ref, Reference):
-                serialized.append(ref.model_dump(by_alias=True))
-            elif isinstance(ref, dict):
-                # Validate and convert dict to ensure it's a valid reference
-                validated_ref = Reference.model_validate(ref)
-                serialized.append(validated_ref.model_dump(by_alias=True))
-            else:
-                serialized.append(ref)
-        self._set_rag_compat_value("refs", serialized)
-
-    @property
-    def totalReferences(self) -> int:
-        direct_value = self.__dict__.get("totalReferences")
-        if isinstance(direct_value, int):
-            return direct_value
-        from app.plugins.packs.rag_compat import compat_total_references_from_payload
-
-        return compat_total_references_from_payload(
-            {
-                "plugins": self.plugins,
-                "toolCalls": self.tool_calls,
-                "history": self.history,
-            },
-            plugin_name=self._RAG_COMPAT_PLUGIN,
-        )
-
-    @totalReferences.setter
-    def totalReferences(self, value: int | None) -> None:
-        if "totalReferences" in getattr(type(self), "model_fields", {}):
-            self.__dict__["totalReferences"] = 0 if value is None else int(value)
-            return
-        self._set_rag_compat_value("totalReferences", None if value is None else int(value))
-
-    # NOTE: Informational RAG-era accessors (contextUsedForGeneration, contextSource,
-    # modelUsedForGeneration, semanticClusterNumber, weight, samplingBucket, questionLength)
-    # removed in Phase 7 legacy retirement. No callers accessed them via
-    # AgenticGroundTruthEntry uses computed properties for legacy field access.
-    # Read paths extract these values from history and plugin data. Write paths
-    # normalize incoming payloads into canonical multi-turn structures.
 
 
 class PaginationMetadata(BaseModel):

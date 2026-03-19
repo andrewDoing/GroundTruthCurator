@@ -13,15 +13,10 @@ from app.domain.models import (
     HistoryEntry,
     HistoryItem,
     PluginPayload,
-    Reference,
     ToolCallRecord,
 )
-from app.plugins.pack_registry import get_rag_compat_pack
 from app.services.tagging_service import apply_computed_tags
 from app.services.validation_service import ValidationError, validate_item_for_approval
-
-
-MISSING = object()
 
 
 class ETagRequiredError(Exception):
@@ -33,44 +28,8 @@ class ETagMismatchError(Exception):
 
 
 @dataclass(slots=True)
-class LegacyCompatUpdate:
-    edited_question: str | None | object = MISSING
-    answer: str | None | object = MISSING
-    refs: list[Reference] | object = MISSING
-
-
-@dataclass(slots=True)
 class UpdateMutationResult:
     should_delete_assignment: bool = False
-
-
-def read_legacy_compat_update(extras: dict[str, Any]) -> LegacyCompatUpdate:
-    update = LegacyCompatUpdate()
-
-    if "editedQuestion" in extras or "edited_question" in extras:
-        update.edited_question = cast(
-            str | None, extras.get("editedQuestion", extras.get("edited_question"))
-        )
-
-    if "answer" in extras:
-        answer_value = extras["answer"]
-        if answer_value is not None and not isinstance(answer_value, str):
-            raise ValidationError("", "answer", "answer must be a string or null")
-        update.answer = cast(str | None, answer_value)
-
-    if "refs" in extras:
-        refs_payload = extras["refs"]
-        if refs_payload is None:
-            update.refs = []
-        elif isinstance(refs_payload, list):
-            update.refs = [
-                ref if isinstance(ref, Reference) else Reference.model_validate(ref)
-                for ref in refs_payload
-            ]
-        else:
-            raise ValidationError("", "refs", "refs must be a list or null")
-
-    return update
 
 
 def _parse_status(value: GroundTruthStatus | str | None) -> GroundTruthStatus:
@@ -100,16 +59,6 @@ def parse_history_entries(entries: Sequence[Any]) -> list[HistoryItem]:
         if not message:
             raise ValidationError("", "history", "history entries must include a non-empty msg")
 
-        refs_data = extras.get("refs")
-        refs_list = None
-        if refs_data is not None:
-            if not isinstance(refs_data, list):
-                raise ValidationError("", "history", "history refs must be a list")
-            refs_list = [
-                ref if isinstance(ref, Reference) else Reference.model_validate(ref)
-                for ref in refs_data
-            ]
-
         expected_behavior = extras.get("expectedBehavior", extras.get("expected_behavior"))
         if expected_behavior is not None and not isinstance(expected_behavior, list):
             raise ValidationError(
@@ -122,7 +71,6 @@ def parse_history_entries(entries: Sequence[Any]) -> list[HistoryItem]:
             HistoryItem(
                 role=getattr(entry, "role"),
                 msg=message,
-                refs=refs_list,
                 expected_behavior=expected_behavior,
             )
         )
@@ -148,7 +96,6 @@ def apply_shared_update(
     status: GroundTruthStatus | str | None = None,
     approve: bool = False,
     actor_user_id: str,
-    legacy_update: LegacyCompatUpdate | None = None,
     clear_assignment_on_statuses: set[GroundTruthStatus] | None = None,
 ) -> UpdateMutationResult:
     now = datetime.now(timezone.utc)
@@ -161,11 +108,9 @@ def apply_shared_update(
     if "history" in provided_fields:
         if history_entries is None:
             item.history = []
-            item.totalReferences = 0
         else:
             # HistoryItem is a subclass of HistoryEntry, so this is safe
             item.history = cast(list[HistoryEntry], parse_history_entries(history_entries))
-            item.totalReferences = 0
 
     if "context_entries" in provided_fields:
         item.context_entries = context_entries or []
@@ -193,17 +138,6 @@ def apply_shared_update(
         item.scenario_id = scenario_id or ""
     if "manual_tags" in provided_fields:
         item.manual_tags = manual_tags or []
-
-    if legacy_update is not None:
-        if legacy_update.edited_question is not MISSING:
-            item.edited_question = cast(str | None, legacy_update.edited_question)
-        if legacy_update.answer is not MISSING:
-            item.answer = cast(str | None, legacy_update.answer)
-        if legacy_update.refs is not MISSING:
-            rag_compat_pack = get_rag_compat_pack()
-            rag_compat_pack.replace_references(
-                item, list(cast(list[Reference], legacy_update.refs))
-            )
 
     if approve:
         item.status = GroundTruthStatus.approved

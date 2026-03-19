@@ -2,7 +2,11 @@ import { Lock } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import useTags from "../../hooks/useTags";
 import type { GroundTruthItem } from "../../models/groundTruth";
-import { getLastAgentTurn, getQueuePreview } from "../../models/groundTruth";
+import {
+	getItemReferences,
+	getLastAgentTurn,
+	getQueuePreview,
+} from "../../models/groundTruth";
 import { cn } from "../../models/utils";
 import { getExplorerExtensions } from "../../registry/ExplorerExtensions";
 import { fetchAvailableDatasets } from "../../services/datasets";
@@ -243,13 +247,16 @@ export default function QuestionsExplorer({
 		// Build API parameters from applied filters
 		// Note: toolCallCount is a client-side sort only (not passed to API)
 		const sortByParam =
+			appliedFilter.sortColumn === "tagCount"
+				? "tagCount"
+				: appliedFilter.sortColumn === "refs" ||
+						appliedFilter.sortColumn === "toolCallCount"
+					? null // plugin/client-side sort; do not pass as core sortBy
+					: appliedFilter.sortColumn;
+		const pluginSortParam =
 			appliedFilter.sortColumn === "refs"
-				? "totalReferences"
-				: appliedFilter.sortColumn === "tagCount"
-					? "tagCount"
-					: appliedFilter.sortColumn === "toolCallCount"
-						? null // client-side sort; do not pass to backend
-						: appliedFilter.sortColumn;
+				? "rag-compat:totalReferences"
+				: undefined;
 
 		// Ensure page is at least 1
 		const safePage = Math.max(1, currentPage);
@@ -267,10 +274,16 @@ export default function QuestionsExplorer({
 					? appliedFilter.tags.exclude
 					: undefined,
 			itemId: appliedFilter.itemId || undefined,
-			refUrl: appliedFilter.refUrl || undefined,
+			pluginFilter: appliedFilter.refUrl
+				? [`rag-compat:refUrl=${appliedFilter.refUrl}`]
+				: undefined,
 			keyword: appliedFilter.keyword || undefined,
-			sortBy: sortByParam,
-			sortOrder: sortByParam ? appliedFilter.sortDirection : undefined,
+			sortBy: sortByParam ?? undefined,
+			pluginSort: pluginSortParam,
+			sortOrder:
+				sortByParam || pluginSortParam
+					? appliedFilter.sortDirection
+					: undefined,
 			page: safePage,
 			limit: itemsPerPage,
 		};
@@ -1232,7 +1245,7 @@ export default function QuestionsExplorer({
 											</td>
 											{/* Refs */}
 											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden lg:table-cell">
-												{item.totalReferences ?? 0}
+												{getItemReferences(item).length}
 											</td>
 											{/* Tag Count */}
 											<td className="px-3 py-3 text-center text-sm font-medium text-slate-700 hidden xl:table-cell">

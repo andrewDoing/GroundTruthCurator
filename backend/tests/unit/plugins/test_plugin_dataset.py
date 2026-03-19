@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.models import AgenticGroundTruthEntry
 from app.plugins.computed_tags.dataset import DatasetPlugin
+from tests.test_helpers import make_test_entry
 
 
 class TestDatasetPlugin:
@@ -30,9 +30,5 @@ class TestDatasetPlugin:
     def test_compute_returns_dataset_prefixed_tag(self, dataset_name, expected_tag):
         """compute() returns 'dataset:' prefix with the dataset name."""
         plugin = DatasetPlugin()
-        item = AgenticGroundTruthEntry(
-            id="test-id",
-            datasetName=dataset_name,
-            synthQuestion="Question",
-        )
+        item = make_test_entry(id="test-id", dataset_name=dataset_name)
         assert plugin.compute(item) == expected_tag

@@ -47,14 +47,21 @@ vi.mock("../../../../src/services/datasets", () => ({
 
 const createMockItem = (
 	overrides: Partial<QuestionsExplorerItem> = {},
-): QuestionsExplorerItem => ({
-	id: "item-1",
-	question: "Test Question",
-	answer: "Test Answer",
-	status: "draft",
-	providerId: "test",
-	...overrides,
-});
+): QuestionsExplorerItem => {
+	const question = overrides.question ?? "Test Question";
+	const history = overrides.history ?? [
+		{ role: "user", content: question },
+		{ role: "agent", content: "Test Answer" },
+	];
+	return {
+		id: "item-1",
+		question,
+		history,
+		status: "draft",
+		providerId: "test",
+		...overrides,
+	};
+};
 
 describe("QuestionsExplorer", () => {
 	const mockOnAssign = vi.fn();
@@ -109,14 +116,14 @@ describe("QuestionsExplorer", () => {
 			async (
 				params: {
 					itemId?: string;
-					refUrl?: string;
+					pluginFilter?: string[];
 					keyword?: string;
 					page?: number;
 				} = {},
 			) => {
 				const hasTextFilter =
 					Boolean(params.itemId) ||
-					Boolean(params.refUrl) ||
+					Boolean(params.pluginFilter?.length) ||
 					Boolean(params.keyword);
 				const page = typeof params.page === "number" ? params.page : 1;
 				const totalPages = hasTextFilter ? 1 : 3;
@@ -405,7 +412,9 @@ describe("QuestionsExplorer", () => {
 				name: "reference URL",
 				label: "Reference URL:",
 				value: "https://example.com/ref",
-				expectedFilter: { refUrl: "https://example.com/ref" },
+				expectedFilter: {
+					pluginFilter: ["rag-compat:refUrl=https://example.com/ref"],
+				},
 			},
 			{
 				name: "keyword",

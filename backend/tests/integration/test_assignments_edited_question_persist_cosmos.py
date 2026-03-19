@@ -13,9 +13,9 @@ def make_item(dataset: str, item_id: str) -> dict[str, Any]:
         "datasetName": dataset,
         # Fixed bucket UUID for deterministic PK
         "bucket": str(UUID("00000000-0000-0000-0000-000000000000")),
-        "synthQuestion": "Original synth question?",
-        "answer": None,
-        "refs": [],
+        "history": [
+            {"role": "user", "msg": "Original synth question?"},
+        ],
         "manualTags": [
             "source:synthetic",
             "split:train",
@@ -31,18 +31,7 @@ def make_item(dataset: str, item_id: str) -> dict[str, Any]:
 async def test_assignments_put_persists_edited_question_camel_case(
     async_client: AsyncClient, user_headers: dict[str, str]
 ):
-    """Compat-migration coverage for the temporary editedQuestion alias path.
-
-    This test stays only while assignments updates still project legacy camelCase
-    question fields across the compatibility boundary. Delete it with the alias
-    retirement work in the hard-delete phase.
-
-    **Phase 5 Audit (2026-03-12)**: MIGRATION TEST - INFORMATIONAL
-    This test validates that editedQuestion persists correctly through Cosmos
-    round-trips. The test is marked as temporary and should be deleted when
-    Phase 6 removes legacy field support. Not a delete blocker, but documents
-    current persistence contract.
-    """
+    """Assignments PUT persists an updated user question via canonical history."""
     dataset = f"editedq-{uuid4().hex[:6]}"
     item_id = "gt-1"
     item = make_item(dataset, item_id)
@@ -65,16 +54,17 @@ async def test_assignments_put_persists_edited_question_camel_case(
     bucket = cast(str, row["bucket"])
     etag = cast(str, row.get("_etag"))
 
-    # Update via assignments PUT using camelCase editedQuestion
+    # Update via assignments PUT using canonical history
     new_question = "How do I reset my password (rephrased)?"
     r = await async_client.put(
         f"/v1/assignments/{dataset}/{bucket}/{item_id}",
         headers={**user_headers, "If-Match": etag},
-        json={"editedQuestion": new_question},
+        json={"history": [{"role": "user", "msg": new_question}]},
     )
     assert r.status_code == 200, r.text
     body = cast(dict[str, Any], r.json())
-    assert body.get("editedQuestion") == new_question
+    history = body.get("history") or []
+    assert history and history[0].get("msg") == new_question
 
     # Fetch item directly and assert persistence
     r = await async_client.get(
@@ -82,11 +72,13 @@ async def test_assignments_put_persists_edited_question_camel_case(
     )
     assert r.status_code == 200, r.text
     fetched = cast(dict[str, Any], r.json())
-    assert fetched.get("editedQuestion") == new_question
+    fetched_history = fetched.get("history") or []
+    assert fetched_history and fetched_history[0].get("msg") == new_question
 
     # List my assignments and ensure enriched view carries updated question
     r = await async_client.get("/v1/assignments/my", headers=user_headers)
     assert r.status_code == 200, r.text
     my_items = cast(list[dict[str, Any]], r.json())
     mine = next(x for x in my_items if x.get("id") == item_id)
-    assert mine.get("editedQuestion") == new_question
+    mine_history = mine.get("history") or []
+    assert mine_history and mine_history[0].get("msg") == new_question

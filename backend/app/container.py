@@ -143,6 +143,14 @@ class Container:
             plugin_export_transforms=self.plugin_pack_registry.collect_export_transforms(),
         )
 
+    def _validate_plugin_packs_startup(self) -> None:
+        logger.info("Running plugin-pack startup validation...")
+        self.plugin_pack_registry.validate_all()
+        logger.info(
+            "Plugin-pack validation passed. Registered packs: %s",
+            self.plugin_pack_registry.names(),
+        )
+
     def init_cosmos_repo(self, db_name: str | None = None) -> None:
         """Create a Cosmos repo instance and wire services.
 
@@ -180,6 +188,7 @@ class Container:
             connection_verify=settings.COSMOS_CONNECTION_VERIFY,
             test_mode=settings.COSMOS_TEST_MODE,
             credential=credential,
+            plugin_pack_registry=self.plugin_pack_registry,
         )
         logger.info(
             "Using CosmosGroundTruthRepo (endpoint=%s, db=%s, container=%s)",
@@ -227,6 +236,7 @@ class Container:
         self.repo = InMemoryGroundTruthRepo(
             items=demo_items,
             curation_instructions=demo_instructions,
+            plugin_pack_registry=self.plugin_pack_registry,
         )
         self.assignment_service = AssignmentService(self.repo)
         self.snapshot_service = self._build_snapshot_service(self.repo)
@@ -235,13 +245,18 @@ class Container:
         self.tag_registry_service = TagRegistryService(self.tags_repo)
         self.tag_definitions_repo = cast(Any, None)
         self.search_service = (
-            SearchService(DemoSearchAdapter(demo_items)) if enable_demo_data else SearchService()
+            SearchService(
+                DemoSearchAdapter(demo_items, plugin_pack_registry=self.plugin_pack_registry)
+            )
+            if enable_demo_data
+            else SearchService()
         )
         logger.info(
             "Using InMemoryGroundTruthRepo (demo_mode=%s, items=%s)",
             enable_demo_data,
             len(demo_items),
         )
+        self._validate_plugin_packs_startup()
 
     async def startup_cosmos(self, db_name: str | None = None) -> None:
         """Initialize and validate Cosmos repos and services.
@@ -283,12 +298,7 @@ class Container:
 
         # Step 4: Run plugin-pack startup validation so misconfigured packs
         # fail here with an actionable error rather than silently at runtime.
-        logger.info("Running plugin-pack startup validation...")
-        self.plugin_pack_registry.validate_all()
-        logger.info(
-            "Plugin-pack validation passed. Registered packs: %s",
-            self.plugin_pack_registry.names(),
-        )
+        self._validate_plugin_packs_startup()
 
     def init_search(self) -> None:
         """Configure search adapter if Azure Search settings are present."""
